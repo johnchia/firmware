@@ -1,0 +1,103 @@
+#!/bin/sh
+
+# This deliberately has no SNN prefix: Divinus and Majestic cannot share the
+# camera pipeline, and Majestic remains the boot-time daemon.
+DAEMON="/usr/bin/divinus"
+CONFIG="/etc/divinus.yaml"
+PIDFILE="/var/run/divinus.pid"
+MAJESTIC_PIDFILE="/var/run/majestic.pid"
+
+majestic_running() {
+	if [ -r "$MAJESTIC_PIDFILE" ]; then
+		read -r majestic_pid < "$MAJESTIC_PIDFILE"
+		[ -n "$majestic_pid" ] && kill -0 "$majestic_pid" 2>/dev/null && return 0
+	fi
+	pidof majestic >/dev/null 2>&1
+}
+
+divinus_running() {
+	if [ -r "$PIDFILE" ]; then
+		read -r divinus_pid < "$PIDFILE"
+		[ -n "$divinus_pid" ] && kill -0 "$divinus_pid" 2>/dev/null
+		return
+	fi
+	return 1
+}
+
+start() {
+	if majestic_running; then
+		echo "Refusing to start Divinus: Majestic is running."
+		echo "Stop it first with /etc/init.d/S95majestic stop."
+		return 1
+	fi
+
+	if [ ! -r "$CONFIG" ]; then
+		echo "Refusing to start Divinus: missing $CONFIG."
+		return 1
+	fi
+
+	echo -n "Starting Divinus: "
+	# Divinus searches its working directory before /etc; run it from /etc so
+	# this service always uses the configured /etc/divinus.yaml explicitly.
+	cd /etc || return 1
+	start-stop-daemon -b -m -S -q -p "$PIDFILE" -x "$DAEMON"
+	status=$?
+	if [ "$status" -eq 0 ]; then
+		echo "OK"
+	else
+		echo "FAIL"
+	fi
+	return "$status"
+}
+
+stop() {
+	echo -n "Stopping Divinus: "
+	start-stop-daemon -K -q -p "$PIDFILE"
+	status=$?
+	if [ "$status" -ne 0 ]; then
+		echo "FAIL"
+		return "$status"
+	fi
+
+	# Divinus treats SIGTERM as an in-place restart.  Give its shutdown path a
+	# moment, then force termination so a later start reads a fresh config and
+	# can exclusively own the camera pipeline.
+	sleep 1
+	if divinus_running; then
+		start-stop-daemon -K -q -s KILL -p "$PIDFILE"
+		status=$?
+		if [ "$status" -ne 0 ]; then
+			echo "FAIL"
+			return "$status"
+		fi
+	fi
+
+	rm -f "$PIDFILE"
+	echo "OK"
+	return 0
+}
+
+restart() {
+	stop || return $?
+	sleep 1
+	start
+}
+
+status() {
+	if divinus_running; then
+		echo "Divinus is running."
+		return 0
+	fi
+	echo "Divinus is not running."
+	return 3
+}
+
+case "$1" in
+	start|stop|restart|status)
+		"$1"
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|status}"
+		exit 1
+		;;
+esac
