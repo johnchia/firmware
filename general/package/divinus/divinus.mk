@@ -9,6 +9,10 @@ DIVINUS_VERSION = HEAD
 DIVINUS_LICENSE = MIT
 DIVINUS_LICENSE_FILES = LICENSE
 
+# A developer checkout can contain products from a direct make invocation.
+# Never copy those into Buildroot's clean override source tree.
+DIVINUS_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = --exclude divinus --exclude '*.o'
+
 # Keep the tested camera-specific streaming changes confined to the ssc30kq
 # Divinus images. All other targets continue to build the OpenIPC source.
 ifneq ($(filter ssc30kq-ultimate ssc30kq-divinus,$(OPENIPC_SOC_MODEL)-$(OPENIPC_VARIANT)),)

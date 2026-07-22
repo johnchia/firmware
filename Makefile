@@ -6,6 +6,12 @@ BR_CONF = $(TARGET)/openipc_defconfig
 TARGET ?= $(PWD)/output
 export CMAKE_POLICY_VERSION_MINIMUM := 3.5
 
+# Use an explicit local checkout for Divinus development without changing the
+# release commit pinned by the Buildroot package.
+ifneq ($(strip $(DIVINUS_SRCDIR)),)
+BR_MAKE += DIVINUS_OVERRIDE_SRCDIR=$(abspath $(DIVINUS_SRCDIR))
+endif
+
 CONFIG = $(error variable BOARD not defined)
 TIMER := $(shell date +%s)
 
@@ -32,6 +38,20 @@ build: defconfig
 
 br-%: defconfig
 	@$(BR_MAKE) $(subst br-,,$@) -j$(shell nproc)
+
+.PHONY: divinus-local divinus-pinned
+
+divinus-local:
+	@test -n "$(strip $(DIVINUS_SRCDIR))" || { \
+		echo "DIVINUS_SRCDIR is required (path to a Divinus checkout)"; exit 2; }
+	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
+		DIVINUS_SRCDIR="$(abspath $(DIVINUS_SRCDIR))" br-divinus-rebuild
+
+divinus-pinned:
+	@test -z "$(strip $(DIVINUS_SRCDIR))" || { \
+		echo "Do not set DIVINUS_SRCDIR when restoring the pinned Divinus source"; exit 2; }
+	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) br-divinus-dirclean
+	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) br-divinus
 
 defconfig: prepare
 	@echo --- $(or $(CONFIG),$(error variable BOARD not found))
@@ -60,6 +80,9 @@ help:
 	- make package - list available packages\n \
 	- make distclean - remove buildroot and output folder\n \
 	- make br-linux - build linux kernel only\n\n"
+	@printf "Divinus development:\n \
+	- make BOARD=<board> DIVINUS_SRCDIR=/path/to/divinus divinus-local\n \
+	- make BOARD=<board> divinus-pinned\n\n"
 
 list:
 	@ls -1 br-ext-chip-*/configs
