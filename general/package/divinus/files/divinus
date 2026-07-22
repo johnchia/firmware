@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# This deliberately has no SNN prefix: Divinus and Majestic cannot share the
-# camera pipeline, and Majestic remains the boot-time daemon.
+# This script is installed without an SNN prefix when Majestic owns the camera
+# at boot, and as S95divinus on the Majestic-free Divinus image.
 DAEMON="/usr/bin/divinus"
 CONFIG="/etc/divinus.yaml"
 PIDFILE="/var/run/divinus.pid"
