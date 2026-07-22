@@ -9,6 +9,19 @@ DIVINUS_VERSION = HEAD
 DIVINUS_LICENSE = MIT
 DIVINUS_LICENSE_FILES = LICENSE
 
+# Keep camera-specific streaming changes confined to the ssc30kq ultimate
+# test image. All other targets continue to build the OpenIPC source.
+ifeq ($(OPENIPC_SOC_MODEL)-$(OPENIPC_VARIANT),ssc30kq-ultimate)
+DIVINUS_SITE = $(call github,johnchia,divinus,$(DIVINUS_VERSION))
+DIVINUS_VERSION = 849f4e5bf7cecb3f9d54e4be9581347f05268129
+else
+define DIVINUS_APPLY_CONFIG_COMPAT_PATCH
+	$(APPLY_PATCHES) $(@D) $(DIVINUS_PKGDIR)/files/patches \
+		0003-config-allow-omitted-web-whitelist.patch
+endef
+DIVINUS_POST_PATCH_HOOKS += DIVINUS_APPLY_CONFIG_COMPAT_PATCH
+endif
+
 ifeq ($(BR2_TOOLCHAIN_USES_GLIBC),y)
 	DIVINUS_OPTIONS = "-rdynamic -s -Os -lm"
 else

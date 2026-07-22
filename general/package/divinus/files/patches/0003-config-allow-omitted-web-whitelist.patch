@@ -1,13 +1,13 @@
 From: OpenIPC Firmware <firmware@openipc.org>
 Subject: [PATCH] config: keep web whitelist optional
 
-Older Divinus configurations do not contain system.web_whitelist.  Keep the
-default empty whitelist when the field is absent so those configurations remain
-compatible and access remains unrestricted as before.
+Older Divinus configurations do not contain system.web_whitelist. Keep the
+default empty whitelist when the field is absent.
 
 --- a/src/app_config.c
 +++ b/src/app_config.c
-@@ -308,7 +308,9 @@ enum ConfigError app_config_parse(void) {
+@@ -308,9 +308,11 @@ enum ConfigError app_config_parse(void) {
+     if (err != CONFIG_OK)
          goto RET_ERR;
      app_config.web_port = (unsigned short)port;
 -    parse_list(&ini, "system", "web_whitelist",
@@ -18,3 +18,4 @@ compatible and access remains unrestricted as before.
 +        goto RET_ERR;
      *app_config.web_whitelist[count] = '\0';
      parse_bool(&ini, "system", "web_enable_auth", &app_config.web_enable_auth);
+     parse_param_value(
