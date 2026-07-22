@@ -13,7 +13,7 @@ DIVINUS_LICENSE_FILES = LICENSE
 # Divinus images. All other targets continue to build the OpenIPC source.
 ifneq ($(filter ssc30kq-ultimate ssc30kq-divinus,$(OPENIPC_SOC_MODEL)-$(OPENIPC_VARIANT)),)
 DIVINUS_SITE = $(call github,johnchia,divinus,$(DIVINUS_VERSION))
-DIVINUS_VERSION = 849f4e5bf7cecb3f9d54e4be9581347f05268129
+DIVINUS_VERSION = ffab5fb0ad86a6ab8f5e713b972284e2f9577073
 DIVINUS_DEPENDENCIES += sigmastar-osdrv-infinity6e
 else
 define DIVINUS_APPLY_CONFIG_COMPAT_PATCH
