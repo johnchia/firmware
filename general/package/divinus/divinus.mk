@@ -19,6 +19,14 @@ ifneq ($(filter ssc30kq-ultimate ssc30kq-divinus,$(OPENIPC_SOC_MODEL)-$(OPENIPC_
 DIVINUS_SITE = $(call github,johnchia,divinus,$(DIVINUS_VERSION))
 DIVINUS_VERSION = c69b5584284b66d760ebb4768f84b53ab96ead57
 DIVINUS_DEPENDENCIES += sigmastar-osdrv-infinity6e
+
+# Compy (RTSP/RTP/SDP) plus its libevent-openipc event loop, staged so a
+# future Divinus source pin can link against them (see general/package/compy,
+# distributed-gathering-walrus.md step 2). Unused by the currently-pinned
+# DIVINUS_VERSION until that commit is flipped over in a later, isolated
+# change.
+DIVINUS_DEPENDENCIES += compy libevent-openipc
+DIVINUS_SSC30KQ_RTSP_LIBS = -lcompy -levent_core -levent_pthreads
 else
 define DIVINUS_APPLY_CONFIG_COMPAT_PATCH
 	$(APPLY_PATCHES) $(@D) $(DIVINUS_PKGDIR)/files/patches \
@@ -28,9 +36,9 @@ DIVINUS_POST_PATCH_HOOKS += DIVINUS_APPLY_CONFIG_COMPAT_PATCH
 endif
 
 ifeq ($(BR2_TOOLCHAIN_USES_GLIBC),y)
-	DIVINUS_OPTIONS = "-rdynamic -s -Os -lm"
+	DIVINUS_OPTIONS = "-rdynamic -s -Os -lm $(DIVINUS_SSC30KQ_RTSP_LIBS)"
 else
-	DIVINUS_OPTIONS = "-rdynamic -s -Os"
+	DIVINUS_OPTIONS = "-rdynamic -s -Os $(DIVINUS_SSC30KQ_RTSP_LIBS)"
 endif
 
 define DIVINUS_BUILD_CMDS
