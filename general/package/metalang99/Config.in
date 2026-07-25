@@ -1,0 +1,12 @@
+config BR2_PACKAGE_METALANG99
+	bool "metalang99"
+	help
+	  A metaprogramming library for pure C99/C11, powering
+	  Hirrolot's Datatype99/Interface99.
+
+	  Header/macro-only build dependency, vendored here purely so
+	  its extracted source tree can be handed to a dependent
+	  package's CMake FetchContent as an offline override -- it
+	  installs nothing to the target itself.
+
+	  https://github.com/Hirrolot/metalang99
