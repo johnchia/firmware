@@ -41,11 +41,24 @@ br-%: defconfig
 
 .PHONY: divinus-local divinus-pinned
 
+# Split into two serial sub-makes instead of the single `br-divinus-rebuild`
+# this used to call. Buildroot declares `divinus-rebuild: divinus-clean-for-rebuild
+# .WAIT divinus`, relying on `.WAIT` to stop the build branch from running until
+# the stamp files have been removed -- but `.WAIT` is a GNU Make 4.4 feature and
+# is not honoured by 4.3, which is what most hosts still ship. Under `-j` the two
+# branches then evaluate concurrently: the build branch sees `.stamp_built` before
+# the clean branch deletes it, concludes the package is up to date, and only the
+# rsync re-runs. The result was a silent no-op -- exit 0, a plausible-looking log
+# ending at the rsync line, and a binary still built from the previous source,
+# which is an excellent way to flash and debug stale firmware. Two separate
+# invocations are ordered by make itself and need no `.WAIT`.
 divinus-local:
 	@test -n "$(strip $(DIVINUS_SRCDIR))" || { \
 		echo "DIVINUS_SRCDIR is required (path to a Divinus checkout)"; exit 2; }
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
-		DIVINUS_SRCDIR="$(abspath $(DIVINUS_SRCDIR))" br-divinus-rebuild
+		DIVINUS_SRCDIR="$(abspath $(DIVINUS_SRCDIR))" br-divinus-clean-for-rebuild
+	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
+		DIVINUS_SRCDIR="$(abspath $(DIVINUS_SRCDIR))" br-divinus
 
 divinus-pinned:
 	@test -z "$(strip $(DIVINUS_SRCDIR))" || { \
