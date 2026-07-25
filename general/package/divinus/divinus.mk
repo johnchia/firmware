@@ -17,14 +17,19 @@ DIVINUS_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = --exclude divinus --exclude '*.o'
 # Divinus images. All other targets continue to build the OpenIPC source.
 ifneq ($(filter ssc30kq-ultimate ssc30kq-divinus,$(OPENIPC_SOC_MODEL)-$(OPENIPC_VARIANT)),)
 DIVINUS_SITE = $(call github,johnchia,divinus,$(DIVINUS_VERSION))
-DIVINUS_VERSION = c69b5584284b66d760ebb4768f84b53ab96ead57
+# johnchia/divinus master, hardware-verified on ssc30kq. This is the commit the
+# staged Compy packaging below was waiting for: it carries the Compy + libevent
+# RTSP rewrite and the three teardown fixes that followed it -- the double
+# client_unregister() race (3207fe4), draining in-flight encoder sends before
+# freeing the event base (52c2839), and the shutdown handle use-after-free
+# inherited from upstream (94c7021).
+DIVINUS_VERSION = 94c7021424672be65363c4ebee1a6a0e9c459a2e
 DIVINUS_DEPENDENCIES += sigmastar-osdrv-infinity6e
 
-# Compy (RTSP/RTP/SDP) plus its libevent-openipc event loop, staged so a
-# future Divinus source pin can link against them (see general/package/compy,
-# distributed-gathering-walrus.md step 2). Unused by the currently-pinned
-# DIVINUS_VERSION until that commit is flipped over in a later, isolated
-# change.
+# Compy (RTSP/RTP/SDP) plus its libevent-openipc event loop. Required to build
+# the pinned Divinus above -- rtsp/rtsp.c and rtsp/compy_libevent.c include
+# compy.h, so without these the package fails to compile rather than silently
+# losing a feature. See general/package/compy.
 DIVINUS_DEPENDENCIES += compy libevent-openipc
 DIVINUS_SSC30KQ_RTSP_LIBS = -lcompy -levent_core -levent_pthreads
 else
