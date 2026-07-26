@@ -22,6 +22,29 @@ ifneq ($(strip $(RAPTOR_SRCDIR)),)
 BR_MAKE += RAPTOR_STREAMING_OVERRIDE_SRCDIR=$(abspath $(RAPTOR_SRCDIR))
 endif
 
+# An overridden source tree is invisible to Buildroot's staleness tracking. The
+# package's .stamp_built has no prerequisite anywhere inside RAPTOR_SRCDIR, so a
+# plain image build after editing the daemons re-uses whatever binaries the
+# previous build left behind -- and the image still gets a current-looking
+# /etc/openipc-build-id, because that id describes *this* repository and the
+# raptor checkout is not part of it. Observed on 2026-07-26: an image built to
+# carry an audio fix, whose rad was the build from before the fix, reported as
+# a successful build of the current tree.
+#
+# Dropping the package's build stamps before the image build costs one relink
+# and makes the image mean what its build id says. It is a separate make
+# invocation rather than Buildroot's <pkg>-rebuild for the reason documented at
+# raptor-local below: on GNU make 4.3 that rule's .WAIT is ignored and it can
+# evaluate the build before the stamps are gone.
+#
+# (A DIVINUS_SRCDIR build has the identical exposure and is left alone here.)
+ifneq ($(strip $(RAPTOR_SRCDIR)),)
+RAPTOR_RESYNC = $(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
+	RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" br-raptor-streaming-clean-for-rebuild
+else
+RAPTOR_RESYNC = true
+endif
+
 CONFIG = $(error variable BOARD not defined)
 TIMER := $(shell date +%s)
 
@@ -44,6 +67,7 @@ endif
 all: repack-final timer
 
 build: defconfig
+	@$(RAPTOR_RESYNC)
 	@$(BR_MAKE) all -j$(shell nproc)
 
 br-%: defconfig
