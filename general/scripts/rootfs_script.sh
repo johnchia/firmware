@@ -51,9 +51,13 @@ if grep -q "USES_MUSL=y" ${BR2_CONFIG}; then
 	ln -sf ../../lib/libc.so ${TARGET_DIR}/usr/bin/ldd
 fi
 
+# Per-variant exclusions. Comments and blank lines are skipped, so a list can
+# record *why* a path is safe to drop -- which is the only thing a future reader
+# needs from it, and the difference between a considered exclusion and a
+# superstition.
 LIST="${BR2_EXTERNAL_GENERAL_PATH}/scripts/excludes/${OPENIPC_SOC_MODEL}_${OPENIPC_VARIANT}.list"
 if [ -f ${LIST} ]; then
-	xargs -a ${LIST} -I % rm -f ${TARGET_DIR}%
+	grep -vE '^[[:space:]]*(#|$)' ${LIST} | xargs -I % rm -f ${TARGET_DIR}%
 fi
 
 if [ -f "${LATE_OVERLAY_LIST}" ]; then

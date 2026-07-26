@@ -1,0 +1,27 @@
+# Paths removed from the ssc30kq_raptor rootfs, relative to the target root.
+#
+# The rootfs partition on this board is 5120KB and the codec work took the image
+# to 5160KB, which flashcp refused. Everything dropped here is verifiably
+# unreferenced in this variant, checked two ways: it appears in no DT_NEEDED of
+# any ELF in the image, and its name appears nowhere in the rootfs as text (so
+# nothing dlopens it either). Re-check both before adding to this list -- the HAL
+# reaches the MI libraries through dlopen, so DT_NEEDED alone is not an answer.
+#
+# libstdc++, 1354KB, the largest single file in the image after mhal.ko. Nothing
+# in this variant is C++: the daemons, the HAL and every vendor library the HAL
+# opens are C. It survives only because OpenIPC's post-build script keeps
+# libstdc++ whenever USES_GLIBC=y, which is a proxy for "something might need
+# it", not a statement that something does. The -gdb.py pretty-printer script is
+# a debugger helper that has no business on a camera at all.
+/usr/lib/libstdc++.so.6
+/usr/lib/libstdc++.so.6.0.32
+/usr/lib/libstdc++.so.6.0.32-gdb.py
+#
+# Not dropped, but available if this image ever needs another ~430KB compressed:
+#   /usr/lib/libmi_ive.so    758KB, vendor image-vector-engine userspace library
+#   /usr/lib/libMD_LINUX.so  406KB, vendor motion-detection library
+# Both are equally unreferenced today (no DT_NEEDED, no dlopen string anywhere),
+# and both belong to the vendor bundle rather than to us. They are left in place
+# because libstdc++ alone gives about ten times the headroom this needed, and
+# because the only real proof that removing a vendor library is harmless is a
+# board test. Take them when there is a reason to, not pre-emptively.
