@@ -302,8 +302,33 @@ define CHECK_SIZE
 		echo -- size exceeded by: $(shell expr $(FILE_SIZE) - $(2))KB; exit 1; fi
 endef
 
+# The build identity is not computed here: it is read back from the rootfs that
+# is about to be packaged, where general/scripts/rootfs_script.sh wrote it. That
+# makes the tarball's name and /etc/openipc-build-id on a running camera the same
+# string by construction, so "which image is this" and "what is flashed" cannot
+# disagree.
+#
+# They used to be computed independently, and this line was
+#
+#   $(eval OPENIPC_BUILD_ID ?= $(shell git rev-parse --short HEAD ...)-$(shell date ...))
+#
+# which names an artefact after its last *commit*. An image built before
+# committing was therefore stamped with its predecessor's hash, so two images
+# with genuinely different contents differed in name only by the timestamp --
+# and flashing the wrong one of the pair cost an evening spent debugging a
+# package that had been in the image all along. Uncommitted work now shows up
+# as a -dirty suffix and can never collide with the commit it came from.
+#
+# The fallback only fires when there is no staged rootfs to read (a bare `make
+# repack`), and says so rather than inventing a plausible-looking hash.
+#
+# LATEST is a stable name for the newest build of this soc/type/variant.
+# Timestamped tarballs accumulate here for a good reason -- going back to
+# yesterday's image matters during a bring-up -- but a flashing script that has
+# to pick one out of a directory listing will eventually pick wrong. The symlink
+# is the one to flash; the timestamped names are the archive.
 define REPACK_FIRMWARE
-	$(eval OPENIPC_BUILD_ID ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)-$(shell date -u +%Y%m%dT%H%M%SZ))
+	$(eval OPENIPC_BUILD_ID ?= $(or $(shell cat $(TARGET)/target/etc/openipc-build-id 2>/dev/null),unknown-$(shell date -u +%Y%m%dT%H%M%SZ)))
 	cd $(TARGET)/images && if test -e rootfs.tar; then mv -f rootfs.tar rootfs.$(BR2_OPENIPC_SOC_MODEL).tar; fi
 	$(if $(1),cd $(TARGET)/images && if test -e $(1); then mv -f $(1) $(1).$(BR2_OPENIPC_SOC_MODEL); fi)
 	$(if $(2),cd $(TARGET)/images && if test -e $(2); then mv -f $(2) $(2).$(BR2_OPENIPC_SOC_MODEL); fi)
@@ -312,6 +337,10 @@ define REPACK_FIRMWARE
 	$(if $(1),$(eval KERNEL = $(1).$(BR2_OPENIPC_SOC_MODEL) $(1).$(BR2_OPENIPC_SOC_MODEL).md5sum),$(eval KERNEL =))
 	$(if $(2),$(eval ROOTFS = $(2).$(BR2_OPENIPC_SOC_MODEL) $(2).$(BR2_OPENIPC_SOC_MODEL).md5sum),$(eval ROOTFS =))
 	$(eval ARCHIVE = openipc.$(BR2_OPENIPC_SOC_MODEL)-$(3)-$(BR2_OPENIPC_VARIANT)-$(OPENIPC_BUILD_ID).tgz)
+	$(eval LATEST = openipc.$(BR2_OPENIPC_SOC_MODEL)-$(3)-$(BR2_OPENIPC_VARIANT)-latest.tgz)
 	cd $(TARGET)/images && tar -czf $(ARCHIVE) $(KERNEL) $(ROOTFS)
+	cd $(TARGET)/images && ln -sfn $(ARCHIVE) $(LATEST)
+	echo "- image: $(ARCHIVE)"
+	echo "-        $(LATEST) -> $(OPENIPC_BUILD_ID)"
 	rm -f $(TARGET)/images/*.md5sum
 endef
