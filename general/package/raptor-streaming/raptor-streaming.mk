@@ -50,6 +50,7 @@ RAPTOR_STREAMING_LICENSE_FILES = raptor/LICENSE
 RAPTOR_STREAMING_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = \
 	--exclude ref --exclude sigmastar-sdk --exclude compy \
 	--exclude '*.o' --exclude '*.a' --exclude '*.so' \
+	--exclude '.built' \
 	--exclude 'rss_build_info.c' \
 	--exclude 'build' \
 	$(foreach d,$(RAPTOR_STREAMING_DAEMONS) $(RAPTOR_STREAMING_TOOLS),--exclude $(d)/$(d))
@@ -111,41 +112,39 @@ endef
 # built it by hand, which is exactly the kind of artefact a firmware image must
 # not depend on. compy is excluded from the source sync for the same reason.
 #
-# MAKE1, not MAKE: raptor's Makefile builds both HAL archives from one rule with
-# two targets,
+# Deleting the build products before every build, so that "rebuilt" means
+# rebuilt.
 #
-#   $(LIB_HAL_VIDEO_FILE) $(LIB_HAL_AUDIO_FILE):
-#           $(MAKE) -C $(HAL_DIR) ...
+# This used to compensate for two defects in raptor's own Makefile: HAL archive
+# rules with no prerequisites (so make never reconsidered an archive that
+# already existed) and two targets sharing one sub-make recipe (so under -j both
+# ran at once and each wrote the other's archive). Both are now fixed upstream,
+# in raptor/Makefile, by building each sibling library through a stamp -- which
+# is why this file no longer needs MAKE1 to serialise the build.
 #
-# which GNU make expands into two independent rules sharing a recipe. Under -j
-# both run at once, each sub-make writing the other's archive, and a daemon links
-# whichever half-written .a it finds -- the symptom is a pile of undefined
-# rss_hal_* references from a build whose own `AR libraptor_hal_*.a` lines
-# succeeded. Serialising here is the cheap fix (the whole build is seconds); the
-# real fix belongs upstream, as a grouped target (&:) or a stamp file.
+# It is still not safe to drop this, because prerequisites are necessary but not
+# sufficient here. Buildroot's override rsync copies with -a, preserving each
+# file's mtime from the developer's checkout, and updates in place without
+# deleting anything. Check out an older revision of raptor-hal and its sources
+# arrive *older* than the archive the previous build left behind, so make is
+# correct to conclude there is nothing to do -- and the image silently ships HAL
+# code that is not the code in the checkout. mtimes cannot answer "is this the
+# tree I asked for"; deleting the products can.
 #
-# The same missing prerequisites make the archives *stale* rather than merely
-# racy, and that one is worse because it is silent. The rule is:
-#
-#   $(LIB_HAL_VIDEO_FILE) $(LIB_HAL_AUDIO_FILE):
-#
-# with no prerequisites at all, so once an archive exists make considers it
-# finished and never looks at the sources again. Buildroot's rsync updates the
-# files in place without deleting anything, so a rebuild after editing
-# raptor-hal re-syncs the .c files and then links the daemons against the
-# previous archive -- an image that silently ships HAL code that is not the code
-# in the checkout. Deleting the products first is what makes a rebuild mean what
-# it says. The daemon and tool binaries go too: they do not depend on the
-# archive either, so a HAL-only change would otherwise not even relink them.
+# The daemon and tool binaries go too, so a library-only change relinks them.
+# The stamps must go with the archives: a stamp that outlives the archive it
+# stands for tells make the file has already been produced, and the link then
+# fails on a missing .a.
 define RAPTOR_STREAMING_CLEAN_PRODUCTS
 	rm -f $(@D)/raptor-hal/libraptor_hal_video.a $(@D)/raptor-hal/libraptor_hal_audio.a
+	rm -f $(@D)/raptor-hal/.built $(@D)/raptor-ipc/.built $(@D)/raptor-common/.built
 	rm -f $(foreach d,$(RAPTOR_STREAMING_DAEMONS) $(RAPTOR_STREAMING_TOOLS),$(@D)/raptor/$(d)/$(d))
 endef
 
 define RAPTOR_STREAMING_BUILD_CMDS
 	$(call RAPTOR_STREAMING_CHECK_SRCDIR)
 	$(call RAPTOR_STREAMING_CLEAN_PRODUCTS)
-	$(TARGET_MAKE_ENV) $(MAKE1) -C $(@D)/raptor \
+	$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/raptor \
 		PLATFORM=$(RAPTOR_STREAMING_PLATFORM) \
 		AAC=1 OPUS=1 \
 		CROSS_COMPILE="$(TARGET_CROSS)" \
