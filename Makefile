@@ -67,11 +67,28 @@ divinus-pinned:
 
 # Re-sync the local checkout and rebuild just Raptor, leaving the rest of the
 # image alone. Use this to iterate on the daemons without a full image build.
+#
+# Two sequential invocations rather than Buildroot's <pkg>-rebuild, which does
+# not work here and fails *silently*. Buildroot 2024.02 defines it as
+#
+#   $(1)-rebuild: $(1)-clean-for-rebuild .WAIT $(1)
+#
+# and .WAIT needs GNU make 4.4; on 4.3 it is not honoured, so the stamp removal
+# and the rebuild are just parallel prerequisites and the build can be evaluated
+# before the stamps are gone. The observed result is a run that re-syncs the
+# source, builds nothing, and exits 0 -- leaving the previous binaries in place
+# while looking like it worked. Splitting the two steps removes the ordering
+# question entirely.
+#
+# (divinus-local above uses br-divinus-rebuild and has the same exposure.)
 raptor-local:
 	@test -n "$(strip $(RAPTOR_SRCDIR))" || { \
 		echo "RAPTOR_SRCDIR is required (parent directory of the raptor repos)"; exit 2; }
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
-		RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" br-raptor-streaming-rebuild
+		RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" \
+		br-raptor-streaming-clean-for-rebuild
+	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
+		RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" br-raptor-streaming
 
 defconfig: prepare
 	@echo --- $(or $(CONFIG),$(error variable BOARD not found))

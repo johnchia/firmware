@@ -118,8 +118,28 @@ endef
 # rss_hal_* references from a build whose own `AR libraptor_hal_*.a` lines
 # succeeded. Serialising here is the cheap fix (the whole build is seconds); the
 # real fix belongs upstream, as a grouped target (&:) or a stamp file.
+#
+# The same missing prerequisites make the archives *stale* rather than merely
+# racy, and that one is worse because it is silent. The rule is:
+#
+#   $(LIB_HAL_VIDEO_FILE) $(LIB_HAL_AUDIO_FILE):
+#
+# with no prerequisites at all, so once an archive exists make considers it
+# finished and never looks at the sources again. Buildroot's rsync updates the
+# files in place without deleting anything, so a rebuild after editing
+# raptor-hal re-syncs the .c files and then links the daemons against the
+# previous archive -- an image that silently ships HAL code that is not the code
+# in the checkout. Deleting the products first is what makes a rebuild mean what
+# it says. The daemon and tool binaries go too: they do not depend on the
+# archive either, so a HAL-only change would otherwise not even relink them.
+define RAPTOR_STREAMING_CLEAN_PRODUCTS
+	rm -f $(@D)/raptor-hal/libraptor_hal_video.a $(@D)/raptor-hal/libraptor_hal_audio.a
+	rm -f $(foreach d,$(RAPTOR_STREAMING_DAEMONS) $(RAPTOR_STREAMING_TOOLS),$(@D)/raptor/$(d)/$(d))
+endef
+
 define RAPTOR_STREAMING_BUILD_CMDS
 	$(call RAPTOR_STREAMING_CHECK_SRCDIR)
+	$(call RAPTOR_STREAMING_CLEAN_PRODUCTS)
 	$(TARGET_MAKE_ENV) $(MAKE1) -C $(@D)/raptor \
 		PLATFORM=$(RAPTOR_STREAMING_PLATFORM) \
 		CROSS_COMPILE="$(TARGET_CROSS)" \
