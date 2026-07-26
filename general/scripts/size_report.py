@@ -19,6 +19,8 @@ Required env:
 Optional env:
   BR2_TARGET_ROOTFS_SQUASHFS=y / BR2_TARGET_ROOTFS_UBI=y  (used for cap lookup)
   BR2_OPENIPC_SOC_VENDOR  used for rockchip cap exception
+  BR2_OPENIPC_ROOTFS_PART_KB  real rootfs partition size, where it does not
+                          follow from the flash size; overrides the rootfs cap
   BR2_OVERLAY_PATH        defaults to BR2_OUTPUT_DIR/../general/overlay
 
 Run after `make BOARD=...` and before or after `repack` (handles both raw and
@@ -149,18 +151,32 @@ def squashfs_metadata(path: Path) -> dict | None:
     return info
 
 
-def kernel_caps(flash_mb: str, vendor: str, has_ubi: bool) -> dict[str, int]:
+def kernel_caps(
+    flash_mb: str, vendor: str, has_ubi: bool, rootfs_part_kb: str = ""
+) -> dict[str, int]:
     """Mirror the size limits the Makefile's CHECK_SIZE enforces."""
     vendor = vendor.strip('"')
     if has_ubi:
         if vendor in ("rockchip", "sigmastar"):
-            return {"kernel_kb": 0, "rootfs_kb": 16384}
-        return {"kernel_kb": 4096, "rootfs_kb": 16384}
-    if vendor == "rockchip":
-        return {"kernel_kb": 4096, "rootfs_kb": 8192}
-    if flash_mb.strip('"') == "8":
-        return {"kernel_kb": 2048, "rootfs_kb": 5120}
-    return {"kernel_kb": 2048, "rootfs_kb": 8192}
+            caps = {"kernel_kb": 0, "rootfs_kb": 16384}
+        else:
+            caps = {"kernel_kb": 4096, "rootfs_kb": 16384}
+    elif vendor == "rockchip":
+        caps = {"kernel_kb": 4096, "rootfs_kb": 8192}
+    elif flash_mb.strip('"') == "8":
+        caps = {"kernel_kb": 2048, "rootfs_kb": 5120}
+    else:
+        caps = {"kernel_kb": 2048, "rootfs_kb": 8192}
+
+    # A board whose partition table does not follow from its flash size states
+    # the real rootfs partition, and it wins: reporting headroom against a limit
+    # larger than the partition is worse than reporting none, because it reads
+    # as room to spend. See ROOTFS_CAP_KB in the top-level Makefile.
+    override = rootfs_part_kb.strip('"').strip()
+    if override.isdigit():
+        caps["rootfs_kb"] = int(override)
+
+    return caps
 
 
 def parse_autoload(overlay_dir: Path) -> set[str]:
@@ -210,6 +226,7 @@ def build_report() -> dict:
     soc_model = env("OPENIPC_SOC_MODEL")
     variant = env("OPENIPC_VARIANT")
     flash_mb = env("BR2_OPENIPC_FLASH_SIZE", required=False, default="")
+    rootfs_part_kb = env("BR2_OPENIPC_ROOTFS_PART_KB", required=False, default="")
     vendor = env("BR2_OPENIPC_SOC_VENDOR", required=False, default="")
     overlay_dir = Path(
         env(
@@ -321,7 +338,7 @@ def build_report() -> dict:
         "vmlinux_bytes": vmlinux.stat().st_size if vmlinux else None,
     }
 
-    caps = kernel_caps(flash_mb, vendor, has_ubi)
+    caps = kernel_caps(flash_mb, vendor, has_ubi, rootfs_part_kb)
     kernel_used_kb = (
         (kernel_img.stat().st_size + 1023) // 1024 if kernel_img else 0
     )

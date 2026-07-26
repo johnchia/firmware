@@ -26,6 +26,17 @@ config BR2_OPENIPC_VARIANT
 config BR2_OPENIPC_FLASH_SIZE
 	string "OpenIPC flash size"
 
+config BR2_OPENIPC_ROOTFS_PART_KB
+	string "OpenIPC rootfs partition size in KB"
+	help
+	  Size of the rootfs MTD partition in KB, for boards whose partition
+	  table does not follow from the size of the flash chip -- a 16MB NOR
+	  that gives the rootfs 5MB and the remaining 8.5MB to the overlay, for
+	  example. The build's size limit is a property of the partition the
+	  image has to fit in, not of the chip.
+
+	  Leave empty to derive the limit from BR2_OPENIPC_FLASH_SIZE as before.
+
 config BR2_OPENIPC_MAJESTIC
 	string "OpenIPC Majestic"
 	default "lite"

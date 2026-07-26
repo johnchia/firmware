@@ -176,6 +176,23 @@ endif
 repack-final: build
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) repack
 
+# The rootfs size limit is a property of the *partition table*, not of the flash
+# chip. Deriving it from BR2_OPENIPC_FLASH_SIZE assumes the two agree, and they
+# need not: ssc30kq has 16MB of NOR but gives the rootfs only 0x500000 (5120KB),
+# the remaining 8.5MB going to the overlay --
+#
+#   0x000000250000-0x000000750000 : "rootfs"
+#   0x000000750000-0x000001000000 : "rootfs_data"
+#
+# so a 16MB board was checked against 8192KB, passed at 5160KB, and flashcp then
+# refused the image as "bigger than /dev/mtd3". A limit larger than the partition
+# is not a limit; it moves the failure from the build, where it is a number, to
+# the flash, where it is a camera in an unknown state. Boards whose layout does
+# not follow from the chip size state the real figure in
+# BR2_OPENIPC_ROOTFS_PART_KB; everything else keeps the previous defaults.
+ROOTFS_CAP_KB = $(or $(strip $(subst ",,$(BR2_OPENIPC_ROOTFS_PART_KB))),\
+	$(if $(filter "8",$(BR2_OPENIPC_FLASH_SIZE)),5120,8192))
+
 repack:
 ifeq ($(BR2_PACKAGE_OPENIPC_NFS_ROOT),y)
 ifeq ($(BR2_OPENIPC_SOC_VENDOR),"rockchip")
@@ -194,10 +211,8 @@ else
 ifeq ($(BR2_TARGET_ROOTFS_SQUASHFS),y)
 ifeq ($(BR2_OPENIPC_SOC_VENDOR),"rockchip")
 	@$(call PREPARE_REPACK,zboot.img,4096,rootfs.squashfs,8192,nor)
-else ifeq ($(BR2_OPENIPC_FLASH_SIZE),"8")
-	@$(call PREPARE_REPACK,uImage,2048,rootfs.squashfs,5120,nor)
 else
-	@$(call PREPARE_REPACK,uImage,2048,rootfs.squashfs,8192,nor)
+	@$(call PREPARE_REPACK,uImage,2048,rootfs.squashfs,$(ROOTFS_CAP_KB),nor)
 endif
 endif
 ifeq ($(BR2_TARGET_ROOTFS_UBI),y)
@@ -220,6 +235,7 @@ size-report:
 	OPENIPC_SOC_MODEL=$(BR2_OPENIPC_SOC_MODEL) \
 	OPENIPC_VARIANT=$(BR2_OPENIPC_VARIANT) \
 	BR2_OPENIPC_FLASH_SIZE=$(BR2_OPENIPC_FLASH_SIZE) \
+	BR2_OPENIPC_ROOTFS_PART_KB=$(BR2_OPENIPC_ROOTFS_PART_KB) \
 	BR2_OPENIPC_SOC_VENDOR=$(BR2_OPENIPC_SOC_VENDOR) \
 	BR2_TARGET_ROOTFS_SQUASHFS=$(BR2_TARGET_ROOTFS_SQUASHFS) \
 	BR2_TARGET_ROOTFS_UBI=$(BR2_TARGET_ROOTFS_UBI) \

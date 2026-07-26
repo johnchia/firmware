@@ -43,6 +43,19 @@ BR2_OPENIPC_SOC_MODEL="ssc30kq"
 BR2_OPENIPC_SOC_FAMILY="infinity6e"
 BR2_OPENIPC_VARIANT="raptor"
 BR2_OPENIPC_FLASH_SIZE="16"
+# The chip is 16MB but the rootfs partition is 5MB of it, the rest going to the
+# overlay, so the limit the build enforces cannot be derived from the flash size:
+#
+#   0x000000040000-0x000000050000 : "env"
+#   0x000000050000-0x000000250000 : "kernel"       2048KB
+#   0x000000250000-0x000000750000 : "rootfs"       5120KB
+#   0x000000750000-0x000001000000 : "rootfs_data"  8896KB
+#
+# Without this the build checked a 16MB board against 8192KB, passed a 5160KB
+# rootfs, and flashcp refused it as "bigger than /dev/mtd3" -- the failure moved
+# from the build, where it is a number, to the flash, where it is a camera in an
+# unknown state. Re-read /proc/mtd before changing this.
+BR2_OPENIPC_ROOTFS_PART_KB="5120"
 
 # Packages
 #
