@@ -57,8 +57,13 @@ RAPTOR_STREAMING_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = \
 # The HAL dlopens the MI libraries rather than linking them, so this is an
 # install-order dependency rather than a link-time one: the vendor bundle and
 # the kernel modules have to be in the image for the daemons to do anything.
+#
+# faac and opus, by contrast, are genuine link-time dependencies -- but of rad
+# alone. Upstream's AAC=1 also declares an AAC *decoder* (-lhelix-aac), which is
+# only linked by daemons this image does not build (rsp, rmd), so no helix
+# package is needed; -DRAPTOR_AAC on its own compiles fine everywhere else.
 RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
-	sigmastar-osdrv-infinity6e
+	sigmastar-osdrv-infinity6e faac opus
 
 # What this image runs. Deliberately a subset of upstream's DAEMONS: the rest
 # (recording, web, motion, wifibroadcast...) are either unported to this backend
@@ -142,6 +147,7 @@ define RAPTOR_STREAMING_BUILD_CMDS
 	$(call RAPTOR_STREAMING_CLEAN_PRODUCTS)
 	$(TARGET_MAKE_ENV) $(MAKE1) -C $(@D)/raptor \
 		PLATFORM=$(RAPTOR_STREAMING_PLATFORM) \
+		AAC=1 OPUS=1 \
 		CROSS_COMPILE="$(TARGET_CROSS)" \
 		SYSROOT="$(STAGING_DIR)" \
 		RSS_BUILD_HASH="$(RAPTOR_STREAMING_BUILD_HASH)" \
