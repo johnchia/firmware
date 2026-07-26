@@ -12,6 +12,16 @@ ifneq ($(strip $(DIVINUS_SRCDIR)),)
 BR_MAKE += DIVINUS_OVERRIDE_SRCDIR=$(abspath $(DIVINUS_SRCDIR))
 endif
 
+# Raptor has no pinned release to fall back on: it is four sibling repositories
+# and its SigmaStar backend is not upstream yet, so a local checkout is the only
+# source. RAPTOR_SRCDIR is the *parent* directory holding raptor, raptor-hal,
+# raptor-common, raptor-ipc and compy.
+# The package is raptor-streaming because Buildroot already has a `raptor`
+# (raptor2, the RDF library); the knob here keeps the short name.
+ifneq ($(strip $(RAPTOR_SRCDIR)),)
+BR_MAKE += RAPTOR_STREAMING_OVERRIDE_SRCDIR=$(abspath $(RAPTOR_SRCDIR))
+endif
+
 CONFIG = $(error variable BOARD not defined)
 TIMER := $(shell date +%s)
 
@@ -53,6 +63,16 @@ divinus-pinned:
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) br-divinus-dirclean
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) br-divinus
 
+.PHONY: raptor-local
+
+# Re-sync the local checkout and rebuild just Raptor, leaving the rest of the
+# image alone. Use this to iterate on the daemons without a full image build.
+raptor-local:
+	@test -n "$(strip $(RAPTOR_SRCDIR))" || { \
+		echo "RAPTOR_SRCDIR is required (parent directory of the raptor repos)"; exit 2; }
+	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
+		RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" br-raptor-streaming-rebuild
+
 defconfig: prepare
 	@echo --- $(or $(CONFIG),$(error variable BOARD not found))
 	@cat $(CONFIG) $(PWD)/general/openipc.fragment > $(BR_CONF)
@@ -83,6 +103,9 @@ help:
 	@printf "Divinus development:\n \
 	- make BOARD=<board> DIVINUS_SRCDIR=/path/to/divinus divinus-local\n \
 	- make BOARD=<board> divinus-pinned\n\n"
+	@printf "Raptor development (RAPTOR_SRCDIR is the parent of the raptor repos):\n \
+	- make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor\n \
+	- make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor raptor-local\n\n"
 
 list:
 	@ls -1 br-ext-chip-*/configs

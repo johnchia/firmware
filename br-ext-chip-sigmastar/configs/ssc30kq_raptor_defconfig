@@ -1,0 +1,73 @@
+# Architecture
+BR2_arm=y
+BR2_cortex_a7=y
+BR2_ARM_FPU_NEON_VFPV4=y
+BR2_ARM_INSTRUCTIONS_THUMB2=y
+
+# Toolchain
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
+BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/openipc/firmware/releases/download/$(OPENIPC_TOOLCHAIN).tgz"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="arm-openipc-linux-gnueabihf"
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_4_9=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_GLIBC=y
+# BR2_TOOLCHAIN_EXTERNAL_INET_RPC is not set
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+
+# Kernel
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/$(OPENIPC_KERNEL).tar.gz"
+BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/infinity6e-ssc012b.config"
+BR2_LINUX_KERNEL_UIMAGE=y
+BR2_LINUX_KERNEL_XZ=y
+
+# Filesystem
+BR2_PACKAGE_BUSYBOX_CONFIG="$(BR2_EXTERNAL)/package/busybox/busybox.config"
+BR2_PACKAGE_EXFATPROGS=y
+BR2_PACKAGE_UBOOT_TOOLS=y
+BR2_PACKAGE_WIREGUARD_LINUX_COMPAT=y
+BR2_PACKAGE_WIREGUARD_TOOLS=y
+BR2_PACKAGE_ZLIB=y
+# BR2_PACKAGE_IFUPDOWN_SCRIPTS is not set
+BR2_TARGET_ROOTFS_CPIO=y
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/ssc30kq-post-image.sh"
+
+# OpenIPC
+BR2_OPENIPC_SOC_VENDOR="sigmastar"
+BR2_OPENIPC_SOC_MODEL="ssc30kq"
+BR2_OPENIPC_SOC_FAMILY="infinity6e"
+BR2_OPENIPC_VARIANT="raptor"
+BR2_OPENIPC_FLASH_SIZE="16"
+
+# Packages
+#
+# Raptor owns the camera on this image: there is no Majestic and no Divinus, so
+# the OSDRV package installs the full Infinity6E vendor library bundle on its
+# own (see its BR2_PACKAGE_MAJESTIC condition) and the HAL dlopens what it needs
+# from there.
+#
+# Raptor has no download site yet -- its SigmaStar backend is on unpushed
+# branches -- so this target needs a local checkout:
+#
+#   make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=/path/to/raptor-parent
+#
+# libschrift (rod's glyph rasteriser) and majestic-fonts (the TrueType file it
+# loads) are pulled in by the Raptor package rather than listed here.
+BR2_PACKAGE_DROPBEAR_OPENIPC=y
+BR2_PACKAGE_EXFAT_OPENIPC=y
+BR2_PACKAGE_IPCTOOL=y
+BR2_PACKAGE_JSONFILTER=y
+BR2_PACKAGE_LIBCURL_OPENIPC=y
+BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
+# BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
+BR2_PACKAGE_MBEDTLS_OPENIPC=y
+BR2_PACKAGE_RAPTOR_STREAMING=y
+BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6E=y
+BR2_PACKAGE_VTUND_OPENIPC=y

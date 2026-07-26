@@ -1,0 +1,9 @@
+config BR2_PACKAGE_COMPY
+	bool "compy"
+	help
+	  HTTP/RTSP protocol library used by Raptor's streaming daemon.
+
+	  Static library, staging only: nothing is installed into the
+	  rootfs.
+
+	  https://github.com/gtxaspec/compy
