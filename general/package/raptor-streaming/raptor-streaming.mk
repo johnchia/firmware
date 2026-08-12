@@ -64,7 +64,7 @@ RAPTOR_STREAMING_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = \
 # only linked by daemons this image does not build (rsp, rmd), so no helix
 # package is needed; -DRAPTOR_AAC on its own compiles fine everywhere else.
 RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
-	sigmastar-osdrv-infinity6e faac opus
+	sigmastar-osdrv-$(OPENIPC_SOC_FAMILY) faac opus
 
 # What this image runs. Deliberately a subset of upstream's DAEMONS: the rest
 # (recording, web, motion, wifibroadcast...) are either unported to this backend
@@ -79,7 +79,10 @@ RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
 RAPTOR_STREAMING_DAEMONS = rvd rsd rad rod ric
 RAPTOR_STREAMING_TOOLS = raptorctl
 
-RAPTOR_STREAMING_PLATFORM = INFINITY6E
+# The HAL backend to compile, one per SoC family. Derived from the family so a
+# new SigmaStar board needs only its defconfig, not an edit here: infinity6e ->
+# INFINITY6E, infinity6c -> INFINITY6C.
+RAPTOR_STREAMING_PLATFORM = $(shell echo $(OPENIPC_SOC_FAMILY) | tr '[:lower:]' '[:upper:]')
 
 # Board config, with the generic one as the fallback. The ssc30kq file carries
 # the settings this hardware was actually brought up with, including the
