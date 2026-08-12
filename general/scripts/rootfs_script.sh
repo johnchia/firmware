@@ -48,6 +48,11 @@ fi
 
 if grep -q "USES_MUSL=y" ${BR2_CONFIG}; then
 	ln -sf libc.so ${TARGET_DIR}/lib/ld-uClibc.so.0
+	# Newer SigmaStar vendor blobs (2024+) are linked against uClibc-ng, whose
+	# loader/libc sonames bumped to ld-uClibc.so.1 / libc.so.0. musl satisfies
+	# them the same way it does the old .so.0 name, so alias those too.
+	ln -sf libc.so ${TARGET_DIR}/lib/ld-uClibc.so.1
+	ln -sf libc.so ${TARGET_DIR}/lib/libc.so.0
 	ln -sf ../../lib/libc.so ${TARGET_DIR}/usr/bin/ldd
 fi
 
