@@ -180,6 +180,11 @@ define RAPTOR_STREAMING_INSTALL_TARGET_CMDS
 	$(INSTALL) -m 644 $(RAPTOR_STREAMING_CONFIG_FILE) $(TARGET_DIR)/etc/raptor.conf
 	$(INSTALL) -m 755 $(@D)/raptor/config/S31raptor \
 		$(TARGET_DIR)/etc/init.d/S95raptor
+	# rod's default OSD font path is /usr/share/fonts/default.ttf; point it at the
+	# UbuntuMono the majestic-fonts dependency already ships rather than shipping a
+	# second copy. Relative target so it resolves under any root.
+	$(INSTALL) -m 755 -d $(TARGET_DIR)/usr/share/fonts
+	ln -sf truetype/UbuntuMono-Regular.ttf $(TARGET_DIR)/usr/share/fonts/default.ttf
 endef
 
 $(eval $(generic-package))
