@@ -30,11 +30,13 @@ define MAJESTIC_WEBUI_INSTALL
 	cp -r $(@D)/www $(TARGET_DIR)/var
 endef
 
+# The dist is a moving ref, so which fpv-only cgis it ships varies; removing them
+# for a standard build must not fail on the ones a given dist happens to omit.
 define MAJESTIC_WEBUI_STANDARD_FIXUP
-	rm $(TARGET_DIR)/var/www/cgi-bin/fpv-wfb.cgi
-	rm $(TARGET_DIR)/var/www/cgi-bin/j/locale_fpv.cgi
-	rm $(TARGET_DIR)/var/www/cgi-bin/p/header_fpv.cgi
-	rm $(TARGET_DIR)/var/www/cgi-bin/p/fpv_common.cgi
+	rm -f $(TARGET_DIR)/var/www/cgi-bin/fpv-wfb.cgi
+	rm -f $(TARGET_DIR)/var/www/cgi-bin/j/locale_fpv.cgi
+	rm -f $(TARGET_DIR)/var/www/cgi-bin/p/header_fpv.cgi
+	rm -f $(TARGET_DIR)/var/www/cgi-bin/p/fpv_common.cgi
 endef
 
 define MAJESTIC_WEBUI_FPV_FIXUP
