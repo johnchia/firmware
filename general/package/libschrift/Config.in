@@ -1,0 +1,10 @@
+config BR2_PACKAGE_LIBSCHRIFT
+	bool "libschrift"
+	help
+	  Lightweight TrueType font rendering library.
+
+	  Static library, staging only: nothing is installed into the
+	  rootfs. Selected by packages that rasterise text on the device,
+	  such as Raptor's OSD daemon.
+
+	  https://github.com/tomolt/libschrift

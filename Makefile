@@ -12,6 +12,39 @@ ifneq ($(strip $(DIVINUS_SRCDIR)),)
 BR_MAKE += DIVINUS_OVERRIDE_SRCDIR=$(abspath $(DIVINUS_SRCDIR))
 endif
 
+# Raptor has no pinned release to fall back on: it is four sibling repositories
+# and its SigmaStar backend is not upstream yet, so a local checkout is the only
+# source. RAPTOR_SRCDIR is the *parent* directory holding raptor, raptor-hal,
+# raptor-common, raptor-ipc and compy.
+# The package is raptor-streaming because Buildroot already has a `raptor`
+# (raptor2, the RDF library); the knob here keeps the short name.
+ifneq ($(strip $(RAPTOR_SRCDIR)),)
+BR_MAKE += RAPTOR_STREAMING_OVERRIDE_SRCDIR=$(abspath $(RAPTOR_SRCDIR))
+endif
+
+# An overridden source tree is invisible to Buildroot's staleness tracking. The
+# package's .stamp_built has no prerequisite anywhere inside RAPTOR_SRCDIR, so a
+# plain image build after editing the daemons re-uses whatever binaries the
+# previous build left behind -- and the image still gets a current-looking
+# /etc/openipc-build-id, because that id describes *this* repository and the
+# raptor checkout is not part of it. Observed on 2026-07-26: an image built to
+# carry an audio fix, whose rad was the build from before the fix, reported as
+# a successful build of the current tree.
+#
+# Dropping the package's build stamps before the image build costs one relink
+# and makes the image mean what its build id says. It is a separate make
+# invocation rather than Buildroot's <pkg>-rebuild for the reason documented at
+# raptor-local below: on GNU make 4.3 that rule's .WAIT is ignored and it can
+# evaluate the build before the stamps are gone.
+#
+# (A DIVINUS_SRCDIR build has the identical exposure and is left alone here.)
+ifneq ($(strip $(RAPTOR_SRCDIR)),)
+RAPTOR_RESYNC = $(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
+	RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" br-raptor-streaming-clean-for-rebuild
+else
+RAPTOR_RESYNC = true
+endif
+
 CONFIG = $(error variable BOARD not defined)
 TIMER := $(shell date +%s)
 
@@ -34,6 +67,7 @@ endif
 all: repack-final timer
 
 build: defconfig
+	@$(RAPTOR_RESYNC)
 	@$(BR_MAKE) all -j$(shell nproc)
 
 br-%: defconfig
@@ -66,6 +100,33 @@ divinus-pinned:
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) br-divinus-dirclean
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) br-divinus
 
+.PHONY: raptor-local
+
+# Re-sync the local checkout and rebuild just Raptor, leaving the rest of the
+# image alone. Use this to iterate on the daemons without a full image build.
+#
+# Two sequential invocations rather than Buildroot's <pkg>-rebuild, which does
+# not work here and fails *silently*. Buildroot 2024.02 defines it as
+#
+#   $(1)-rebuild: $(1)-clean-for-rebuild .WAIT $(1)
+#
+# and .WAIT needs GNU make 4.4; on 4.3 it is not honoured, so the stamp removal
+# and the rebuild are just parallel prerequisites and the build can be evaluated
+# before the stamps are gone. The observed result is a run that re-syncs the
+# source, builds nothing, and exits 0 -- leaving the previous binaries in place
+# while looking like it worked. Splitting the two steps removes the ordering
+# question entirely.
+#
+# (divinus-local above uses br-divinus-rebuild and has the same exposure.)
+raptor-local:
+	@test -n "$(strip $(RAPTOR_SRCDIR))" || { \
+		echo "RAPTOR_SRCDIR is required (parent directory of the raptor repos)"; exit 2; }
+	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
+		RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" \
+		br-raptor-streaming-clean-for-rebuild
+	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
+		RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" br-raptor-streaming
+
 defconfig: prepare
 	@echo --- $(or $(CONFIG),$(error variable BOARD not found))
 	@cat $(CONFIG) $(PWD)/general/openipc.fragment > $(BR_CONF)
@@ -96,6 +157,9 @@ help:
 	@printf "Divinus development:\n \
 	- make BOARD=<board> DIVINUS_SRCDIR=/path/to/divinus divinus-local\n \
 	- make BOARD=<board> divinus-pinned\n\n"
+	@printf "Raptor development (RAPTOR_SRCDIR is the parent of the raptor repos):\n \
+	- make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor\n \
+	- make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor raptor-local\n\n"
 
 list:
 	@ls -1 br-ext-chip-*/configs
@@ -149,6 +213,23 @@ endif
 repack-final: build
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) repack
 
+# The rootfs size limit is a property of the *partition table*, not of the flash
+# chip. Deriving it from BR2_OPENIPC_FLASH_SIZE assumes the two agree, and they
+# need not: ssc30kq has 16MB of NOR but gives the rootfs only 0x500000 (5120KB),
+# the remaining 8.5MB going to the overlay --
+#
+#   0x000000250000-0x000000750000 : "rootfs"
+#   0x000000750000-0x000001000000 : "rootfs_data"
+#
+# so a 16MB board was checked against 8192KB, passed at 5160KB, and flashcp then
+# refused the image as "bigger than /dev/mtd3". A limit larger than the partition
+# is not a limit; it moves the failure from the build, where it is a number, to
+# the flash, where it is a camera in an unknown state. Boards whose layout does
+# not follow from the chip size state the real figure in
+# BR2_OPENIPC_ROOTFS_PART_KB; everything else keeps the previous defaults.
+ROOTFS_CAP_KB = $(or $(strip $(subst ",,$(BR2_OPENIPC_ROOTFS_PART_KB))),\
+	$(if $(filter "8",$(BR2_OPENIPC_FLASH_SIZE)),5120,8192))
+
 repack:
 ifeq ($(BR2_PACKAGE_OPENIPC_NFS_ROOT),y)
 ifeq ($(BR2_OPENIPC_SOC_VENDOR),"rockchip")
@@ -167,10 +248,8 @@ else
 ifeq ($(BR2_TARGET_ROOTFS_SQUASHFS),y)
 ifeq ($(BR2_OPENIPC_SOC_VENDOR),"rockchip")
 	@$(call PREPARE_REPACK,zboot.img,4096,rootfs.squashfs,8192,nor)
-else ifeq ($(BR2_OPENIPC_FLASH_SIZE),"8")
-	@$(call PREPARE_REPACK,uImage,2048,rootfs.squashfs,5120,nor)
 else
-	@$(call PREPARE_REPACK,uImage,2048,rootfs.squashfs,8192,nor)
+	@$(call PREPARE_REPACK,uImage,2048,rootfs.squashfs,$(ROOTFS_CAP_KB),nor)
 endif
 endif
 ifeq ($(BR2_TARGET_ROOTFS_UBI),y)
@@ -193,6 +272,7 @@ size-report:
 	OPENIPC_SOC_MODEL=$(BR2_OPENIPC_SOC_MODEL) \
 	OPENIPC_VARIANT=$(BR2_OPENIPC_VARIANT) \
 	BR2_OPENIPC_FLASH_SIZE=$(BR2_OPENIPC_FLASH_SIZE) \
+	BR2_OPENIPC_ROOTFS_PART_KB=$(BR2_OPENIPC_ROOTFS_PART_KB) \
 	BR2_OPENIPC_SOC_VENDOR=$(BR2_OPENIPC_SOC_VENDOR) \
 	BR2_TARGET_ROOTFS_SQUASHFS=$(BR2_TARGET_ROOTFS_SQUASHFS) \
 	BR2_TARGET_ROOTFS_UBI=$(BR2_TARGET_ROOTFS_UBI) \
@@ -275,8 +355,33 @@ define CHECK_SIZE
 		echo -- size exceeded by: $(shell expr $(FILE_SIZE) - $(2))KB; exit 1; fi
 endef
 
+# The build identity is not computed here: it is read back from the rootfs that
+# is about to be packaged, where general/scripts/rootfs_script.sh wrote it. That
+# makes the tarball's name and /etc/openipc-build-id on a running camera the same
+# string by construction, so "which image is this" and "what is flashed" cannot
+# disagree.
+#
+# They used to be computed independently, and this line was
+#
+#   $(eval OPENIPC_BUILD_ID ?= $(shell git rev-parse --short HEAD ...)-$(shell date ...))
+#
+# which names an artefact after its last *commit*. An image built before
+# committing was therefore stamped with its predecessor's hash, so two images
+# with genuinely different contents differed in name only by the timestamp --
+# and flashing the wrong one of the pair cost an evening spent debugging a
+# package that had been in the image all along. Uncommitted work now shows up
+# as a -dirty suffix and can never collide with the commit it came from.
+#
+# The fallback only fires when there is no staged rootfs to read (a bare `make
+# repack`), and says so rather than inventing a plausible-looking hash.
+#
+# LATEST is a stable name for the newest build of this soc/type/variant.
+# Timestamped tarballs accumulate here for a good reason -- going back to
+# yesterday's image matters during a bring-up -- but a flashing script that has
+# to pick one out of a directory listing will eventually pick wrong. The symlink
+# is the one to flash; the timestamped names are the archive.
 define REPACK_FIRMWARE
-	$(eval OPENIPC_BUILD_ID ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo local)-$(shell date -u +%Y%m%dT%H%M%SZ))
+	$(eval OPENIPC_BUILD_ID ?= $(or $(shell cat $(TARGET)/target/etc/openipc-build-id 2>/dev/null),unknown-$(shell date -u +%Y%m%dT%H%M%SZ)))
 	cd $(TARGET)/images && if test -e rootfs.tar; then mv -f rootfs.tar rootfs.$(BR2_OPENIPC_SOC_MODEL).tar; fi
 	$(if $(1),cd $(TARGET)/images && if test -e $(1); then mv -f $(1) $(1).$(BR2_OPENIPC_SOC_MODEL); fi)
 	$(if $(2),cd $(TARGET)/images && if test -e $(2); then mv -f $(2) $(2).$(BR2_OPENIPC_SOC_MODEL); fi)
@@ -285,6 +390,10 @@ define REPACK_FIRMWARE
 	$(if $(1),$(eval KERNEL = $(1).$(BR2_OPENIPC_SOC_MODEL) $(1).$(BR2_OPENIPC_SOC_MODEL).md5sum),$(eval KERNEL =))
 	$(if $(2),$(eval ROOTFS = $(2).$(BR2_OPENIPC_SOC_MODEL) $(2).$(BR2_OPENIPC_SOC_MODEL).md5sum),$(eval ROOTFS =))
 	$(eval ARCHIVE = openipc.$(BR2_OPENIPC_SOC_MODEL)-$(3)-$(BR2_OPENIPC_VARIANT)-$(OPENIPC_BUILD_ID).tgz)
+	$(eval LATEST = openipc.$(BR2_OPENIPC_SOC_MODEL)-$(3)-$(BR2_OPENIPC_VARIANT)-latest.tgz)
 	cd $(TARGET)/images && tar -czf $(ARCHIVE) $(KERNEL) $(ROOTFS)
+	cd $(TARGET)/images && ln -sfn $(ARCHIVE) $(LATEST)
+	echo "- image: $(ARCHIVE)"
+	echo "-        $(LATEST) -> $(OPENIPC_BUILD_ID)"
 	rm -f $(TARGET)/images/*.md5sum
 endef

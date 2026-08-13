@@ -1,0 +1,14 @@
+config BR2_PACKAGE_FAAC
+	bool "faac"
+	help
+	  Freeware Advanced Audio Coder -- an AAC encoder, providing
+	  AAC-LC and HE-AAC v1 (AAC-LC plus SBR).
+
+	  Not in Buildroot's own package set, and the version matters: the
+	  modern releases build with Meson and expose a different API
+	  (faac_encoder_open / faac_params_init) from the faacEnc* one that
+	  distributions carried for years. Raptor's rad uses the modern
+	  API, so this package tracks the commit Raptor's own
+	  build-standalone.sh pins.
+
+	  https://github.com/knik0/faac
