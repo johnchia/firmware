@@ -1,5 +1,10 @@
 config BR2_PACKAGE_MAJESTIC
 	bool "Majestic streamer"
+	# Majestic links libyaml to parse majestic.yaml. Selecting it here rather
+	# than only listing it in _DEPENDENCIES is what puts the library in the
+	# image: _DEPENDENCIES orders the build, but the target directory is
+	# assembled from the packages the configuration enables.
+	select BR2_PACKAGE_LIBYAML
 	help
 	  Tiny but powerful IPC streaming software
 	  (non-commercial version for personal use only)
