@@ -43,9 +43,18 @@ BR2_OPENIPC_FLASH_SIZE="8"
 
 # Packages
 #
-# Raptor owns the camera on this image: there is no Majestic and no Divinus, so
-# the OSDRV package installs the full Infinity6C vendor library bundle on its
-# own and the HAL dlopens what it needs from there.
+# Raptor owns the camera on this image: nothing else streams from it, so the
+# OSDRV package installs the full Infinity6C vendor library bundle on its own
+# and the HAL dlopens what it needs from there.
+#
+# Majestic is carried anyway, as a reference encoder rather than a streamer. It
+# is the second opinion when the MI stack refuses something and it is not clear
+# whether the fault is Raptor's or the SoC's -- the H.265 rate-control question
+# on this part is exactly that shape. It does not start on its own: a post-build
+# hook renames its init script to K95majestic (see
+# general/scripts/late-post-build-hooks.list), because /etc/init.d runs in name
+# order and S95majestic would otherwise take the MI devices before S95raptor.
+# To use it: /etc/init.d/S95raptor stop, then run majestic by hand.
 #
 # Raptor has no download site yet -- its SigmaStar backend is on unpushed
 # branches -- so this target needs a local checkout:
@@ -63,6 +72,7 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
+BR2_PACKAGE_MAJESTIC=y
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
 # The client library only. The broker is a forking server with no role on a
 # camera that publishes to one elsewhere, and Buildroot ties mosquitto's TLS to
