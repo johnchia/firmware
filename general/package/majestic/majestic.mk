@@ -12,9 +12,16 @@ MAJESTIC_LICENSE_FILES = LICENSE
 MAJESTIC_FAMILY = $(OPENIPC_SOC_FAMILY)
 MAJESTIC_VARIANT = $(OPENIPC_MAJESTIC)
 
+# libyaml is listed because majestic links it (it parses majestic.yaml with it),
+# not because anything here uses it directly. It was missing for years without
+# showing, since every image that carried Majestic also carried yaml-cli, which
+# selects libyaml and installed it as a side effect. An image with Majestic and
+# no yaml-cli -- ssc377qe_raptor is the first -- ships a binary that dies at
+# startup on "Error loading shared library libyaml-0.so.2".
 MAJESTIC_DEPENDENCIES += \
 	libevent-openipc \
 	libogg-openipc \
+	libyaml \
 	mbedtls-openipc \
 	opus-openipc \
 	json-c
