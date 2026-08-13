@@ -1,0 +1,16 @@
+config BR2_PACKAGE_COMPY
+	bool "compy"
+	select BR2_PACKAGE_SLICE99
+	select BR2_PACKAGE_METALANG99
+	select BR2_PACKAGE_DATATYPE99
+	select BR2_PACKAGE_INTERFACE99
+	help
+	  A small, portable RTSP 1.0 server library in C99 for embedded
+	  IP cameras: RTCP, SRTP/SRTCP, RTSPS, Digest auth, ONVIF
+	  backchannel, H.264/H.265.
+
+	  Static build-time dependency only -- it is staged for other
+	  packages (e.g. a future Divinus RTSP rewrite) to link
+	  against, and installs nothing to the target rootfs itself.
+
+	  https://github.com/gtxaspec/compy
