@@ -6,7 +6,13 @@
 
 # Pinned rather than tracked at HEAD (which is what Raptor's own
 # build-standalone.sh does) so an image can be rebuilt identically later.
-COMPY_VERSION = 0649f6b73835ab216cc6110736f044fb338c2eb6
+#
+# Bumped past a783835 ("rtcp: anchor sender reports to the media clock"), which
+# adds Compy_RtpTransport_set_clock_reference. rsd calls it from
+# rsd_ring_reader.c as of raptor's own "rsd: anchor audio sender reports on the
+# capture clock" -- the two landed upstream together, so a pin older than this
+# fails the image build on an implicit declaration rather than on a link error.
+COMPY_VERSION = c12c5942f57688d5d25ebea36176445135a4681f
 COMPY_SITE = $(call github,gtxaspec,compy,$(COMPY_VERSION))
 COMPY_LICENSE = MIT
 COMPY_LICENSE_FILES = LICENSE
