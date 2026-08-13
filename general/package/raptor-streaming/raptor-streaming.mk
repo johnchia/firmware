@@ -64,7 +64,7 @@ RAPTOR_STREAMING_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = \
 # only linked by daemons this image does not build (rsp, rmd), so no helix
 # package is needed; -DRAPTOR_AAC on its own compiles fine everywhere else.
 RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
-	sigmastar-osdrv-$(OPENIPC_SOC_FAMILY) faac opus
+	sigmastar-osdrv-$(OPENIPC_SOC_FAMILY) faac opus mosquitto
 
 # What this image runs. Deliberately a subset of upstream's DAEMONS: the rest
 # (recording, web, motion, wifibroadcast...) are either unported to this backend
@@ -76,7 +76,11 @@ RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
 #   rad  audio
 #   rod  OSD text rendering -- draws into SHM, which rvd uploads to MI_RGN
 #   ric  IR-cut day/night; exits immediately unless [ircut] enabled
-RAPTOR_STREAMING_DAEMONS = rvd rsd rad rod ric
+#   rmq  MQTT bridge; needs libmosquitto, which is why mosquitto is a dependency
+#        above. Idle unless [mqtt] enabled, and it is the recovery path for
+#        settings that only apply at bring-up -- it writes the config file
+#        itself, so it can correct one even when rvd is down.
+RAPTOR_STREAMING_DAEMONS = rvd rsd rad rod ric rmq
 RAPTOR_STREAMING_TOOLS = raptorctl
 
 # The HAL backend to compile, one per SoC family. Derived from the family so a
