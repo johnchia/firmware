@@ -14,6 +14,23 @@ MDNSD_OPENIPC_LICENSE_FILES = LICENSE
 MDNSD_OPENIPC_DEPENDENCIES = host-pkgconf
 MDNSD_OPENIPC_AUTORECONF = YES
 
+# Stage the library and its headers, so something other than the bundled daemon
+# can use libmdnsd -- the query side of it (mdnsd_query, mdnsd_find,
+# mdnsd_get_address) is how a client discovers a service on the LAN rather than
+# being told where it is.
+#
+# The stock autotools staging install is enough: upstream already ships the
+# public headers as nobase_include_HEADERS (libmdnsd/{mdnsd,1035,sdtxt,xht}.h),
+# so they land under usr/include/libmdnsd/ with the directory kept, alongside a
+# linkable usr/lib/libmdnsd.so. No INSTALL_STAGING_CMDS of our own, which is
+# also why this does not repeat the mquery bug below: `make install` gates that
+# binary on the ENABLE_MQUERY automake conditional, where the hand-written
+# target install did not.
+#
+# Note for anyone linking it: there is no pkg-config file, so -lmdnsd has to be
+# spelled out.
+MDNSD_OPENIPC_INSTALL_STAGING = YES
+
 ifeq ($(BR2_PACKAGE_MDNSD_MQUERY_OPENIPC),y)
 MDNSD_OPENIPC_CONF_OPTS += --with-mquery --without-systemd
 else
