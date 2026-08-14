@@ -40,7 +40,7 @@
 # All four move together in practice -- a HAL change usually needs the daemon
 # change that calls it -- so bump them as a set and rebuild before trusting the
 # result. There is no test that a mixed set links.
-RAPTOR_STREAMING_VERSION = 9c135ee1e4d850a5b1e062492f7371853ed717cc
+RAPTOR_STREAMING_VERSION = fac6913c9f394ba76adca5ebaf1ed0c52bae8553
 RAPTOR_STREAMING_HAL_VERSION = 621877e5b3ced34166b9b4d594ba350924390eec
 RAPTOR_STREAMING_COMMON_VERSION = 51358d23f85bd6f23f3f2d0be3e33c776b650217
 RAPTOR_STREAMING_IPC_VERSION = 1124c3194b90f131dde48e18c5641e748445fc9b
@@ -180,12 +180,16 @@ RAPTOR_STREAMING_TOOLS = raptorctl
 # INFINITY6E, infinity6c -> INFINITY6C.
 RAPTOR_STREAMING_PLATFORM = $(shell echo $(OPENIPC_SOC_FAMILY) | tr '[:lower:]' '[:upper:]')
 
-# Board config, with the generic one as the fallback. The ssc30kq file carries
-# the settings this hardware was actually brought up with, including the
-# comments recording why each one is what it is.
-RAPTOR_STREAMING_CONFIG_FILE = $(if $(wildcard $(@D)/raptor/config/raptor-$(OPENIPC_SOC_MODEL).conf),\
-	$(@D)/raptor/config/raptor-$(OPENIPC_SOC_MODEL).conf,\
-	$(@D)/raptor/config/raptor.conf)
+# One config for every board. This used to pick a raptor-$(SOC_MODEL).conf when
+# raptor shipped one, which made the config a per-part fork that drifted from the
+# default it was copied from; raptor deleted those and this follows.
+#
+# Per-image changes belong in general/overlay/etc/raptor.conf, which Buildroot
+# applies after packages and which therefore wins over this. That overlay is what
+# turns [mqtt] and [http] on. Note it is global rather than board-scoped: a
+# setting that is genuinely true of one board only has nowhere to go here yet,
+# and should be argued for as a raptor.conf default or carried on the board.
+RAPTOR_STREAMING_CONFIG_FILE = $(@D)/raptor/config/raptor.conf
 
 # The hash in the daemons' startup banner, which during a soak is how you tell
 # which build is on the board. raptor's own Makefile derives it with

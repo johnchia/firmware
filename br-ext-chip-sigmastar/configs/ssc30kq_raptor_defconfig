@@ -64,10 +64,29 @@ BR2_OPENIPC_ROOTFS_PART_KB="5120"
 # own (see its BR2_PACKAGE_MAJESTIC condition) and the HAL dlopens what it needs
 # from there.
 #
-# Raptor has no download site yet -- its SigmaStar backend is on unpushed
-# branches -- so this target needs a local checkout:
+# Raptor is fetched from pinned commits on github.com/johnchia (the sigmastar
+# branches are not upstream yet), so this target builds with no checkout. To
+# build one instead:
 #
 #   make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=/path/to/raptor-parent
+#
+# THE SHIPPED raptor.conf CARRIES NO BOARD SETTINGS
+#
+# Raptor used to carry a raptor-ssc30kq.conf and the package preferred it over
+# the generic file. That fork is gone: every image now installs raptor.conf, and
+# general/overlay/etc/raptor.conf is what an image changes, which is global
+# rather than per-board.
+#
+# The IR-cut GPIOs went with it. Those were never an SSC30KQ property in the
+# first place -- they are board wiring, and two cameras on this part from
+# different vendors have no reason to agree -- so a defconfig, which is keyed on
+# the SoC model, is the wrong place to state them and this one does not.
+# Nothing rediscovers them either: /etc/thingino.json is a thingino file and
+# does not exist here, so unset pins mean a filter that never moves.
+#
+# Set them per camera in the overlay before trusting day/night. raptor's
+# docs/sigmastar.md has the pins the bring-up unit used as a worked example,
+# plus the H-bridge polarity trap and the night_gain reasoning.
 #
 # libschrift (rod's glyph rasteriser) and majestic-fonts (the TrueType file it
 # loads) are pulled in by the Raptor package rather than listed here.
@@ -81,6 +100,13 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
+# The client library only. rmq links libmosquitto, so the Raptor package depends
+# on mosquitto unconditionally and it is built for this target whether or not it
+# is selected here; selecting it is what makes the broker's `default y` visible
+# so it can be turned off. Left implicit, the broker is excluded only because the
+# symbol above happens to be unset, which is not a decision anyone made.
+BR2_PACKAGE_MOSQUITTO=y
+# BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_RAPTOR_STREAMING=y
 BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6E=y
 BR2_PACKAGE_VTUND_OPENIPC=y
