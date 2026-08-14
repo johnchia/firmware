@@ -18,7 +18,21 @@ BR2_TOOLCHAIN_EXTERNAL_CXX=y
 # Kernel
 BR2_LINUX_KERNEL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
-BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/$(OPENIPC_KERNEL).tar.gz"
+# The kernel from a fork of openipc/linux, on the same branch name -- only the
+# owner changes, since OPENIPC_KERNEL is the branch and the fork keeps it.
+#
+# It carries /proc/sstar_flash_uid: the NOR part's factory unique ID, which is
+# the one per-unit value these boards have, published so that rcS can derive a
+# MAC address from it. Without it every camera built from this image answers to
+# 00:00:23:34:45:66.
+#
+# WATCH THE DOWNLOAD CACHE. The tarball is named for the branch, so it is still
+# sigmastar-infinity6e.tar.gz -- the same filename upstream's has. Buildroot
+# caches by filename and does not re-fetch, so a tree that has built this board
+# before will silently keep building upstream's source after this line changes.
+# Delete output/buildroot-*/dl/linux/$(OPENIPC_KERNEL).tar.gz when moving
+# between the two.
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/johnchia/linux/archive/$(OPENIPC_KERNEL).tar.gz"
 BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
 BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/infinity6e-ssc012b.config"
 BR2_LINUX_KERNEL_UIMAGE=y

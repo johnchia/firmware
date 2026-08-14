@@ -17,7 +17,21 @@ BR2_TOOLCHAIN_EXTERNAL_CXX=y
 # Kernel
 BR2_LINUX_KERNEL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
-BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/$(OPENIPC_KERNEL).tar.gz"
+# The kernel from a fork of openipc/linux, on the same branch name -- only the
+# owner changes, since OPENIPC_KERNEL is the branch and the fork keeps it.
+#
+# It carries /proc/sstar_flash_uid: the NOR part's factory unique ID, which on
+# this SoC is the only per-unit identity there is, the die ID registers reading
+# zero. rcS derives a MAC address from it, so that every camera built from this
+# image does not answer to 00:00:23:34:45:66.
+#
+# WATCH THE DOWNLOAD CACHE. The tarball is named for the branch, so it is still
+# sigmastar-infinity6c.tar.gz -- the same filename upstream's has. Buildroot
+# caches by filename and does not re-fetch, so a tree that has built this board
+# before will silently keep building upstream's source after this line changes.
+# Delete output/buildroot-*/dl/linux/$(OPENIPC_KERNEL).tar.gz when moving
+# between the two.
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/johnchia/linux/archive/$(OPENIPC_KERNEL).tar.gz"
 BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
 BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/infinity6c-ssc027d.config"
 BR2_LINUX_KERNEL_UIMAGE=y
@@ -89,9 +103,9 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
 BR2_PACKAGE_MAJESTIC=y
 # mDNS-SD, so the camera answers to <hostname>.local and its services can be
-# found without knowing the address. It pairs with the per-MAC hostname in
-# S00hostname: that is what makes the name unique across cameras on the same
-# SoC, and this is what publishes it. Services are files in /etc/mdns.d.
+# found without knowing the address. It pairs with the per-MAC hostname derived
+# in rcS: that is what makes the name unique across cameras on the same SoC,
+# and this is what publishes it. Services are files in /etc/mdns.d.
 #
 # mquery (the LAN scanner) is deliberately left out. It is a diagnostic, this
 # rootfs has about 20 KB of slack, and browsing from a host answers the same

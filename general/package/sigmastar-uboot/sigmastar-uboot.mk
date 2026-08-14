@@ -24,19 +24,24 @@
 # 64-bit unique ID (4Bh), which is the one per-unit value that survives a chip
 # erase because it is never stored. See ~/raptor/HANDOFF-i6c-mac-from-flash-uid.md.
 #
-# Infinity6E gets the same treatment as of c531802, from the same code rather
-# than from its own die ID -- it has a working one, and using it would mean two
-# derivations, each right on one part, with a board's address depending on which
-# ran. Other families build a bootloader equivalent to upstream's: the package
-# is still the way to get a locally built one into an image, but it buys no MAC
-# until its config header opts in.
+# That derivation is **infinity6c only**, and the attempt to extend it is worth
+# knowing about before anyone tries again. Infinity6E has no such read because
+# CONFIG_MS_NOR_ONEBIN, which is what builds one, does not add a driver -- it
+# replaces spi_flash_probe with an implementation that drives the FSP/QSPI block
+# directly, and that fails on 6E. A board flashed with it reaches the console
+# and never finds its kernel. See b686d0d.
 #
-# On these two the bootloader is also where the rootfs partition size is
-# decided -- common/cmd_sf.c picks 5120k or 8192k from the squashfs it finds --
-# so a board wanting the larger layout needs this package whatever it thinks of
-# MAC addresses. See BR2_OPENIPC_ROOTFS_PART_KB in ssc30kq_raptor_defconfig.
+# Every other SigmaStar part now derives its address in userspace instead, from
+# /proc/sstar_flash_uid, on the same opcode and the same eight bytes. 6C keeps
+# doing it here only until that is proven on hardware; the two agree exactly, so
+# a board does not change address when it moves between them.
+#
+# The bootloader is also where the rootfs partition size is decided --
+# common/cmd_sf.c picks 5120k or 8192k from the squashfs it finds -- so a board
+# wanting the larger layout needs this package whatever it thinks of MAC
+# addresses. See BR2_OPENIPC_ROOTFS_PART_KB in ssc30kq_raptor_defconfig.
 
-SIGMASTAR_UBOOT_VERSION = c531802f290ef63d534d21f66efb2a18946d943d
+SIGMASTAR_UBOOT_VERSION = b686d0d813af9da21662fdb924a40baa2710116c
 SIGMASTAR_UBOOT_SITE = $(call github,johnchia,u-boot-sigmastar,$(SIGMASTAR_UBOOT_VERSION))
 SIGMASTAR_UBOOT_LICENSE = GPL-2.0+
 SIGMASTAR_UBOOT_LICENSE_FILES = Licenses/gpl-2.0.txt

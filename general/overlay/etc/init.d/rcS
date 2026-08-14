@@ -1,7 +1,312 @@
 #!/bin/sh
+#
+# ONE-SHOT SETUP, THEN THE SERVICES
+#
+# Everything above the S?? loop runs once and has nothing to stop. That is why
+# it is here rather than in an init.d script: those are services -- rcS calls
+# each with `start`, rcK calls it with `stop`, and a thing that answers those
+# verbs can be restarted without a reboot. Deriving a MAC address and a
+# hostname answer neither, and carrying them as S00* files meant scripts that
+# ignored their own argument and existed inside a start/stop/restart case block
+# purely to look like something they were not.
+#
+# The order here is a dependency, not a numbering convention. The hostname
+# suffix comes from the MAC, so the address has to exist first; and both have
+# to be settled before S40network, which is what hands the address to the
+# interface and tells the DHCP server the camera's name.
+
 export SENSOR=$(fw_printenv -n sensor)
 export UPGRADE=$(fw_printenv -n upgrade)
 export TZ=$(cat /etc/TZ)
+
+# ---------------------------------------------------------------------------
+# A MAC ADDRESS OF ITS OWN
+# ---------------------------------------------------------------------------
+#
+# Every board built from one image ships with OpenIPC's shared fallback
+# 00:00:23:34:45:66, so two cameras on one network are a MAC collision --
+# indistinguishable in a lease table, and fighting over an address.
+#
+# WHY USERSPACE
+#
+# U-Boot is the obvious place, and the SigmaStar bootloader does do this on
+# Infinity6C. Extending that to a second SoC meant changing the flash driver it
+# builds with, which stopped the board reaching NOR at all: no `sf probe`, no
+# kernel, and mtd0 is the one partition with no software recovery path. Here
+# the worst case is a camera with the address it already had, and a fix ships
+# in the next sysupgrade.
+#
+# The cost is that the address is applied after userspace starts rather than
+# before the first packet, so a virgin board's very first boot may lease
+# against the placeholder. It corrects itself on the next one, and the live
+# apply below shortens even that.
+#
+# WHY THE GUARD
+#
+# Only an empty or placeholder ethaddr is replaced. An address someone set --
+# in the WebUI, by hand, or by an earlier run of this -- is theirs, and this
+# runs about once in a board's life. That also keeps it off the flash: no
+# unique ID is read and no environment is written on any boot after the first.
+
+ETHADDR_PLACEHOLDER=00:00:23:34:45:66
+
+# The NOR part's factory unique ID (4Bh): 64 factory-programmed read-only bits,
+# unique per device, on a part that is soldered down. It is also the only
+# identity that survives a chip erase, being derived rather than stored.
+#
+# The kernel publishes it, and that is deliberate. Reading it here would mean
+# issuing a raw opcode on the controller the MTD driver owns, which can land in
+# the middle of a jffs2 commit and corrupt a write rather than fail; the driver
+# does it under its own mutex instead. An empty or missing file means this board
+# has no per-unit identity to offer.
+uid_from_flash() {
+	local uid=
+
+	[ -r /proc/sstar_flash_uid ] || return 1
+	read -r uid < /proc/sstar_flash_uid 2>/dev/null
+
+	echo "$uid" | tr -d ' \r\n' | tr 'ABCDEF' 'abcdef'
+}
+
+# The same eight bytes, by way of the bootloader, on boards whose U-Boot still
+# publishes them. Kept because the two agree exactly -- same opcode, same part,
+# same folding below -- so a board migrating from one to the other keeps the
+# address it already had. It stops firing once the bootloader no longer sets it.
+uid_from_env() {
+	fw_printenv -n uidraw 2>/dev/null | tr -d ' \r\n' | tr 'ABCDEF' 'abcdef'
+}
+
+# All-zero and all-ones are what a part answers with when it implements no
+# unique number, or when the bus read back idle. Both are identical on every
+# unit, so deriving from one would hand the whole fleet the same address --
+# a failure, not a value. Anything that is not an even run of hex digits is
+# refused rather than padded into something plausible.
+uid_usable() {
+	case "$1" in
+		"" | *[!0-9a-f]*) return 1 ;;
+		*[!0]*) ;;
+		*) return 1 ;;
+	esac
+
+	case "$1" in
+		*[!f]*) ;;
+		*) return 1 ;;
+	esac
+
+	[ $(( ${#1} % 2 )) -eq 0 ] && [ ${#1} -ge 12 ]
+}
+
+# Fold an identity of any length into a locally administered address.
+#
+# The low five bytes become the address and everything above them is XORed back
+# over those, three at a time, so every bit of the source reaches the result and
+# two parts differing anywhere differ here. On the eight-byte flash ID this is
+# exactly what U-Boot computes, which is what keeps an Infinity6C board's
+# address the same whether the bootloader or this script derived it.
+#
+# 0x02 is a locally administered unicast prefix: bit 1 set says the address was
+# assigned here rather than from an OUI, bit 0 clear says unicast. That is the
+# honest claim -- this is not a purchased address and should not pretend to be
+# globally unique.
+#
+# The last byte is forced odd so a wireless address derived as ethaddr + 1
+# cannot carry into the byte above and collide with the wired one.
+mac_from_uid() {
+	local uid=$1
+	local n= lead= b= i= m1= m2= m3= m4= m5=
+
+	set -- $(echo "$uid" | sed 's/../& /g')
+	n=$#
+	[ $n -ge 6 ] || return 1
+
+	i=$(( n - 5 ))
+	while [ $i -gt 0 ]; do
+		lead="$lead $1"
+		shift
+		i=$(( i - 1 ))
+	done
+
+	m1=$1 m2=$2 m3=$3 m4=$4 m5=$5
+
+	i=0
+	for b in $lead; do
+		case $(( i % 3 )) in
+			0) m1=$(printf '%02x' $(( 0x$m1 ^ 0x$b ))) ;;
+			1) m2=$(printf '%02x' $(( 0x$m2 ^ 0x$b ))) ;;
+			2) m3=$(printf '%02x' $(( 0x$m3 ^ 0x$b ))) ;;
+		esac
+		i=$(( i + 1 ))
+	done
+
+	m5=$(printf '%02x' $(( 0x$m5 | 1 )))
+
+	echo "02:$m1:$m2:$m3:$m4:$m5"
+}
+
+ethaddr_provision() {
+	local current= uid= mac=
+
+	current=$(fw_printenv -n ethaddr 2>/dev/null)
+	case "$current" in
+		"" | "$ETHADDR_PLACEHOLDER") ;;
+		*) return 0 ;;
+	esac
+
+	uid=$(uid_from_flash)
+	if ! uid_usable "$uid"; then
+		uid=$(uid_from_env)
+		uid_usable "$uid" || uid=
+	fi
+
+	if [ -z "$uid" ]; then
+		echo "ethaddr: no per-unit id on this board, keeping ${current:-unset}"
+		return 0
+	fi
+
+	mac=$(mac_from_uid "$uid") || return 0
+
+	echo "ethaddr: $mac, derived from $uid"
+	fw_setenv ethaddr "$mac" 2>/dev/null
+
+	# For this boot as well as the next. interfaces.d/eth0 already reads
+	# ethaddr, so a normal boot would pick it up at S40network anyway -- this
+	# is what makes a manual re-run take effect, and what spares a virgin
+	# board a lease against the placeholder.
+	if [ -e /sys/class/net/eth0 ]; then
+		ip link set dev eth0 down 2>/dev/null
+		ip link set dev eth0 address "$mac" 2>/dev/null
+		ip link set dev eth0 up 2>/dev/null
+	fi
+}
+
+# ---------------------------------------------------------------------------
+# A NAME OF ITS OWN: openipc-<soc>-<last 4 hex of the MAC>
+# ---------------------------------------------------------------------------
+#
+# The packaged hostname is BR2_TARGET_GENERIC_HOSTNAME, "openipc-$(SOC_MODEL)",
+# identical on every unit built from the image. Two cameras of the same SoC are
+# then the same host by name -- in a lease table, in syslog, and at a shell
+# prompt, which is where it bites with two boards on the desk.
+#
+# The MAC is the identity that is already per-unit, so the suffix is taken from
+# there rather than invented and stored. Nothing is generated and nothing
+# persisted that could drift: the name is a function of the hardware and comes
+# out the same on every boot, including after a firstboot wipe.
+#
+# busybox is built with CONFIG_IFUPDOWN_UDHCPC_CMD_OPTIONS="-x
+# hostname:$(hostname) ...", so ifup already tells the DHCP server what this
+# camera is called. Setting the name before the S?? loop is therefore all it
+# takes for the lease table to stop showing a row of identical hosts.
+#
+# inittab has already applied /etc/hostname by now, so a board where this finds
+# no MAC simply keeps the packaged name.
+
+HOSTNAME_FILE=/etc/hostname
+HOSTS_FILE=/etc/hosts
+
+# The pristine copy under the overlay's lower layer. Reading the base name from
+# there rather than from $HOSTNAME_FILE keeps this idempotent: once the derived
+# name has been written, /etc/hostname is no longer the packaged one, and
+# deriving from itself would append a second suffix on the next boot.
+HOSTNAME_ROM=/rom/etc/hostname
+
+# fw_printenv first, and not /sys/class/net/eth0/address, for two reasons: the
+# ethernet driver may still be a module that S70vendor has not insmod'ed yet,
+# and ethaddr is the same value interfaces.d/eth0 hands the interface, so the
+# name and the address on the wire cannot disagree. The sysfs read is the
+# fallback for boards whose MAC does not come from the environment.
+mac_address() {
+	local mac=
+
+	mac=$(fw_printenv -n ethaddr 2>/dev/null)
+	if [ -z "$mac" ] && [ -r /sys/class/net/eth0/address ]; then
+		read -r mac < /sys/class/net/eth0/address
+	fi
+
+	echo "$mac"
+}
+
+# Last two octets, lowercase, no separators. Anything that is not twelve hex
+# digits is refused rather than truncated into a plausible-looking suffix.
+mac_suffix() {
+	local hex=
+
+	hex=$(mac_address | tr -d ':-' | tr 'ABCDEF' 'abcdef')
+	case "$hex" in
+		[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
+			echo "$hex" | cut -c9-12
+			;;
+	esac
+}
+
+# Buildroot writes the packaged hostname into /etc/hosts as well, as the
+# 127.0.1.1 entry -- the Debian convention that lets the machine resolve its own
+# name. Renaming the host without it leaves that line pointing at a name nothing
+# answers to, so `ping $(hostname)` stops working on the box itself.
+#
+# Only the 127.0.1.1 line is touched, and only when it still holds a name this
+# script is entitled to replace.
+update_hosts() {
+	local want=$1
+	local base=$2
+	local current=
+	local tab=
+
+	[ -w "$HOSTS_FILE" ] || return 0
+
+	current=$(awk '$1 == "127.0.1.1" { print $2; exit }' "$HOSTS_FILE")
+	[ -z "$current" ] && return 0
+	[ "$current" = "$want" ] && return 0
+
+	case "$current" in
+		"$base" | "$base"-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+		*) return 0 ;;
+	esac
+
+	tab=$(printf '\t')
+	sed -i "s|^127\.0\.1\.1[[:space:]].*|127.0.1.1${tab}${want}|" "$HOSTS_FILE"
+}
+
+hostname_derive() {
+	local base=
+	local current=
+	local suffix=
+	local want=
+
+	suffix=$(mac_suffix)
+	[ -z "$suffix" ] && return 0
+
+	[ -r "$HOSTNAME_ROM" ] && read -r base < "$HOSTNAME_ROM"
+	[ -z "$base" ] && return 0
+
+	want="$base-$suffix"
+
+	[ -r "$HOSTNAME_FILE" ] && read -r current < "$HOSTNAME_FILE"
+
+	# Only the packaged name and a name this wrote are ours to replace.
+	# `set_fullname` in /etc/profile writes openipc-<chip>-<sensor>, and someone
+	# may simply have chosen a name; overwriting either on every boot would make
+	# the setting look broken. The pattern is four hex digits rather than four of
+	# anything, so a short sensor name cannot be mistaken for our own suffix.
+	case "$current" in
+		"$base" | "$base"-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+		*) return 0 ;;
+	esac
+
+	echo "Setting hostname to $want"
+	hostname "$want"
+	update_hosts "$want" "$base"
+
+	# Kept in the file too, so that /etc/hostname and the kernel agree for
+	# everything that reads one or the other -- the WebUI reads the file, the
+	# shell prompt reads the kernel -- and so inittab alone produces the right
+	# name on later boots. One jffs2 write, on the first boot after an upgrade.
+	[ "$current" = "$want" ] && return 0
+	echo "$want" > "$HOSTNAME_FILE" 2>/dev/null
+}
+
+ethaddr_provision
+hostname_derive
 
 for i in /etc/init.d/S??*; do
 	[ ! -f "$i" ] && continue
