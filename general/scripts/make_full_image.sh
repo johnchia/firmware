@@ -59,9 +59,9 @@ SNI_REF=$5
 KERNEL=$IMAGES/uImage.$SOC
 ROOTFS=$IMAGES/rootfs.squashfs.$SOC
 
-# The SigmaStar NOR layout, in KiB, as the running kernel reports it:
+# The SigmaStar NOR layout, in KiB. Everything up to the rootfs is fixed:
 #
-#   mtdparts=NOR_FLASH:256k(boot),64k(env),2048k(kernel),5120k(rootfs),-(rootfs_data)
+#   mtdparts=NOR_FLASH:256k(boot),64k(env),2048k(kernel),${rootmtd}(rootfs),-(rootfs_data)
 #
 # Offsets are what the bootloader and the kernel command line both already
 # assume; they are named here so the size checks below have something to check
@@ -72,8 +72,6 @@ ENV_OFF_KB=256
 KERNEL_OFF_KB=320
 KERNEL_MAX_KB=2048
 ROOTFS_OFF_KB=2368
-ROOTFS_MAX_KB=5120
-IMAGE_KB=$((ROOTFS_OFF_KB + ROOTFS_MAX_KB))
 
 for f in "$UBOOT" "$KERNEL" "$ROOTFS"; do
 	if [ ! -f "$f" ]; then
@@ -81,6 +79,55 @@ for f in "$UBOOT" "$KERNEL" "$ROOTFS"; do
 		exit 1
 	fi
 done
+
+# THE ROOTFS PARTITION IS NOT A CONSTANT
+#
+# rootmtd above is a U-Boot variable, and the bootloader picks it by reading the
+# squashfs superblock at the rootfs offset and looking at how big the filesystem
+# says it is (common/cmd_sf.c):
+#
+#   if (magic == 0x73717368) {
+#       if (bytes + 0x1000 < 0x500000) setenv("rootmtd", "5120k");
+#       else                           setenv("rootmtd", "8192k");
+#   }
+#
+# where `bytes` is bytes_used at offset 40 of the superblock. So the partition
+# table is a function of the image being flashed, and this script has to answer
+# the same question the bootloader will -- with the same rule, on the same
+# bytes, rather than by assuming either size.
+#
+# Getting it wrong is not a size check that fails. It decides where rootfs_data
+# begins, so an image padded for the 8192k layout and then booted into the
+# 5120k one writes 0xFF over the first 3MB of the overlay: not a brick, but
+# every setting on the camera is gone with nothing saying why.
+#
+# The magic is checked because U-Boot checks it: a rootfs it cannot recognise
+# leaves rootmtd at its compiled-in default, which is 5120k.
+SQUASH_MAGIC=73717368
+ROOTFS_MAGIC=$(od -An -tx4 -N4 "$ROOTFS" | tr -d ' ')
+ROOTFS_BYTES=$(od -An -tu4 -j40 -N4 "$ROOTFS" | tr -d ' ')
+
+if [ "$ROOTFS_MAGIC" != "$SQUASH_MAGIC" ]; then
+	ROOTFS_MAX_KB=5120
+	echo "- rootfs   not squashfs (magic 0x$ROOTFS_MAGIC); U-Boot will keep its"
+	echo "-          default 5120k rootfs, so that is what this image assumes"
+elif [ $((ROOTFS_BYTES + 4096)) -lt 5242880 ]; then
+	ROOTFS_MAX_KB=5120
+else
+	ROOTFS_MAX_KB=8192
+fi
+
+IMAGE_KB=$((ROOTFS_OFF_KB + ROOTFS_MAX_KB))
+
+# The chip, when the caller knows it. The 8192k layout needs 10560KB of flash
+# before rootfs_data starts, which a 8MB part does not have -- and an image
+# larger than the flash is one that cannot be written, so it is worth saying so
+# here rather than part-way through a flashcp.
+if [ -n "$FLASH_KB" ] && [ "$IMAGE_KB" -gt "$FLASH_KB" ]; then
+	echo "image is ${IMAGE_KB} KB but the flash is ${FLASH_KB} KB" >&2
+	echo "  the ${ROOTFS_MAX_KB}k rootfs layout does not fit this part" >&2
+	exit 1
+fi
 
 # Check every piece against the partition it lands in, here rather than on the
 # flash. An oversized rootfs written at its offset runs into rootfs_data and the
@@ -124,3 +171,5 @@ trap - EXIT
 
 echo "- full:   $OUT ($IMAGE_KB KB, env sector left erased)"
 echo "-         boot@${BOOT_OFF_KB}K env@${ENV_OFF_KB}K kernel@${KERNEL_OFF_KB}K rootfs@${ROOTFS_OFF_KB}K"
+echo "-         rootfs partition ${ROOTFS_MAX_KB}k, which is what U-Boot will pick"
+echo "-         for a squashfs of ${ROOTFS_BYTES} bytes; rootfs_data starts at ${IMAGE_KB}K"

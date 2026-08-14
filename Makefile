@@ -272,7 +272,8 @@ fullimage: defconfig
 		echo "or point UBOOT_BIN at one built elsewhere (the assembled"; \
 		echo "container, not u-boot.bin)"; \
 		exit 2; }
-	@$(SHELL) $(PWD)/general/scripts/make_full_image.sh \
+	@FLASH_KB=$(shell expr $(subst ",,$(BR2_OPENIPC_FLASH_SIZE)) \* 1024) \
+	$(SHELL) $(PWD)/general/scripts/make_full_image.sh \
 		"$(FULLIMAGE_UBOOT)" \
 		"$(TARGET)/images" \
 		"$(subst ",,$(BR2_OPENIPC_SOC_MODEL))" \
