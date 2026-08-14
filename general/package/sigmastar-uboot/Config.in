@@ -1,0 +1,16 @@
+config BR2_PACKAGE_SIGMASTAR_UBOOT
+	bool "sigmastar-uboot"
+	help
+	  SigmaStar's U-Boot 2015.01, built from the OpenIPC fork at
+	  github.com/johnchia/u-boot-sigmastar, which adds a MAC address
+	  derived from the NOR part's factory unique ID (infinity6c
+	  only). Without it every board answers to the shared fallback
+	  00:00:23:34:45:66.
+
+	  Emits images/u-boot-<soc>-nor.bin -- the whole boot container
+	  (IPL, GCIS, IPL_CUST, SNI, u-boot), not just u-boot.bin. It is
+	  not part of the sysupgrade tarball: mtd0 has no software
+	  recovery path, so writing it is a deliberate act with a
+	  programmer to hand. `make fullimage` picks it up.
+
+	  https://github.com/johnchia/u-boot-sigmastar

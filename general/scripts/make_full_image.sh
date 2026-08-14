@@ -15,7 +15,8 @@
 # the release server too, so a locally built rootfs does not appear either. That
 # is the right default for reproducing a release and the wrong one for testing a
 # change, which is what this script is for. Every byte here comes from this
-# working tree.
+# working tree -- the bootloader included, since the sigmastar-uboot package
+# builds one into <images-dir> from a fork of that same repository.
 #
 # THE ENVIRONMENT IS DELIBERATELY BLANK
 #

@@ -82,4 +82,11 @@ BR2_PACKAGE_MOSQUITTO=y
 # BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_RAPTOR_STREAMING=y
 BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6C=y
+# The bootloader, from a fork that derives ethaddr from the NOR part's unique
+# ID. Without it every SSC377QE built from this image answers to the shared
+# 00:00:23:34:45:66, which makes a second camera on the subnet a MAC collision.
+# It is not in the sysupgrade tarball -- it lands in images/ as
+# u-boot-ssc377qe-nor.bin for `make fullimage`, because mtd0 has no software
+# recovery and writing it is a deliberate act.
+BR2_PACKAGE_SIGMASTAR_UBOOT=y
 BR2_PACKAGE_VTUND_OPENIPC=y

@@ -22,6 +22,13 @@ ifneq ($(strip $(RAPTOR_SRCDIR)),)
 BR_MAKE += RAPTOR_STREAMING_OVERRIDE_SRCDIR=$(abspath $(RAPTOR_SRCDIR))
 endif
 
+# Build the bootloader from a checkout instead of the commit pinned in
+# general/package/sigmastar-uboot. The pin is a fork, so testing a change there
+# otherwise means pushing it first.
+ifneq ($(strip $(UBOOT_SRCDIR)),)
+BR_MAKE += SIGMASTAR_UBOOT_OVERRIDE_SRCDIR=$(abspath $(UBOOT_SRCDIR))
+endif
+
 # An overridden source tree is invisible to Buildroot's staleness tracking. The
 # package's .stamp_built has no prerequisite anywhere inside RAPTOR_SRCDIR, so a
 # plain image build after editing the daemons re-uses whatever binaries the
@@ -127,6 +134,22 @@ raptor-local:
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
 		RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" br-raptor-streaming
 
+.PHONY: uboot-local
+
+# Same two-step for the bootloader, and for the same reason as above: an
+# overridden source tree has no prerequisite Buildroot can see, so a plain build
+# after editing U-Boot re-installs the container from the previous one. On mtd0
+# that is worse than elsewhere -- the flash succeeds, the board boots the old
+# bootloader, and the change appears not to work.
+uboot-local:
+	@test -n "$(strip $(UBOOT_SRCDIR))" || { \
+		echo "UBOOT_SRCDIR is required (path to a u-boot-sigmastar checkout)"; exit 2; }
+	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
+		UBOOT_SRCDIR="$(abspath $(UBOOT_SRCDIR))" \
+		br-sigmastar-uboot-clean-for-rebuild
+	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
+		UBOOT_SRCDIR="$(abspath $(UBOOT_SRCDIR))" br-sigmastar-uboot
+
 defconfig: prepare
 	@echo --- $(or $(CONFIG),$(error variable BOARD not found))
 	@cat $(CONFIG) $(PWD)/general/openipc.fragment > $(BR_CONF)
@@ -160,10 +183,14 @@ help:
 	@printf "Raptor development (RAPTOR_SRCDIR is the parent of the raptor repos):\n \
 	- make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor\n \
 	- make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor raptor-local\n\n"
+	@printf "Bootloader (sigmastar-uboot; the pin is a fork of openipc/u-boot-sigmastar):\n \
+	- make BOARD=<board> br-sigmastar-uboot - build it alone\n \
+	- make BOARD=<board> UBOOT_SRCDIR=~/u-boot-sigmastar uboot-local\n\n"
 	@printf "Full NOR image from locally built pieces. A modified bootloader\n \
 	reaches an image no other way: repack_firmware.sh and the CI workflow both\n \
 	download u-boot from the release server.\n \
-	- make BOARD=<board> UBOOT_BIN=~/u-boot-sigmastar/BOOT-<soc>.bin fullimage\n \
+	- make BOARD=<board> fullimage - uses images/u-boot-<soc>-nor.bin\n \
+	- add UBOOT_BIN=<container> to flash one built elsewhere\n \
 	- add SNI_REF=<dump of the board's mtd0> to keep its flash descriptor\n\n"
 
 list:
@@ -229,15 +256,24 @@ repack-final: build
 # appear in either, which is the right default for reproducing a release and no
 # use at all for testing a change.
 #
-# Requires UBOOT_BIN because there is no sane default: this repo does not build
-# u-boot, and silently reaching for a downloaded one would defeat the point.
+# The bootloader defaults to the one the sigmastar-uboot package built, which
+# is in this tree and is the point. What it must never default to is a
+# downloaded one: that would put upstream's bootloader in an image that claims
+# to be assembled from local pieces, silently. UBOOT_BIN overrides for a
+# container built elsewhere.
+FULLIMAGE_UBOOT = $(strip $(if $(strip $(UBOOT_BIN)),$(abspath $(UBOOT_BIN)),\
+	$(TARGET)/images/u-boot-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor.bin))
+
 fullimage: defconfig
-	@test -n "$(strip $(UBOOT_BIN))" || { \
-		echo "UBOOT_BIN is required (the assembled boot container, not u-boot.bin)"; \
-		echo "e.g. make BOARD=$(BOARD) UBOOT_BIN=~/u-boot-sigmastar/BOOT-ssc377qe.bin fullimage"; \
+	@test -f "$(FULLIMAGE_UBOOT)" || { \
+		echo "no boot container at $(FULLIMAGE_UBOOT)"; \
+		echo "enable BR2_PACKAGE_SIGMASTAR_UBOOT and build, or run"; \
+		echo "  make BOARD=$(BOARD) br-sigmastar-uboot"; \
+		echo "or point UBOOT_BIN at one built elsewhere (the assembled"; \
+		echo "container, not u-boot.bin)"; \
 		exit 2; }
 	@$(SHELL) $(PWD)/general/scripts/make_full_image.sh \
-		"$(abspath $(UBOOT_BIN))" \
+		"$(FULLIMAGE_UBOOT)" \
 		"$(TARGET)/images" \
 		"$(subst ",,$(BR2_OPENIPC_SOC_MODEL))" \
 		"$(TARGET)/images/openipc-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor-full.bin" \
