@@ -40,7 +40,7 @@
 # All four move together in practice -- a HAL change usually needs the daemon
 # change that calls it -- so bump them as a set and rebuild before trusting the
 # result. There is no test that a mixed set links.
-RAPTOR_STREAMING_VERSION = 8f7773cb1084b88fb1bf08e188f5755225fa96af
+RAPTOR_STREAMING_VERSION = 9c135ee1e4d850a5b1e062492f7371853ed717cc
 RAPTOR_STREAMING_HAL_VERSION = 621877e5b3ced34166b9b4d594ba350924390eec
 RAPTOR_STREAMING_COMMON_VERSION = 51358d23f85bd6f23f3f2d0be3e33c776b650217
 RAPTOR_STREAMING_IPC_VERSION = 1124c3194b90f131dde48e18c5641e748445fc9b
@@ -170,7 +170,9 @@ endif
 #        above. Idle unless [mqtt] enabled, and it is the recovery path for
 #        settings that only apply at bring-up -- it writes the config file
 #        itself, so it can correct one even when rvd is down.
-RAPTOR_STREAMING_DAEMONS = rvd rsd rad rod ric rmq
+#   rhd  HTTP: snapshots and MJPEG served off the same rings, plus the status
+#        page. Gated by [http] enabled, which the overlay config turns on.
+RAPTOR_STREAMING_DAEMONS = rvd rsd rad rod ric rmq rhd
 RAPTOR_STREAMING_TOOLS = raptorctl
 
 # The HAL backend to compile, one per SoC family. Derived from the family so a
