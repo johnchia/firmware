@@ -12,10 +12,10 @@ ifneq ($(strip $(DIVINUS_SRCDIR)),)
 BR_MAKE += DIVINUS_OVERRIDE_SRCDIR=$(abspath $(DIVINUS_SRCDIR))
 endif
 
-# Raptor has no pinned release to fall back on: it is four sibling repositories
-# and its SigmaStar backend is not upstream yet, so a local checkout is the only
-# source. RAPTOR_SRCDIR is the *parent* directory holding raptor, raptor-hal,
-# raptor-common, raptor-ipc and compy.
+# Build Raptor from a checkout instead of the four commits pinned in
+# general/package/raptor-streaming. RAPTOR_SRCDIR is the *parent* directory
+# holding raptor, raptor-hal, raptor-common, raptor-ipc and compy, because
+# raptor's Makefile reaches its siblings through relative paths.
 # The package is raptor-streaming because Buildroot already has a `raptor`
 # (raptor2, the RDF library); the knob here keeps the short name.
 ifneq ($(strip $(RAPTOR_SRCDIR)),)

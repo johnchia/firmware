@@ -56,8 +56,9 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # order and S95majestic would otherwise take the MI devices before S95raptor.
 # To use it: /etc/init.d/S95raptor stop, then run majestic by hand.
 #
-# Raptor has no download site yet -- its SigmaStar backend is on unpushed
-# branches -- so this target needs a local checkout:
+# Raptor is fetched from four pinned commits on github.com/johnchia (the
+# sigmastar branches are not upstream yet), so this target builds with no
+# checkout. To build one instead:
 #
 #   make BOARD=ssc377qe_raptor RAPTOR_SRCDIR=/path/to/raptor-parent
 #

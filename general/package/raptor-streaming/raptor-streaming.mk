@@ -23,24 +23,101 @@
 # *not* used from there -- it comes from the compy package instead (see the
 # COMPY_* overrides below).
 #
-# There is deliberately no download site. The SigmaStar backend lives on
-# unpushed branches of the gtxaspec repositories, so no fetchable revision of it
-# exists; a local checkout is currently the only valid source. Pass it as
+# FOUR PINS, ONE PACKAGE
 #
-#   make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=/path/to/parent
+# This used to have no download site at all: the SigmaStar work lived on
+# unpushed branches, so a local checkout was the only valid source and an image
+# could not be rebuilt by anyone who did not have one. The branches are pushed
+# now, so each repository is pinned here and the build fetches them. A checkout
+# stays available as the developer path -- RAPTOR_SRCDIR, exactly as Divinus
+# uses DIVINUS_SRCDIR -- but it is no longer required to build an image.
 #
-# which the top-level Makefile turns into RAPTOR_STREAMING_OVERRIDE_SRCDIR. When
-# the branches are upstreamed this gains a normal pinned _SITE/_VERSION and the
-# override becomes the developer path, as it already is for Divinus.
+# The pins are on **johnchia**, not gtxaspec: the sigmastar branch exists only on
+# the forks (`git ls-remote --heads origin sigmastar` is empty on all four).
+# When the work lands upstream these become gtxaspec pins and nothing else here
+# changes.
 #
-# _SOURCE has to be blanked explicitly: Buildroot otherwise derives
-# raptor-streaming-local.tar.gz from _VERSION and then refuses the package for
-# having a source with no site to fetch it from. Empty _SOURCE is how a package
-# says it has nothing to download.
-RAPTOR_STREAMING_VERSION = local
-RAPTOR_STREAMING_SOURCE =
+# All four move together in practice -- a HAL change usually needs the daemon
+# change that calls it -- so bump them as a set and rebuild before trusting the
+# result. There is no test that a mixed set links.
+RAPTOR_STREAMING_VERSION = 8f7773cb1084b88fb1bf08e188f5755225fa96af
+RAPTOR_STREAMING_HAL_VERSION = fdc47ca92a87c0b0ee533cfd926732096f638f05
+RAPTOR_STREAMING_COMMON_VERSION = 51358d23f85bd6f23f3f2d0be3e33c776b650217
+RAPTOR_STREAMING_IPC_VERSION = 1124c3194b90f131dde48e18c5641e748445fc9b
+
+# A FIFTH PIN, BECAUSE A TARBALL IS NOT A CLONE
+#
+# raptor-hal keeps the MI ABI declarations in a submodule, johnchia/sigmastar-headers,
+# and reaches them as -Isigmastar-headers/<family> (mk/sigmastar.mk). GitHub's
+# source archives omit submodule contents entirely -- the directory is simply not
+# in the tarball -- so the first pinned build got as far as
+# "fatal error: i6c_aud.h: No such file or directory". A checkout never shows
+# this because `git submodule update` has already populated it.
+#
+# The sha is the gitlink recorded at RAPTOR_STREAMING_HAL_VERSION, not whatever
+# main points at today:
+#
+#   git -C raptor-hal ls-tree <hal-pin> sigmastar-headers
+#
+# so bumping the HAL pin means re-reading this one. That is the same coupling a
+# submodule has, made explicit because Buildroot cannot follow the gitlink for a
+# source it did not clone.
+#
+# raptor-hal's other submodule, gtxaspec/ingenic-headers, is deliberately not
+# fetched: mk/sigmastar.mk overrides SDK_INCLUDE, and the -I for the Ingenic tree
+# is inside `ifneq ($(VENDOR),sigmastar)`, so nothing on these boards reads it.
+# An Ingenic raptor target here would need it added the same way.
+RAPTOR_STREAMING_HEADERS_VERSION = 6b8e353477d3a262e9872f692ddde1907f5a3c9c
+
+RAPTOR_STREAMING_SITE = $(call github,johnchia,raptor,$(RAPTOR_STREAMING_VERSION))
 RAPTOR_STREAMING_LICENSE = MIT
 RAPTOR_STREAMING_LICENSE_FILES = raptor/LICENSE
+
+# Buildroot fetches one source per package, so the other three come as extra
+# downloads. Each URL is spelled the way Buildroot's own github helper spells
+# it -- .../archive/<sha>/<name>-<sha>.tar.gz -- because the trailing filename is
+# what the downloader saves the file as, and GitHub ignores it. Left as the bare
+# .../archive/<sha>.tar.gz these would all land in dl/raptor-streaming/ named
+# after nothing but a hash.
+RAPTOR_STREAMING_EXTRA_DOWNLOADS = \
+	$(call github,johnchia,raptor-hal,$(RAPTOR_STREAMING_HAL_VERSION))/raptor-hal-$(RAPTOR_STREAMING_HAL_VERSION).tar.gz \
+	$(call github,johnchia,raptor-common,$(RAPTOR_STREAMING_COMMON_VERSION))/raptor-common-$(RAPTOR_STREAMING_COMMON_VERSION).tar.gz \
+	$(call github,johnchia,raptor-ipc,$(RAPTOR_STREAMING_IPC_VERSION))/raptor-ipc-$(RAPTOR_STREAMING_IPC_VERSION).tar.gz \
+	$(call github,johnchia,sigmastar-headers,$(RAPTOR_STREAMING_HEADERS_VERSION))/sigmastar-headers-$(RAPTOR_STREAMING_HEADERS_VERSION).tar.gz
+
+# The source tree is the parent directory, so the main tarball must NOT be
+# flattened into it the way Buildroot flattens every other package: raptor has to
+# end up at $(@D)/raptor with its siblings beside it, not spilled over $(@D)
+# itself. STRIP_COMPONENTS = 0 keeps the archive's own top directory, and the
+# hook below renames it and unpacks the rest next to it.
+RAPTOR_STREAMING_STRIP_COMPONENTS = 0
+
+# $(1) = repository name, $(2) = its pin, $(3) = where it has to end up.
+#
+# The rm is what makes `mv` mean "become this directory" rather than "move
+# inside it", which is the difference between raptor-hal/sigmastar-headers and
+# raptor-hal/sigmastar-headers/sigmastar-headers-<sha> if the archive ever does
+# ship an empty submodule directory.
+define RAPTOR_STREAMING_UNPACK
+	$(TAR) -C $(@D) -xf $(RAPTOR_STREAMING_DL_DIR)/$(1)-$(2).tar.gz
+	rm -rf $(3)
+	mv $(@D)/$(1)-$(2) $(3)
+endef
+
+# raptor-hal first: the headers go inside it.
+define RAPTOR_STREAMING_LAYOUT_SIBLINGS
+	mv $(@D)/raptor-$(RAPTOR_STREAMING_VERSION) $(@D)/raptor
+	$(call RAPTOR_STREAMING_UNPACK,raptor-hal,$(RAPTOR_STREAMING_HAL_VERSION),$(@D)/raptor-hal)
+	$(call RAPTOR_STREAMING_UNPACK,raptor-common,$(RAPTOR_STREAMING_COMMON_VERSION),$(@D)/raptor-common)
+	$(call RAPTOR_STREAMING_UNPACK,raptor-ipc,$(RAPTOR_STREAMING_IPC_VERSION),$(@D)/raptor-ipc)
+	$(call RAPTOR_STREAMING_UNPACK,sigmastar-headers,$(RAPTOR_STREAMING_HEADERS_VERSION),$(@D)/raptor-hal/sigmastar-headers)
+endef
+
+# Extract hooks do not run on the override path -- Buildroot replaces download,
+# extract and patch with a single rsync there -- which is correct: a developer
+# checkout already has this layout, that being the layout the project is
+# developed in.
+RAPTOR_STREAMING_POST_EXTRACT_HOOKS += RAPTOR_STREAMING_LAYOUT_SIBLINGS
 
 # The parent directory holds more than the five repositories: ref/ is a ~100 MB
 # documentation mirror and sigmastar-sdk/ a vendor drop, neither of which the
@@ -95,21 +172,35 @@ RAPTOR_STREAMING_CONFIG_FILE = $(if $(wildcard $(@D)/raptor/config/raptor-$(OPEN
 	$(@D)/raptor/config/raptor-$(OPENIPC_SOC_MODEL).conf,\
 	$(@D)/raptor/config/raptor.conf)
 
-# Buildroot's rsync drops .git, so raptor's own `git rev-parse` for the build
-# banner would report "unknown" from inside the source tree. Read it from the
-# checkout instead -- during a soak, the banner is how you tell which build is
-# on the board.
-RAPTOR_STREAMING_BUILD_HASH = $(shell git -C $(RAPTOR_STREAMING_OVERRIDE_SRCDIR)/raptor rev-parse --short HEAD 2>/dev/null || echo unknown)
+# The hash in the daemons' startup banner, which during a soak is how you tell
+# which build is on the board. raptor's own Makefile derives it with
+# `git rev-parse`, and neither source it is given here has a .git to read: an
+# unpacked tarball never had one, and Buildroot's override rsync drops it. So it
+# is passed in -- the pin for a pinned build, the checkout's HEAD for an
+# overridden one, which is the revision each actually built.
+ifneq ($(RAPTOR_STREAMING_OVERRIDE_SRCDIR),)
+RAPTOR_STREAMING_BUILD_HASH = $(shell git -C $(RAPTOR_STREAMING_OVERRIDE_SRCDIR)/raptor \
+	describe --always --dirty=+ --abbrev=7 --match=nothing 2>/dev/null || echo unknown)
+else
+RAPTOR_STREAMING_BUILD_HASH = $(shell echo $(RAPTOR_STREAMING_VERSION) | cut -c1-7)
+endif
 
-# With no _SITE and no override, Buildroot has nothing to download or extract
-# and leaves an empty source directory, so the build would fail on a missing
-# path instead of saying what is wrong. The presence of $(@D)/raptor is an exact
-# proxy for "the override rsync ran".
+# $(@D)/raptor is where both paths must have put the source: the extract hook
+# for a pinned build, the rsync for an overridden one. Checking it costs nothing
+# and turns "no such file or directory" deep in a sub-make into a sentence.
 define RAPTOR_STREAMING_CHECK_SRCDIR
 	test -d $(@D)/raptor || { \
 		echo "*** No Raptor source in $(@D)."; \
-		echo "*** Pass a local checkout: make BOARD=$(OPENIPC_SOC_MODEL)_raptor RAPTOR_SRCDIR=/path/to/parent"; \
-		echo "*** RAPTOR_SRCDIR is the directory holding raptor/, raptor-hal/, raptor-common/ and raptor-ipc/."; \
+		echo "*** A pinned build unpacks it there; RAPTOR_SRCDIR=/path/to/parent"; \
+		echo "*** overrides that with a checkout holding raptor/, raptor-hal/,"; \
+		echo "*** raptor-common/ and raptor-ipc/ as siblings."; \
+		exit 1; }
+	test -n "$$(ls -A $(@D)/raptor-hal/sigmastar-headers 2>/dev/null)" || { \
+		echo "*** raptor-hal/sigmastar-headers is missing or empty."; \
+		echo "*** The MI declarations are a submodule of raptor-hal, and neither a"; \
+		echo "*** GitHub tarball nor a checkout that has not run 'git submodule"; \
+		echo "*** update' carries them. Without it the build fails one file at a"; \
+		echo "*** time on missing i6c_*.h."; \
 		exit 1; }
 endef
 
