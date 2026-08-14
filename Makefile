@@ -160,6 +160,11 @@ help:
 	@printf "Raptor development (RAPTOR_SRCDIR is the parent of the raptor repos):\n \
 	- make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor\n \
 	- make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor raptor-local\n\n"
+	@printf "Full NOR image from locally built pieces. A modified bootloader\n \
+	reaches an image no other way: repack_firmware.sh and the CI workflow both\n \
+	download u-boot from the release server.\n \
+	- make BOARD=<board> UBOOT_BIN=~/u-boot-sigmastar/BOOT-<soc>.bin fullimage\n \
+	- add SNI_REF=<dump of the board's mtd0> to keep its flash descriptor\n\n"
 
 list:
 	@ls -1 br-ext-chip-*/configs
@@ -212,6 +217,31 @@ endif
 
 repack-final: build
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) repack
+
+# A full NOR image, boot through rootfs, from what is in this tree.
+#
+# The .tgz the normal build emits carries kernel and rootfs only, so it can be
+# sysupgraded but says nothing about the bootloader. The two paths that do
+# produce a full .bin -- general/scripts/repack_firmware.sh and create() in
+# .github/workflows/image.yml -- fetch u-boot from
+# github.com/openipc/firmware/releases, built by .github/workflows/uboot.yml
+# from openipc/u-boot-sigmastar. A locally modified bootloader therefore cannot
+# appear in either, which is the right default for reproducing a release and no
+# use at all for testing a change.
+#
+# Requires UBOOT_BIN because there is no sane default: this repo does not build
+# u-boot, and silently reaching for a downloaded one would defeat the point.
+fullimage: defconfig
+	@test -n "$(strip $(UBOOT_BIN))" || { \
+		echo "UBOOT_BIN is required (the assembled boot container, not u-boot.bin)"; \
+		echo "e.g. make BOARD=$(BOARD) UBOOT_BIN=~/u-boot-sigmastar/BOOT-ssc377qe.bin fullimage"; \
+		exit 2; }
+	@$(SHELL) $(PWD)/general/scripts/make_full_image.sh \
+		"$(abspath $(UBOOT_BIN))" \
+		"$(TARGET)/images" \
+		"$(subst ",,$(BR2_OPENIPC_SOC_MODEL))" \
+		"$(TARGET)/images/openipc-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor-full.bin" \
+		$(if $(strip $(SNI_REF)),"$(abspath $(SNI_REF))")
 
 # The rootfs size limit is a property of the *partition table*, not of the flash
 # chip. Deriving it from BR2_OPENIPC_FLASH_SIZE assumes the two agree, and they
