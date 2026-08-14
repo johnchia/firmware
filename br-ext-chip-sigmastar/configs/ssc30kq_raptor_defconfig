@@ -43,19 +43,30 @@ BR2_OPENIPC_SOC_MODEL="ssc30kq"
 BR2_OPENIPC_SOC_FAMILY="infinity6e"
 BR2_OPENIPC_VARIANT="raptor"
 BR2_OPENIPC_FLASH_SIZE="16"
-# The chip is 16MB but the rootfs partition is 5MB of it, the rest going to the
-# overlay, so the limit the build enforces cannot be derived from the flash size:
+# The rootfs partition, stated because it does not follow from the chip size.
+# U-Boot picks between two layouts at boot -- it reads the squashfs superblock at
+# 0x250000 and takes 8192k once bytes_used + 0x1000 reaches 0x500000, 5120k
+# otherwise (common/cmd_sf.c) -- so the partition table is a function of the
+# image being flashed and the build has to be told which of the two it is
+# building for. The larger one gives:
 #
 #   0x000000040000-0x000000050000 : "env"
 #   0x000000050000-0x000000250000 : "kernel"       2048KB
-#   0x000000250000-0x000000750000 : "rootfs"       5120KB
-#   0x000000750000-0x000001000000 : "rootfs_data"  8896KB
+#   0x000000250000-0x000000a50000 : "rootfs"       8192KB
+#   0x000000a50000-0x000001000000 : "rootfs_data"  5824KB
 #
-# Without this the build checked a 16MB board against 8192KB, passed a 5160KB
-# rootfs, and flashcp refused it as "bigger than /dev/mtd3" -- the failure moved
-# from the build, where it is a number, to the flash, where it is a camera in an
-# unknown state. Re-read /proc/mtd before changing this.
-BR2_OPENIPC_ROOTFS_PART_KB="5120"
+# This was "5120", which is the layout the board runs until the bootloader below
+# is written to it, and the numbers above are not what /proc/mtd reports on a
+# board that has not had it. THE TWO SETTINGS GO TOGETHER: flashing a >5120KB
+# rootfs to a board still running its old U-Boot leaves rootmtd at the
+# compiled-in 5120k, and the rootfs then runs 3MB into rootfs_data -- not a
+# brick, but every setting on the camera is gone with nothing saying why. Use
+# `make fullimage`, which writes both and refuses the combination that does not
+# fit.
+#
+# Do not raise it past 8192 to use the remaining slack. 8192 is what U-Boot's
+# larger branch hands out, and nothing here can widen it.
+BR2_OPENIPC_ROOTFS_PART_KB="8192"
 
 # Packages
 #
@@ -109,4 +120,18 @@ BR2_PACKAGE_MOSQUITTO=y
 # BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_RAPTOR_STREAMING=y
 BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6E=y
+# The bootloader, built here rather than downloaded, because the two-layout
+# rootfs rule above lives in this fork's common/cmd_sf.c and a board running
+# anything else keeps rootmtd at 5120k. That is the reason on this target --
+# NOT the MAC derivation ssc377qe_raptor wants it for, which reads the NOR
+# part's unique ID only on infinity6c. Infinity6E has working die-ID registers
+# and already gets a per-unit address, so here this builds a bootloader
+# otherwise equivalent to upstream's.
+#
+# infinity6e_defconfig exists in the tree and takes the same NOR branch of
+# sstar-common.h as infinity6c -- same 0x250000 rootfs, same ${rootmtd} in
+# bootargs -- so the rule applies unchanged. It is not in the sysupgrade
+# tarball: it lands in images/ as u-boot-ssc30kq-nor.bin for `make fullimage`,
+# because mtd0 has no software recovery and writing it is a deliberate act.
+BR2_PACKAGE_SIGMASTAR_UBOOT=y
 BR2_PACKAGE_VTUND_OPENIPC=y

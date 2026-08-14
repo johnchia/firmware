@@ -282,8 +282,8 @@ fullimage: defconfig
 
 # The rootfs size limit is a property of the *partition table*, not of the flash
 # chip. Deriving it from BR2_OPENIPC_FLASH_SIZE assumes the two agree, and they
-# need not: ssc30kq has 16MB of NOR but gives the rootfs only 0x500000 (5120KB),
-# the remaining 8.5MB going to the overlay --
+# need not: ssc30kq had 16MB of NOR while giving the rootfs only 0x500000
+# (5120KB), the remaining 8.5MB going to the overlay --
 #
 #   0x000000250000-0x000000750000 : "rootfs"
 #   0x000000750000-0x000001000000 : "rootfs_data"
@@ -291,8 +291,13 @@ fullimage: defconfig
 # so a 16MB board was checked against 8192KB, passed at 5160KB, and flashcp then
 # refused the image as "bigger than /dev/mtd3". A limit larger than the partition
 # is not a limit; it moves the failure from the build, where it is a number, to
-# the flash, where it is a camera in an unknown state. Boards whose layout does
-# not follow from the chip size state the real figure in
+# the flash, where it is a camera in an unknown state.
+#
+# (That board takes the 8192k layout now, since it builds the bootloader that
+# switches to it. The example stands as the reason this setting exists: the two
+# numbers were independent then and still are.)
+#
+# Boards whose layout does not follow from the chip size state the real figure in
 # BR2_OPENIPC_ROOTFS_PART_KB; everything else keeps the previous defaults.
 ROOTFS_CAP_KB = $(or $(strip $(subst ",,$(BR2_OPENIPC_ROOTFS_PART_KB))),\
 	$(if $(filter "8",$(BR2_OPENIPC_FLASH_SIZE)),5120,8192))
