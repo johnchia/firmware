@@ -39,7 +39,21 @@ BR2_OPENIPC_SOC_VENDOR="sigmastar"
 BR2_OPENIPC_SOC_MODEL="ssc377qe"
 BR2_OPENIPC_SOC_FAMILY="infinity6c"
 BR2_OPENIPC_VARIANT="raptor"
-BR2_OPENIPC_FLASH_SIZE="8"
+BR2_OPENIPC_FLASH_SIZE="16"
+# The rootfs partition, stated because it does not follow from the chip size
+# even now that the chip size is right. u-boot picks between two layouts at
+# boot and reconfigures to the larger one once the rootfs outgrows 5120KB; the
+# layout this board runs gives the rootfs 8MB, as the kernel reports it:
+#
+#   mtd2 kernel      offset 0x00050000  size 0x00200000  (2048 KB)
+#   mtd3 rootfs      offset 0x00250000  size 0x00800000  (8192 KB)
+#   mtd4 rootfs_data offset 0x00a50000  size 0x005b0000  (5824 KB)
+#
+# summing to exactly 0x1000000. This was "8" with no partition size, which
+# capped the build at 5120KB -- 3MB below the partition, so the build refused
+# images the board would have taken, and the rootfs sat at 5120/5120 with the
+# slack unreachable.
+BR2_OPENIPC_ROOTFS_PART_KB="8192"
 
 # Packages
 #
