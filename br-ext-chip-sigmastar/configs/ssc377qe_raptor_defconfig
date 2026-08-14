@@ -74,6 +74,15 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
 BR2_PACKAGE_MAJESTIC=y
+# mDNS-SD, so the camera answers to <hostname>.local and its services can be
+# found without knowing the address. It pairs with the per-MAC hostname in
+# S00hostname: that is what makes the name unique across cameras on the same
+# SoC, and this is what publishes it. Services are files in /etc/mdns.d.
+#
+# mquery (the LAN scanner) is deliberately left out. It is a diagnostic, this
+# rootfs has about 20 KB of slack, and browsing from a host answers the same
+# question without spending any of it.
+BR2_PACKAGE_MDNSD_OPENIPC=y
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
 # The client library only. The broker is a forking server with no role on a
 # camera that publishes to one elsewhere, and Buildroot ties mosquitto's TLS to
