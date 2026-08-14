@@ -43,29 +43,31 @@ BR2_OPENIPC_SOC_MODEL="ssc30kq"
 BR2_OPENIPC_SOC_FAMILY="infinity6e"
 BR2_OPENIPC_VARIANT="raptor"
 BR2_OPENIPC_FLASH_SIZE="16"
-# The rootfs partition, stated because it does not follow from the chip size.
-# U-Boot picks between two layouts at boot -- it reads the squashfs superblock at
-# 0x250000 and takes 8192k once bytes_used + 0x1000 reaches 0x500000, 5120k
-# otherwise (common/cmd_sf.c) -- so the partition table is a function of the
-# image being flashed and the build has to be told which of the two it is
-# building for. The larger one gives:
+# A CEILING, NOT A LAYOUT
 #
-#   0x000000040000-0x000000050000 : "env"
-#   0x000000050000-0x000000250000 : "kernel"       2048KB
-#   0x000000250000-0x000000a50000 : "rootfs"       8192KB
-#   0x000000a50000-0x000001000000 : "rootfs_data"  5824KB
+# This is the largest rootfs the build may emit. It does not choose a partition
+# table and cannot: U-Boot does that at boot, reading the squashfs superblock at
+# 0x250000 and taking 8192k once bytes_used + 0x1000 reaches 0x500000, 5120k
+# below that (common/cmd_sf.c). So the layout follows the size of the image
+# actually flashed --
 #
-# This was "5120", which is the layout the board runs until the bootloader below
-# is written to it, and the numbers above are not what /proc/mtd reports on a
-# board that has not had it. THE TWO SETTINGS GO TOGETHER: flashing a >5120KB
-# rootfs to a board still running its old U-Boot leaves rootmtd at the
-# compiled-in 5120k, and the rootfs then runs 3MB into rootfs_data -- not a
-# brick, but every setting on the camera is gone with nothing saying why. Use
-# `make fullimage`, which writes both and refuses the combination that does not
-# fit.
+#   under ~5116KB   0x250000-0x750000 rootfs 5120KB, rootfs_data 8896KB
+#   at or over      0x250000-0xa50000 rootfs 8192KB, rootfs_data 5824KB
 #
-# Do not raise it past 8192 to use the remaining slack. 8192 is what U-Boot's
-# larger branch hands out, and nothing here can widen it.
+# -- and this setting only says which of the two the build is allowed to reach.
+# At 4844KB the current build sits in the first, and `make fullimage` says so:
+# "rootfs partition 5120k, which is what U-Boot will pick".
+#
+# It was "5120", which capped the build 3MB below what the board can hold. 8192
+# is the real ceiling, but IT IS ONLY SAFE WITH THE BOOTLOADER BELOW. The
+# switch is this fork's, so a board running anything else keeps the compiled-in
+# 5120k however large the rootfs is -- and a rootfs built past 5120KB then runs
+# into rootfs_data. Not a brick, just every setting on the camera gone with
+# nothing saying why. `make fullimage` writes both together and computes the
+# layout with U-Boot's own rule, which is why it is the way to flash this.
+#
+# Do not raise it past 8192. That is what U-Boot's larger branch hands out and
+# nothing here can widen it, whatever the chip has spare.
 BR2_OPENIPC_ROOTFS_PART_KB="8192"
 
 # Packages
