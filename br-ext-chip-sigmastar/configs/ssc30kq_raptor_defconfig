@@ -132,11 +132,16 @@ BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6E=y
 # tarball: it lands in images/ as u-boot-ssc30kq-nor.bin for `make fullimage`,
 # because mtd0 has no software recovery and writing it is a deliberate act.
 #
-# The rootfs rule is the only thing it buys here today. The MAC derivation
-# ssc377qe_raptor wants the package for is in infinity6c/chip.c and nothing
-# calls it on 6E, so this board still answers to the shared vendor default
-# 00:00:23:34:45:66 -- a second SSC30KQ on the subnet is still a collision.
-# That the 6E die carries a usable ID (48 bits of OTP at 0x1F203150, where the
-# 6C registers read zero) does not help while nothing here reads it.
+# It buys the MAC too, as of u-boot c531802. Before that the derivation was in
+# infinity6c/chip.c with nothing calling it on 6E, and this board answered to
+# the shared 00:00:23:34:45:66 like every other; it is shared code now and both
+# parts derive an address from the NOR unique ID. Not from 6E's own die ID,
+# which does work (48 bits of OTP at 0x1F203150, where the 6C registers read
+# zero) -- one derivation for both parts beats two that each cover one.
+#
+# Getting there meant turning on CONFIG_MS_NOR_ONEBIN and CONFIG_MS_MTD_ISP_FLASH
+# in U-Boot's own infinity6e_defconfig -- that is where the change lives, not
+# here -- which swaps 6E onto the flash driver 6C has always used. Worth knowing
+# if this board misbehaves around flash rather than around MAC addresses.
 BR2_PACKAGE_SIGMASTAR_UBOOT=y
 BR2_PACKAGE_VTUND_OPENIPC=y
