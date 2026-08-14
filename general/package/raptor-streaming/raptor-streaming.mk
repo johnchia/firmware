@@ -143,6 +143,19 @@ RAPTOR_STREAMING_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = \
 RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
 	sigmastar-osdrv-$(OPENIPC_SOC_FAMILY) faac opus mosquitto
 
+# libmdnsd, for finding a service on the LAN rather than being told where it is
+# -- rmq's broker address is the case in hand.
+#
+# Conditional, where mosquitto above is not, and the difference is whether the
+# daemon can be built without it. rmq always links libmosquitto, so that one is
+# unconditional; mDNS discovery is a feature of a board that asked for mDNS, and
+# an unconditional entry here would build and install mdnsd on every raptor
+# target whether or not its defconfig selected it. A board without
+# BR2_PACKAGE_MDNSD_OPENIPC simply does not get the discovery path.
+ifeq ($(BR2_PACKAGE_MDNSD_OPENIPC),y)
+RAPTOR_STREAMING_DEPENDENCIES += mdnsd-openipc
+endif
+
 # What this image runs. Deliberately a subset of upstream's DAEMONS: the rest
 # (recording, web, motion, wifibroadcast...) are either unported to this backend
 # or not part of the bring-up, and building them here would only turn unrelated
