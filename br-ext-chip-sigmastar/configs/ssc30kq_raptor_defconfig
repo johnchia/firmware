@@ -21,7 +21,7 @@ BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
 # The kernel from a fork of openipc/linux, on the same branch name -- only the
 # owner changes, since OPENIPC_KERNEL is the branch and the fork keeps it.
 #
-# It carries /proc/sstar_flash_uid: the NOR part's factory unique ID, which is
+# It carries /proc/flash_uid: the NOR part's factory unique ID, which is
 # the one per-unit value these boards have, published so that rcS can derive a
 # MAC address from it. Without it every camera built from this image answers to
 # 00:00:23:34:45:66.

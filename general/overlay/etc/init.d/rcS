@@ -50,11 +50,24 @@ export TZ=$(cat /etc/TZ)
 
 ETHADDR_PLACEHOLDER=00:00:23:34:45:66
 
-# The NOR part's factory unique ID (4Bh): 64 factory-programmed read-only bits,
-# unique per device, on a part that is soldered down. It is also the only
-# identity that survives a chip erase, being derived rather than stored.
+# The NOR part's factory unique ID (4Bh), on a part that is soldered down. It is
+# the only identity that survives a chip erase, being factory-programmed rather
+# than stored.
 #
-# The kernel publishes it, and that is deliberate. Reading it here would mean
+# HOW MUCH OF IT IS ACTUALLY UNIQUE VARIES, SO FOLD ALL OF IT
+#
+# The length is a property of the part, not of this script: 8 bytes on some, 16
+# on the Infinity6E boards here. And not all of it identifies the unit -- on the
+# 6E part, two boards shared the first eight bytes exactly (an ASCII product/lot
+# code) and differed only in bytes 9 and 10. So nothing here may take a prefix,
+# a suffix, or a fixed width: mac_from_uid folds every byte it is given, which
+# is what makes it correct on a part whose layout we have not characterised.
+#
+# The path is deliberately not vendor-prefixed. It answers "does this machine
+# have a flash unique ID", which is not a question about whose SoC this is, and
+# this script should not need editing when the same board turns up on another.
+#
+# The kernel publishes it, and that too is deliberate. Reading it here would mean
 # issuing a raw opcode on the controller the MTD driver owns, which can land in
 # the middle of a jffs2 commit and corrupt a write rather than fail; the driver
 # does it under its own mutex instead. An empty or missing file means this board
@@ -62,16 +75,19 @@ ETHADDR_PLACEHOLDER=00:00:23:34:45:66
 uid_from_flash() {
 	local uid=
 
-	[ -r /proc/sstar_flash_uid ] || return 1
-	read -r uid < /proc/sstar_flash_uid 2>/dev/null
+	[ -r /proc/flash_uid ] || return 1
+	read -r uid < /proc/flash_uid 2>/dev/null
 
 	echo "$uid" | tr -d ' \r\n' | tr 'ABCDEF' 'abcdef'
 }
 
-# The same eight bytes, by way of the bootloader, on boards whose U-Boot still
-# publishes them. Kept because the two agree exactly -- same opcode, same part,
-# same folding below -- so a board migrating from one to the other keeps the
-# address it already had. It stops firing once the bootloader no longer sets it.
+# The same value by way of the bootloader, on boards whose U-Boot publishes it.
+# Only the Infinity6C fork does, and there the two sources read the same eight
+# bytes with the same opcode off the same part, so a 6C board keeps the address
+# it already had when it moves from one to the other. That equivalence is per
+# platform and not a general promise: it holds where both paths exist, which is
+# 6C only -- 6E has no bootloader source and publishes sixteen bytes. This stops
+# firing once the bootloader no longer sets it.
 uid_from_env() {
 	fw_printenv -n uidraw 2>/dev/null | tr -d ' \r\n' | tr 'ABCDEF' 'abcdef'
 }
