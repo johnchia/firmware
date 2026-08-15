@@ -127,6 +127,19 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
+# mDNS-SD, so the camera answers to <hostname>.local and its services can be
+# found without knowing the address. It pairs with the per-MAC hostname derived
+# in rcS: that is what makes the name unique across cameras on the same SoC,
+# and this is what publishes it. Services are files in /etc/mdns.d.
+#
+# It is also how rmq finds the MQTT broker with no [mqtt] host configured, and
+# that half is a BUILD-TIME dependency: raptor's Makefile looks for libmdnsd in
+# the sysroot and compiles rmq's discovery to stubs when it is absent. Without
+# this line the camera does not fail to find a broker, it never looks -- so a
+# board that reaches its broker perfectly well sits on 127.0.0.1 refusing
+# connections. Leaving mdnsd out is a decision to configure every broker
+# address by hand.
+BR2_PACKAGE_MDNSD_OPENIPC=y
 # The client library only. rmq links libmosquitto, so the Raptor package depends
 # on mosquitto unconditionally and it is built for this target whether or not it
 # is selected here; selecting it is what makes the broker's `default y` visible
