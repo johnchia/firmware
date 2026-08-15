@@ -28,7 +28,29 @@ define SIGMASTAR_OSDRV_INFINITY6C_LIBRARIES
 	$(INSTALL) -m 644 -t $(TARGET_DIR)/usr/lib $(SIGMASTAR_OSDRV_INFINITY6C_PKGDIR)/files/lib/*
 endef
 
+# WHO INSTALLS THE MI LIBRARIES
+#
+# The first condition below reads "Majestic brings its own copies, so skip
+# ours". That is not true of this tree: general/package/majestic installs the
+# binary, majestic.yaml and S95majestic, and no libraries at all. So an image
+# selecting both Majestic and Raptor got the MI libraries from nowhere, and
+# Raptor's HAL -- which dlopens them by name -- died at
+#
+#   i6c_sys: dlopen(libcam_os_wrapper.so) failed: No such file or directory
+#   HAL init failed: -2
+#
+# ssc377qe_raptor is exactly that image, and it had been running only because an
+# incremental build left the libraries in target/ from before Majestic was
+# selected. The first clean rebuild dropped them and the camera came up with no
+# pipeline. Nothing failed at build time, because a dlopen by name cannot be a
+# link error -- the image builds, boots, and has no video.
+#
+# Raptor therefore asks for them on its own account rather than relying on
+# Majestic's absence. There is nothing to collide with: Majestic installs no
+# libraries, so this cannot overwrite one of its.
 ifneq ($(BR2_PACKAGE_MAJESTIC),y)
+SIGMASTAR_OSDRV_INFINITY6C_POST_INSTALL_TARGET_HOOKS += SIGMASTAR_OSDRV_INFINITY6C_LIBRARIES
+else ifeq ($(BR2_PACKAGE_RAPTOR_STREAMING),y)
 SIGMASTAR_OSDRV_INFINITY6C_POST_INSTALL_TARGET_HOOKS += SIGMASTAR_OSDRV_INFINITY6C_LIBRARIES
 endif
 
