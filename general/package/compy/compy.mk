@@ -12,7 +12,14 @@
 # rsd_ring_reader.c as of raptor's own "rsd: anchor audio sender reports on the
 # capture clock" -- the two landed upstream together, so a pin older than this
 # fails the image build on an implicit declaration rather than on a link error.
-COMPY_VERSION = c12c5942f57688d5d25ebea36176445135a4681f
+#
+# Bumped again, for the same reason and the same shape of failure. rsd now
+# reports reception back to the sender: 6003176 ("receiver: reception statistics
+# and RTCP receiver reports") adds Compy_RtpReceiver_feed_at and _write_rr, and
+# e677bd7 ("receiver: a leave compound") adds _write_bye. rsd_server.c and
+# rsd_session.c call all three, so the previous pin failed the image build on
+# three implicit declarations.
+COMPY_VERSION = 55797ad685e651825c60d50a8038a0ce9e1f910d
 COMPY_SITE = $(call github,gtxaspec,compy,$(COMPY_VERSION))
 COMPY_LICENSE = MIT
 COMPY_LICENSE_FILES = LICENSE
