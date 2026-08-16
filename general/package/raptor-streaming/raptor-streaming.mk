@@ -136,12 +136,16 @@ RAPTOR_STREAMING_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = \
 # install-order dependency rather than a link-time one: the vendor bundle and
 # the kernel modules have to be in the image for the daemons to do anything.
 #
-# faac and opus, by contrast, are genuine link-time dependencies -- but of rad
-# alone. Upstream's AAC=1 also declares an AAC *decoder* (-lhelix-aac), which is
-# only linked by daemons this image does not build (rsp, rmd), so no helix
-# package is needed; -DRAPTOR_AAC on its own compiles fine everywhere else.
+# faac and opus, by contrast, are genuine link-time dependencies -- of rad, and
+# now of rsd too. Upstream's AAC=1 declares both an encoder (-lfaac) and a
+# decoder (-lhelix-aac); the decoder used to be reached only by daemons this
+# image does not build, so this said no helix package was needed. rsd's
+# backchannel changed that: rsd_backchannel.c includes <aacdec.h> under
+# RAPTOR_AAC to decode AAC coming *from* a client, and rsd's link line has
+# carried -lhelix-aac all along. AAC=1 is one switch for the two libraries, so
+# an image that wants AAC out of rad has to supply the decoder as well.
 RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
-	sigmastar-osdrv-$(OPENIPC_SOC_FAMILY) faac opus mosquitto
+	sigmastar-osdrv-$(OPENIPC_SOC_FAMILY) faac helix-aac opus mosquitto
 
 # libmdnsd, for finding a service on the LAN rather than being told where it is
 # -- rmq's broker address is the case in hand.

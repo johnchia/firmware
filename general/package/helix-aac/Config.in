@@ -1,0 +1,11 @@
+config BR2_PACKAGE_HELIX_AAC
+	bool "helix-aac"
+	help
+	  RealNetworks' fixed-point HE-AAC decoder, built from the copy
+	  vendored in the ESP8266Audio library. Linked by Raptor's RTSP
+	  daemon to decode AAC on the ONVIF backchannel.
+
+	  Static library, staging only: nothing is installed into the
+	  rootfs.
+
+	  https://github.com/earlephilhower/ESP8266Audio
