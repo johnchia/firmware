@@ -40,10 +40,10 @@
 # All four move together in practice -- a HAL change usually needs the daemon
 # change that calls it -- so bump them as a set and rebuild before trusting the
 # result. There is no test that a mixed set links.
-RAPTOR_STREAMING_VERSION = 993563390ca99afc4e948e8beff57e7a77a00375
+RAPTOR_STREAMING_VERSION = 2639c808cb2fa4c31241d33436b1d20c472b31d8
 RAPTOR_STREAMING_HAL_VERSION = 621877e5b3ced34166b9b4d594ba350924390eec
 RAPTOR_STREAMING_COMMON_VERSION = 51358d23f85bd6f23f3f2d0be3e33c776b650217
-RAPTOR_STREAMING_IPC_VERSION = 1124c3194b90f131dde48e18c5641e748445fc9b
+RAPTOR_STREAMING_IPC_VERSION = e2ea1fc13b28a4aced4a7417436058a77f50c612
 
 # A FIFTH PIN, BECAUSE A TARBALL IS NOT A CLONE
 #
@@ -302,6 +302,11 @@ define RAPTOR_STREAMING_INSTALL_TARGET_CMDS
 	$(INSTALL) -m 644 $(RAPTOR_STREAMING_CONFIG_FILE) $(TARGET_DIR)/etc/raptor.conf
 	$(INSTALL) -m 755 $(@D)/raptor/config/S31raptor \
 		$(TARGET_DIR)/etc/init.d/S95raptor
+	# rhd serves the console at / from this file, and 404s without it. It is
+	# the whole web UI: one page that renders itself from rcd's schema.
+	$(INSTALL) -m 755 -d $(TARGET_DIR)/usr/share/raptor
+	$(INSTALL) -m 644 $(@D)/raptor/rhd/index.html \
+		$(TARGET_DIR)/usr/share/raptor/index.html
 	# rod's default OSD font path is /usr/share/fonts/default.ttf; point it at the
 	# UbuntuMono the majestic-fonts dependency already ships rather than shipping a
 	# second copy. Relative target so it resolves under any root.
