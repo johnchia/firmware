@@ -40,7 +40,7 @@
 # All four move together in practice -- a HAL change usually needs the daemon
 # change that calls it -- so bump them as a set and rebuild before trusting the
 # result. There is no test that a mixed set links.
-RAPTOR_STREAMING_VERSION = a4224bd2f47da1eb8dda5c4dab89a18467490eb9
+RAPTOR_STREAMING_VERSION = 9347626bd9a7299a369fa442bde778a606db3afa
 RAPTOR_STREAMING_HAL_VERSION = 621877e5b3ced34166b9b4d594ba350924390eec
 RAPTOR_STREAMING_COMMON_VERSION = 51358d23f85bd6f23f3f2d0be3e33c776b650217
 RAPTOR_STREAMING_IPC_VERSION = e2ea1fc13b28a4aced4a7417436058a77f50c612
