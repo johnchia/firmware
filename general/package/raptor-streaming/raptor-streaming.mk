@@ -171,12 +171,16 @@ endif
 #   rod  OSD text rendering -- draws into SHM, which rvd uploads to MI_RGN
 #   ric  IR-cut day/night; exits immediately unless [ircut] enabled
 #   rmq  MQTT bridge; needs libmosquitto, which is why mosquitto is a dependency
-#        above. Idle unless [mqtt] enabled, and it is the recovery path for
-#        settings that only apply at bring-up -- it writes the config file
-#        itself, so it can correct one even when rvd is down.
+#        above. Idle unless [mqtt] enabled. It plans nothing itself: every
+#        command it receives is handed to rcd.
 #   rhd  HTTP: snapshots and MJPEG served off the same rings, plus the status
 #        page. Gated by [http] enabled, which the overlay config turns on.
-RAPTOR_STREAMING_DAEMONS = rvd rsd rad rod ric rmq rhd
+#   rcd  Config daemon. Owns raptor.conf -- validates every edit, applies what
+#        a running daemon can take live, writes what it cannot, and sequences
+#        the restarts for the rest. rmq and raptorctl are its clients, and
+#        neither writes the file, so a build without it can start the daemons
+#        but cannot change their configuration.
+RAPTOR_STREAMING_DAEMONS = rvd rsd rad rod ric rmq rhd rcd
 RAPTOR_STREAMING_TOOLS = raptorctl
 
 # The HAL backend to compile, one per SoC family. Derived from the family so a
