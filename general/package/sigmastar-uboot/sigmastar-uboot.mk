@@ -16,32 +16,32 @@
 # and .github/workflows/uboot.yml builds that artefact by cloning
 # openipc/u-boot-sigmastar. A fork can therefore never appear in either.
 #
-# The fork exists because the SSC377QE has no per-unit identity the vendor
-# software can reach: the Infinity6C die-ID registers read zero (they do not on
-# 6E), so every board built from one image answers to OpenIPC's shared fallback
-# 00:00:23:34:45:66 and a second camera on the same subnet is a MAC collision.
-# The fork derives ethaddr in board_late_init from the SPI NOR part's factory
-# 64-bit unique ID (4Bh), which is the one per-unit value that survives a chip
-# erase because it is never stored. See ~/raptor/HANDOFF-i6c-mac-from-flash-uid.md.
+# WHAT THE FORK CARRIES
 #
-# That derivation is **infinity6c only**, and the attempt to extend it is worth
-# knowing about before anyone tries again. Infinity6E has no such read because
-# CONFIG_MS_NOR_ONEBIN, which is what builds one, does not add a driver -- it
-# replaces spi_flash_probe with an implementation that drives the FSP/QSPI block
-# directly, and that fails on 6E. A board flashed with it reaches the console
-# and never finds its kernel. See b686d0d.
+# The rootfs partition size, which is decided here and nowhere else:
+# common/cmd_sf.c picks 5120k or 8192k from the squashfs it finds, and both
+# raptor boards want the larger layout. See BR2_OPENIPC_ROOTFS_PART_KB in
+# ssc30kq_raptor_defconfig.
 #
-# Every other SigmaStar part now derives its address in userspace instead, from
-# /proc/sstar_flash_uid, on the same opcode and the same eight bytes. 6C keeps
-# doing it here only until that is proven on hardware; the two agree exactly, so
-# a board does not change address when it moves between them.
+# It used to carry a second thing: ethaddr derived from the SPI NOR part's
+# factory 64-bit unique ID, because the Infinity6C die-ID registers read zero
+# and every board built from one image otherwise answered to OpenIPC's shared
+# fallback 00:00:23:34:45:66. The rootfs now does that itself, from
+# /proc/flash_uid, folding the same eight bytes the same way, so a board does
+# not change address when the derivation moves -- verified on SSC377QE, where
+# both sources read 114a3f3b09914824 and both derive 02:2a:43:ae:48:25. Doing
+# it in one place is the point; see ethaddr_provision in
+# general/overlay/etc/init.d/rcS. Removed in u-boot-sigmastar 2136e33, which
+# also drops the uidraw and uidstat variables the bootloader used to publish.
 #
-# The bootloader is also where the rootfs partition size is decided --
-# common/cmd_sf.c picks 5120k or 8192k from the squashfs it finds -- so a board
-# wanting the larger layout needs this package whatever it thinks of MAC
-# addresses. See BR2_OPENIPC_ROOTFS_PART_KB in ssc30kq_raptor_defconfig.
+# Worth knowing before anyone reinstates it: the bootloader read needed
+# CONFIG_MS_NOR_ONEBIN, and that symbol does not add a driver -- it replaces
+# spi_flash_probe with an implementation that drives the FSP/QSPI block
+# directly, which fails on Infinity6E. A 6E board flashed with it reaches the
+# console and never finds its kernel. That is why the 6E half of the port was
+# reverted (b686d0d), and why userspace is the better home for this.
 
-SIGMASTAR_UBOOT_VERSION = b686d0d813af9da21662fdb924a40baa2710116c
+SIGMASTAR_UBOOT_VERSION = 2136e33b2506e7d1612ce9681a1d4978fd625259
 SIGMASTAR_UBOOT_SITE = $(call github,johnchia,u-boot-sigmastar,$(SIGMASTAR_UBOOT_VERSION))
 SIGMASTAR_UBOOT_LICENSE = GPL-2.0+
 SIGMASTAR_UBOOT_LICENSE_FILES = Licenses/gpl-2.0.txt

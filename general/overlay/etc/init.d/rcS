@@ -84,12 +84,13 @@ uid_from_flash() {
 }
 
 # The same value by way of the bootloader, on boards whose U-Boot publishes it.
-# Only the Infinity6C fork does, and there the two sources read the same eight
-# bytes with the same opcode off the same part, so a 6C board keeps the address
-# it already had when it moves from one to the other. That equivalence is per
-# platform and not a general promise: it holds where both paths exist, which is
-# 6C only -- 6E has no bootloader source and publishes sixteen bytes. This stops
-# firing once the bootloader no longer sets it.
+# No current bootloader does: the Infinity6C fork was the only one, and it
+# stopped once this became the single derivation. What it leaves behind is the
+# reason to keep reading it -- a 6C board flashed before that still has uidraw
+# in its saved environment, and taking the value from there gives it the same
+# address /proc/flash_uid would. Deleting this would only matter to a board
+# whose kernel does not publish the file, which is why it stays as the fallback
+# rather than the source.
 uid_from_env() {
 	fw_printenv -n uidraw 2>/dev/null | tr -d ' \r\n' | tr 'ABCDEF' 'abcdef'
 }
