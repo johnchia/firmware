@@ -127,15 +127,25 @@ jobs:
           path: /tmp/ccache
           key: raptor-${{ matrix.board }}-${{ env.CACHE_DATE }}
 
-      # The Raptor tarballs are named by commit sha, so unlike upstream's
-      # moving-ref packages they are content-addressed and a stale cache cannot
-      # feed the build an old revision. No purge step is needed here.
       - name: dl cache
         uses: actions/cache@v4
         with:
           path: output/dl
           key: raptor-dl-${{ env.CACHE_DATE }}
           restore-keys: raptor-dl-
+
+      # The Raptor tarballs are named by commit sha, so a stale cache cannot
+      # feed those an old revision -- but the image is not only Raptor. These
+      # boards pull sigmastar-osdrv-sensors, which upstream pins to HEAD, and a
+      # moving ref keeps a constant download filename. The cache key is the
+      # month and actions/cache only saves on a miss, so that tarball would be
+      # frozen for weeks and the nightly would quietly ship old vendor drivers.
+      # Same reasoning and same patterns as build.yml's own purge step.
+      - name: Refresh moving-ref package downloads
+        run: |
+          find output/dl -type f -regextype posix-extended \
+            -regex '.*[-.](HEAD|master|main|dist)\.tar\.(gz|bz2|xz)' \
+            -print -delete 2>/dev/null || true
 
       - name: Build
         run: |
