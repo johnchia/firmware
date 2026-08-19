@@ -3,14 +3,22 @@ on:
   pull_request:
     branches:
       - master
-  push:
-    branches:
-      - master
+  # Deliberately no push trigger. Every commit that reaches master was already
+  # parsed and tested by these same jobs on its pull request, so re-running them
+  # on the merge commit only re-proves what was just proven.
   workflow_dispatch:
 
 jobs:
+  # Same guard build.yml and gcc-compat.yml carry. These two jobs are cheap, but
+  # they are the last billed entry point a clone inherits: on a private mirror
+  # every master sync push and every internal PR runs them on that owner's bill.
+  # Upstream the first disjunct is true, so the condition is a tautology here.
   load-hisilicon-parsing:
     name: load_hisilicon os_mem_size derivation
+    if: >-
+      github.repository == 'OpenIPC/firmware' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && !github.event.repository.private)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,11 +26,69 @@ jobs:
 
   sysupgrade-verify:
     name: sysupgrade rootfs verification
+    if: >-
+      github.repository == 'OpenIPC/firmware' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && !github.event.repository.private)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Parse-check under both shells
-        run: |
-          sh -n general/overlay/usr/sbin/sysupgrade
-          dash -n general/overlay/usr/sbin/sysupgrade
+      # The parse-check that used to live here now runs for every shipped script
+      # in the job below, against the busybox ash the device actually uses. This
+      # step was `sh -n` then `dash -n`, which on ubuntu-latest is the same
+      # check twice (/bin/sh is dash) and neither is the target shell.
       - run: bash .github/scripts/test_sysupgrade.sh
+
+      # The copy in git is not the copy that ships: the build strips whole-line
+      # comments out of it. Run the same suite against that form, so the thing
+      # cameras actually execute is the thing under test. Without this, the
+      # stripper could quietly change behaviour and every check above would
+      # still pass, having tested a file no device ever runs.
+      - name: Re-run against the stripped form that actually ships
+        run: |
+          awk -f general/scripts/strip-shell-comments.awk \
+            general/overlay/usr/sbin/sysupgrade > /tmp/sysupgrade.stripped
+          SRC=/tmp/sysupgrade.stripped bash .github/scripts/test_sysupgrade.sh
+
+  # Only sysupgrade was ever parse-checked; every other script in the image --
+  # the init scripts, /etc/profile, /init on initramfs boards, the vendor load_*
+  # scripts that insert the SoC drivers -- reached cameras without anything
+  # confirming it even parses. Nothing else covers them: the overlay and the
+  # package install steps copy these files in verbatim, so a green build says
+  # nothing about their syntax.
+  #
+  # Checked against busybox ash only, since that is what executes on the device.
+  # dash would be the wrong bar: the shipped busybox sets ASH_BASH_COMPAT, so
+  # `function name()` is valid in the field, and four scripts that run on real
+  # hardware fail under dash. See the header of test_shell_parse.sh.
+  #
+  # Deliberately syntax-only. A bashism audit (checkbashisms) over the same set
+  # is a much larger change -- `local` alone is used throughout -- and is worth
+  # doing separately rather than smuggling into a coverage PR.
+  shipped-shell-parse:
+    name: shipped shell scripts parse
+    if: >-
+      github.repository == 'OpenIPC/firmware' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && !github.event.repository.private)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install busybox
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq busybox-static
+      - name: Parse every shipped shell script
+        # STRICT=1 so a busybox that failed to install fails the job instead of
+        # skipping every check and still reporting green.
+        env:
+          STRICT: 1
+        run: bash .github/scripts/test_shell_parse.sh
+
+      # The build strips whole-line comments from all of the above before they
+      # are flashed. Parsing only the tree copy would leave that transform --
+      # which rewrites 128 files nobody reads again -- entirely unchecked.
+      - name: Parse them again as the stripper leaves them
+        env:
+          STRICT: 1
+        run: bash .github/scripts/test_strip_shell_comments.sh

@@ -62,8 +62,10 @@ sed -e 's|grep "GITHUB_VERSION" "$1/etc/os-release"|grep "GITHUB_VERSION" "${1:-
     -e "s|/etc/os-release|@SB@/etc/os-release|g" \
     -e "s|/proc/mtd|@SB@/proc/mtd|g" \
     -e "s|/proc/cmdline|@SB@/proc/cmdline|g" \
+    -e "s|/proc/mounts|@SB@/proc/mounts|g" \
     -e "s|/proc/sys/vm/drop_caches|@SB@/tmp/drop_caches|g" \
     -e "s|/etc/init.d/|@SB@/etc/init.d/|g" \
+    -e "s|/bin/busybox|@SB@/bin/busybox|g" \
     -e "s|@OSRELEASE@|/etc/os-release|g" \
     -e "s|@SB@|$SB|g" \
     "$SRC" > "$SB/sysupgrade"
@@ -74,6 +76,19 @@ grep -q '@SB@\|@OSRELEASE@' "$SB/sysupgrade" \
 for s in S99rc.local S60crond S49ntpd S02klogd S01syslogd; do
     printf '#!/bin/sh\nexit 0\n' > "$SB/etc/init.d/$s"; chmod +x "$SB/etc/init.d/$s"
 done
+# This one logs: whether majestic is put back is a behaviour worth asserting,
+# not just a service that had to exist for the script not to trip over it.
+printf '#!/bin/sh\necho "S95majestic $1" >> "$FLASH_LOG"\nexit 0\n' \
+    > "$SB/etc/init.d/S95majestic"; chmod +x "$SB/etc/init.d/S95majestic"
+
+# ramfs_unwind verifies the restore by reading /proc/mounts before it lets the
+# in-place fallback run, and enter_ramfs consults it to decide whether a leftover
+# tmpfs of its own needs clearing. Give the sandbox one that says the mounts are
+# where they should be, so the fallback cases exercise the fallback rather than
+# the emergency "cannot restore, reboot" path. Deliberately no line for $SB/ram:
+# a stale ramfs is the exception, not the default.
+printf 'tmpfs %s/tmp tmpfs rw,relatime 0 0\nproc %s/proc proc rw,relatime 0 0\n' \
+    "$SB" "$SB" > "$SB/proc/mounts"
 
 set_mtd() { cat > "$SB/proc/mtd"; }
 
@@ -106,6 +121,10 @@ stub killall    'exit 0'
 stub ntpd       'exit 0'
 stub curl       'exit 0'
 stub umount     'exit 0'
+# Logs so ordering can be asserted, and fails by default: an unprivileged test
+# host cannot really pivot, and the fallback is the safety property that matters
+# most here (a camera that cannot build a ramfs must still upgrade).
+stub pivot_root 'echo "pivot_root $*" >> "$FLASH_LOG"; exit ${STUB_PIVOT_RC:-1}'
 stub losetup    'case "$1" in -f) echo /dev/loop0;; *) exit 0;; esac'
 
 # download_firmware runs `md5sum -s -c`. -s (silent) is a busybox extension; GNU
@@ -146,6 +165,15 @@ exit 0'
 stub mount '
 [ $# -eq 0 ] && exit 0
 target=${!#}
+# STUB_MOUNT models the VERIFY-mount (a squashfs image over a loop device). The
+# ramfs pivot mounts tmpfs and relocates existing mounts; those are a different
+# operation and must not inherit the fault being injected, or the hang case
+# wedges before the code under test is even reached.
+for a in "$@"; do
+    case "$a" in
+        move|tmpfs|--move|-M) exit 0 ;;
+    esac
+done
 case "${STUB_MOUNT:-ok}" in
     ok)
         mkdir -p "$target/etc"
@@ -221,7 +249,8 @@ run() {
     : > "$SB/tmp/flash.log"
     OUT=$(cd "$SB" && env PATH="$SB/bin:$PATH" \
         HASERLVER=1 FLASH_LOG="$SB/tmp/flash.log" mount_wait="${MOUNT_WAIT:-3}" \
-        abort_wait=0 \
+        abort_wait=0 RAM_ROOT="$SB/ram" \
+        STUB_PIVOT_RC="${STUB_PIVOT_RC:-1}" \
         STUB_MOUNT="${STUB_MOUNT:-ok}" STUB_VENDOR="${STUB_VENDOR:-sigmastar}" \
         STUB_SOC="${STUB_SOC:-ssc338q}" \
         STUB_IMG_SOC="${STUB_IMG_SOC:-ssc338q}" \
@@ -241,7 +270,8 @@ at() { printf '%s\n' "$OUT" | grep -n -- "$1" | head -1 | cut -d: -f1; }
 
 reset_env() {
     unset STUB_MOUNT STUB_VENDOR STUB_SOC STUB_IMG_SOC STUB_IMG_VERSION MOUNT_WAIT
-    unset STUB_FLASHCP_FAIL
+    unset STUB_FLASHCP_FAIL STUB_PIVOT_RC
+    rm -rf "$SB/ram"
     rm -f "$SB"/tmp/*.ssc338q "$SB"/tmp/firmware.bin.* "$SB"/tmp/*.tgz "$SB"/tmp/*.md5sum
     make_uimage "$SB/tmp/uImage.ssc338q" ssc338q
     make_rootfs "$SB/tmp/rootfs.squashfs.ssc338q"
@@ -609,6 +639,112 @@ else
     bad "-x + pre-write refusal -> expected no write and no reboot, rc=$RC log='$(cat "$SB/tmp/flash.log")'"
 fi
 
+# ---------------------------------------------------------------------------
+echo
+echo "=== Part 1c: die() before the first write (majestic-webui issue #120) ==="
+
+# The headline case. Without -x, a failure before anything reached flash used to
+# reboot anyway, because die() called reboot_system unconditionally. Over
+# /ws/upgrade that reboot is the ONLY thing the WebUI can observe, so it read a
+# refused upgrade as a successful one and sent the user to a status page showing
+# the version they already had.
+reset_env
+STUB_IMG_SOC=gk7205v300
+run -z --rootfs="$R"
+if [ "$RC" -ne 0 ] && nothing_wrote && ! rebooted; then
+    ok "pre-write refusal -> no reboot (nothing changed, so nothing to reboot into)"
+else
+    bad "pre-write refusal -> expected no write and no reboot, rc=$RC log='$(cat "$SB/tmp/flash.log")'"
+fi
+
+# ...and it must say so, because that string is what the WebUI watches for to
+# stop waiting for a reboot that is never coming.
+if printf '%s' "$OUT" | grep -q "Aborting\."; then
+    ok "pre-write refusal still prints 'Aborting.'"
+else
+    bad "pre-write refusal must print 'Aborting.' so a GUI can tell it apart from a flash"
+fi
+
+# The reboot used to double as lock cleanup: /tmp went with it. Now that we stay
+# up, die() has to release the lock itself or the next attempt is refused.
+if [ ! -f "$SB/tmp/sysupgrade.lock" ]; then
+    ok "pre-write refusal releases the lock (a retry is possible)"
+else
+    bad "pre-write refusal left $SB/tmp/sysupgrade.lock behind; the next run would be refused"
+fi
+
+# The other half, and the case the fix must not regress: once flashcp has
+# started, the partition is erased whether or not the write finished, so a die()
+# from there must still reboot. The combined-image path is the one that actually
+# reaches die() after a write (`flashcp ... || die`); on the split path a failed
+# flashcp is not fatal at all, which is why this uses a combined image.
+# free_resources() stops syslog/klogd/ntpd/cron before the download, because
+# dropping the page cache is how a small camera finds the RAM to unpack the
+# image. The reboot used to hide that -- everything came back on the way up.
+# Now that a pre-flash failure stays up, it has to be undone explicitly, or a
+# refused upgrade quietly costs the user their logging and their cron jobs.
+reset_env
+STUB_IMG_SOC=gk7205v300
+run -z --rootfs="$R"
+if printf '%s' "$OUT" | grep -q "Restarting the services stopped for the upgrade"; then
+    ok "pre-write refusal restarts what free_resources stopped"
+else
+    bad "pre-write refusal left services down; the camera stays up but degraded"
+fi
+
+# majestic must be RESTARTED, not started. free_resources' `killall -3` is not a
+# terminate -- SIGQUIT makes majestic release the SDK and keep serving -- so it
+# is still running, just with no video pipeline and no way back in place. Under
+# --web it is worse: majestic latched itself into upgrade mode and never clears
+# the flag.
+if grep -q "S95majestic restart" "$SB/tmp/flash.log"; then
+    ok "pre-write refusal restarts majestic (a gutted daemon needs more than start)"
+else
+    bad "majestic left running without its SDK; video stays down until a power cycle"
+fi
+
+# A lock this run did not take belongs to somebody else. die() is reachable
+# before create_lock, so removing the lock unconditionally there would unlink a
+# CONCURRENT sysupgrade's lock and let two upgrades run at once. run() clears
+# the lock first, so plant it afterwards and drive the script directly.
+reset_env
+: > "$SB/tmp/sysupgrade.lock"
+OUT=$(cd "$SB" && env PATH="$SB/bin:$PATH" HASERLVER=1 \
+    FLASH_LOG="$SB/tmp/flash.log" abort_wait=0 STUB_IMG_SOC=gk7205v300 \
+    sh "$SB/sysupgrade" -z --rootfs="$R" 2>&1)
+RC=$?
+if [ -f "$SB/tmp/sysupgrade.lock" ] && [ "$RC" -ne 0 ]; then
+    ok "a lock this run did not create is left alone"
+else
+    bad "a foreign lock was removed (rc=$RC); mutual exclusion is defeated"
+fi
+rm -f "$SB/tmp/sysupgrade.lock"
+
+# The whole-blob layout is the one that reaches die() after a write
+# (`flashcp ... || die`); on the split path a failed flashcp is not fatal at all.
+# Same setup as the -x case above, minus the -x: the default path must reboot
+# from here for the same reason, and this is what the fix must not regress.
+reset_env
+set_mtd <<'EOF'
+dev:    size   erasesize  name
+mtd0: 00040000 00010000 "boot"
+mtd1: 00010000 00010000 "env"
+mtd2: 00700000 00010000 "firmware"
+EOF
+make_combined "$SB/tmp/firmware.bin.ssc338q"
+make_archive "$SB/tmp/firmware.bin.ssc338q"
+STUB_FLASHCP_FAIL=1
+run -z --archive="$SB/tmp/fw.tgz"
+if [ "$RC" -ne 0 ] && rebooted; then
+    ok "die() after a write started -> still reboots (partial erase is not survivable)"
+else
+    bad "post-write die -> expected a reboot, rc=$RC log='$(cat "$SB/tmp/flash.log")'"
+fi
+
+# ---------------------------------------------------------------------------
+echo
+echo "=== Part 1d: the default path is untouched by all of the above ==="
+
 # The default path must be untouched by all of the above.
 reset_env
 run -z --kernel="$K" --rootfs="$R"
@@ -626,15 +762,239 @@ fi
 
 # ---------------------------------------------------------------------------
 echo
+echo "=== Part 1e: flashing from a ramfs (majestic-webui issue #120) ==="
+
+# flashcp rewrites the partition backing the live squashfs, so from the first
+# write onwards any rootfs page that is not resident reads back as the new image
+# at a stale offset. The reboot is a fork+exec of busybox FROM that partition, so
+# on a small camera it fails with EIO and the box never reboots -- it just stops,
+# needing a power cycle. Everything after the first write therefore has to run
+# from RAM.
+reset_env
+run -z --kernel="$K" --rootfs="$R"
+pline=$(grep -n "pivot_root" "$SB/tmp/flash.log" | head -1 | cut -d: -f1)
+fline=$(grep -n "flashcp"    "$SB/tmp/flash.log" | head -1 | cut -d: -f1)
+if [ -n "$pline" ] && [ -n "$fline" ] && [ "$pline" -lt "$fline" ]; then
+    ok "the ramfs pivot is attempted before the first write"
+else
+    bad "pivot must be attempted before any write (pivot=$pline first-write=$fline)"
+fi
+
+# ...but a camera that cannot build one must still upgrade. The pivot_root stub
+# fails by default, so this run took the fallback.
+if [ "$RC" -eq 0 ] && flashed /dev/mtd2 && flashed /dev/mtd3 && rebooted; then
+    ok "a failed pivot falls back to flashing in place"
+else
+    bad "failed pivot -> expected both flashed and a reboot, rc=$RC log='$(cat "$SB/tmp/flash.log")'"
+fi
+
+# The escape hatch for board bring-up.
+reset_env
+run -z --kernel="$K" --rootfs="$R" --no_ramfs
+if ! grep -q "pivot_root" "$SB/tmp/flash.log" && flashed /dev/mtd3 && rebooted; then
+    ok "--no_ramfs skips the pivot and flashes in place"
+else
+    bad "--no_ramfs -> expected no pivot but a normal flash, log='$(cat "$SB/tmp/flash.log")'"
+fi
+
+# A pivot that did not happen must still hand the old root back as it found it.
+# The shipped rootfs has no /ram, so the directory enter_ramfs makes lands in the
+# overlay's upper layer and stays there: every upgrade since the pivot landed
+# left a stray /overlay/root/ram behind (OpenIPC/majestic-webui#120).
+#
+# rmdir is stubbed rather than left real because this sandbox fakes `mount` --
+# nothing was ever mounted on $SB/ram, so it still holds the staged busybox tree
+# and a real rmdir would rightly refuse to remove it.
+stub rmdir 'echo "rmdir $*" >> "$FLASH_LOG"; exit 0'
+reset_env
+run -z --kernel="$K" --rootfs="$R"
+if grep -q "^rmdir .*/ram$" "$SB/tmp/flash.log"; then
+    ok "a pivot that failed reclaims its ramfs mount point"
+else
+    bad "failed pivot left RAM_ROOT behind, log='$(cat "$SB/tmp/flash.log")'"
+fi
+rm -f "$SB/bin/rmdir"
+
+# ---------------------------------------------------------------------------
+echo
 echo "=== Part 2: invariants in $SRC ==="
 
 # An option named in a user-facing message must exist in the parser.
+# --connect-timeout and --speed-limit/--speed-time are curl's, not ours.
 for opt in $(grep -oE '\-\-[a-z_]+' "$SRC" | sort -u); do
     case "$opt" in
-        --force_*|--wipe_overlay|--no_reboot|--no_update|--help|--web|--url|--archive|--kernel|--rootfs|--channel|--build|--list*|--connect*) continue ;;
+        --force_*|--wipe_overlay|--no_reboot|--no_update|--no_ramfs|--help|--web|--url|--archive|--kernel|--rootfs|--channel|--build|--list*|--connect*|--speed*) continue ;;
     esac
     bad "message references '$opt', which the option parser does not accept"
 done
+# die() must weigh whether flash was touched, not reboot on reflex. Checked in
+# the source as well as behaviourally, because the behavioural cases can only
+# reach a handful of the ~20 die() call sites.
+awk '/^die\(\)/,/^}/' "$SRC" | grep -q 'flash_touched' \
+    && ok "die() gates the reboot on whether flash was touched" \
+    || bad "die() reboots unconditionally again -- a refused upgrade will read as a successful one"
+awk '/^die\(\)/,/^}/' "$SRC" | grep -q 'lock_owned.*rm -f \$LOCK_FILE' \
+    && ok "die() releases the lock, but only one this run owns" \
+    || bad "die() must remove \$LOCK_FILE when it does not reboot -- and only if lock_owned"
+awk '/^create_lock\(\)/,/^}/' "$SRC" | grep -q 'lock_owned=1' \
+    && ok "create_lock records ownership" \
+    || bad "create_lock must set lock_owned, or die() can never release its own lock"
+awk '/^die\(\)/,/^}/' "$SRC" | grep -q 'restore_resources' \
+    && ok "die() restarts the services free_resources stopped" \
+    || bad "a pre-flash die() leaves syslog/klogd/ntpd/cron stopped on a camera that stays up"
+awk '/^restore_resources\(\)/,/^}/' "$SRC" | grep -q 'S95majestic restart' \
+    && ok "restore_resources restarts majestic rather than starting it" \
+    || bad "SIGQUIT leaves majestic running without an SDK; 'start' is a no-op, it needs 'restart'"
+grep -q 'mark_flash_touched' "$SRC" \
+    && ok "the flash-touched marker exists" \
+    || bad "mark_flash_touched is gone; die() cannot tell a pre-write failure apart"
+awk '/^do_update_kernel\(\)/,/^}/' "$SRC" | grep -q 'mark_flash_touched' \
+    && ok "do_update_kernel marks flash touched (not live-dirty, but still final)" \
+    || bad "do_update_kernel must mark flash touched before its write"
+
+# The download is bounded by throughput, not by total elapsed time: -m 120 was a
+# disguised 60 KB/s floor that no slow camera could meet (majestic-webui #120).
+grep -q -- '--speed-limit' "$SRC" \
+    && ok "the download gives up on a stalled transfer, not on a slow one" \
+    || bad "the download must use --speed-limit/--speed-time, not a total-time cap"
+grep -qE 'curl[^|]*-m 120' "$SRC" \
+    && bad "-m 120 is back: any link under ~60 KB/s can never finish a ~7 MB image" \
+    || ok "no total-time cap tight enough to fail a slow link"
+
+# A pivot without a re-exec is theatre: pivot_root changes what paths resolve to,
+# but the running shell keeps its text mapped from the old squashfs inode, which
+# is the very thing that has to stop being true.
+awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | grep -q '^\s*exec ' \
+    && ok "enter_ramfs re-execs (pivot alone leaves the shell on the old rootfs)" \
+    || bad "enter_ramfs must exec after pivoting, or the shell stays mapped to the flash"
+awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | grep -q 'chroot' \
+    && ok "enter_ramfs chroots (pivot_root alone does not move this process's root)" \
+    || bad "enter_ramfs must chroot after pivot_root"
+awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | grep -q 'ldd ' \
+    && ok "enter_ramfs stages the shared libraries busybox needs" \
+    || bad "busybox is dynamically linked; staging it without its libs gives an unrunnable ramfs"
+for m in /dev /proc /tmp; do
+    awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | grep -q "mount -o move $m" \
+        && ok "enter_ramfs carries $m into the new root" \
+        || bad "enter_ramfs must move $m across, or the flash phase loses it"
+done
+case "$(grep -m1 '^RAM_ROOT=' "$SRC")" in
+    *'/tmp'*) bad "RAM_ROOT must not live under /tmp -- /tmp is moved into it" ;;
+    *)        ok  "RAM_ROOT is outside /tmp" ;;
+esac
+grep -q '_ramfs_phase' "$SRC" \
+    && ok "the second phase has an entry point" \
+    || bad "the re-exec'd process has no way to skip to the flash"
+# busybox dispatches on argv[0]; without symlinks the new root has no tools.
+awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | grep -q 'ln -sf busybox' \
+    && ok "enter_ramfs installs busybox applet symlinks" \
+    || bad "without applet symlinks the pivoted root cannot run od/cut/grep/flashcp"
+awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | grep -q 'for applet in sh flashcp reboot' \
+    && ok "enter_ramfs refuses to pivot into a root missing the essentials" \
+    || bad "enter_ramfs must verify the staged root can actually flash and reboot"
+# The fallback is only a fallback if the mounts it needs are still where it left
+# them. Every failure after the first `mount -o move` has to put them back, or a
+# failed pivot strands the running camera with no /dev at all.
+moved=$(awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | grep -c 'mount -o move /')
+unwound=$(awk '/^ramfs_unwind\(\)/,/^}/' "$SRC" | grep -c 'mount -o move "\$RAM_ROOT')
+[ "$moved" -gt 0 ] && [ "$unwound" -ge "$moved" ] \
+    && ok "ramfs_unwind restores every mount enter_ramfs moves ($unwound >= $moved)" \
+    || bad "moves=$moved but only $unwound are restored; a failed pivot would leave them relocated"
+bare=$(awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | awk '/mount -o move \/dev/,0' | grep -c 'return 1' )
+guarded=$(awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | awk '/mount -o move \/dev/,0' | grep -c 'ramfs_unwind')
+[ "$guarded" -ge 1 ] && [ "$bare" -le "$guarded" ] \
+    && ok "no unguarded return between the mount moves and the pivot" \
+    || bad "$bare return(s) after the moves but only $guarded unwind(s)"
+# A shell redirection CREATES its target. Between the /dev move and the pivot the
+# name /dev/null resolves inside the OLD root, which has no such node -- devtmpfs
+# supplied it, and devtmpfs has just been moved away. So `2>/dev/null` there does
+# not discard the error, it writes a regular file named `null` into that root.
+# The root is an overlay, so the file lands in the upper layer and outlives the
+# upgrade: cameras on four SoCs came back from a clean flash carrying a 0600
+# /overlay/root/dev/null (OpenIPC/majestic-webui#120).
+window=$(awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | awk '/mount -o move \/dev/,/pivot_root/')
+printf '%s\n' "$window" | grep -q '>/dev/null' \
+    && bad "enter_ramfs names /dev/null after moving /dev away -- that CREATES the file" \
+    || ok "nothing between the /dev move and the pivot names /dev/null"
+printf '%s\n' "$window" | grep -q '2>&3' \
+    && ok "the window between the /dev move and the pivot redirects to fd 3" \
+    || bad "post-move redirections must name a descriptor, not a path"
+# ramfs_unwind is reached from inside that same window -- putting /dev back is
+# what it exists for -- so it cannot name /dev/null either.
+awk '/^ramfs_unwind\(\)/,/^}/' "$SRC" | grep -q '>/dev/null' \
+    && bad "ramfs_unwind names /dev/null while /dev may still be moved away" \
+    || ok "ramfs_unwind never names /dev/null in a redirection"
+# ...and the descriptor only means anything if it was opened while /dev was still
+# the devtmpfs, i.e. at the top level, before enter_ramfs can run.
+grep -qE '^[^[:space:]].*exec 3>' "$SRC" \
+    && ok "fd 3 is opened at the top level, while /dev is still the devtmpfs" \
+    || bad "fd 3 must be opened before enter_ramfs starts relocating /dev"
+# The mount point is the other half of the same leak: the shipped rootfs has no
+# /ram, so `mkdir -p "$RAM_ROOT"` writes a directory into the overlay's upper
+# layer, and nothing used to take it back out.
+awk '/^ramfs_discard\(\)/,/^}/' "$SRC" | grep -q 'rmdir' \
+    && ok "ramfs_discard reclaims the mount point enter_ramfs created" \
+    || bad "nothing removes RAM_ROOT; the overlay gains an empty /ram per upgrade"
+awk '/^ramfs_discard\(\)/,/^}/' "$SRC" | grep -q 'rm -rf' \
+    && bad "ramfs_discard must not recursively delete a root the flash may still run from" \
+    || ok "ramfs_discard removes an empty directory only (rmdir, never rm -rf)"
+awk '/^ramfs_discard\(\)/,/^}/' "$SRC" | grep -qF '^tmpfs $RAM_ROOT tmpfs' \
+    && ok "ramfs_discard only detaches a tmpfs of its own" \
+    || bad "RAM_ROOT is overridable; an unconditional umount could detach real storage"
+grep -qF 'rmdir "/mnt$RAM_ROOT"' "$SRC" \
+    && ok "the ramfs phase reclaims the mount point stranded in the old root" \
+    || bad "after the pivot nothing removes the old root's RAM_ROOT"
+# ...and that "/mnt$RAM_ROOT" only names the right directory if RAM_ROOT is
+# absolute. It is overridable from the environment, and a relative one would
+# also defeat the /proc/mounts check, which records mount points absolutely.
+grep -qE '^case "\$RAM_ROOT" in /\*\)' "$SRC" \
+    && ok "a relative RAM_ROOT override is normalised to an absolute path" \
+    || bad "RAM_ROOT is used as \"/mnt\$RAM_ROOT\" and matched against /proc/mounts; it must be absolute"
+# That rmdir runs AFTER the pivot, where the applet symlinks are the only tools
+# there are. `busybox --list` is a build option, so on a camera without it the
+# hardcoded fallback list is the whole toolbox -- an applet missing from it is
+# simply "not found", and a cleanup that fails is one that silently did nothing.
+awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | awk '/for applet in sh ash/,/done/' | grep -qw 'rmdir' \
+    && ok "the fallback applet list stages rmdir for the ramfs phase" \
+    || bad "the ramfs phase runs rmdir, but a busybox without --list would not have that applet"
+awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | grep -q 'export remote_update' \
+    && ok "remote_update survives the re-exec (verify_rootfs branches on it)" \
+    || bad "remote_update is not exported; an unmountable rootfs behaves differently in phase 2"
+awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | grep -q 'lock_owned' \
+    && ok "lock_owned survives the re-exec" \
+    || bad "lock_owned is not exported; die() in phase 2 cannot release its own lock"
+# Restoring the mounts is attempted, not guaranteed. Handing the in-place path an
+# environment with no /dev or /proc is exactly what ramfs_unwind exists to stop.
+awk '/^ramfs_unwind\(\)/,/^}/' "$SRC" | grep -q '/dev/null.*||.*/proc/mounts\|! -c /dev/null' \
+    && ok "ramfs_unwind checks the restore took before allowing the fallback" \
+    || bad "ramfs_unwind returns without verifying /dev, /proc and /tmp came back"
+awk '/^ramfs_unwind\(\)/,/^}/' "$SRC" | grep -q 'reboot -d 1 -f' \
+    && ok "an unrestorable environment reboots rather than flashing blind" \
+    || bad "if the restore fails there must be no in-place flash"
+# RAM_ROOT is environment-overridable, so the pre-mount cleanup must not be a
+# blind umount of whatever it happens to point at.
+awk '/^enter_ramfs\(\)/,/^}/' "$SRC" | grep -q 'grep -q "\^tmpfs \$RAM_ROOT tmpfs"' \
+    && ok "the pre-mount cleanup only clears a tmpfs of our own" \
+    || bad "enter_ramfs unmounts \$RAM_ROOT blindly; pointed at real storage that detaches it"
+# After the pivot the old system is behind /mnt, so exiting without a reboot
+# leaves exactly the corpse this change exists to prevent.
+awk '/^die\(\)/,/^}/' "$SRC" | grep -q '_ramfs_phase' \
+    && ok "die() reboots unconditionally once we are in the ramfs" \
+    || bad "a die() inside the ramfs must reboot; there is no system left to return to"
+# The WebUI keeps majestic alive on purpose: it is the server streaming the log,
+# and SIGQUIT to a majestic already in upgrade mode is a use-after-free
+# (tracked daemon-side). The only legitimate one left is free_resources'
+# non---web kill, which frees video memory for the download.
+if [ "$(grep -c 'killall -q -3 majestic' "$SRC")" = "1" ] &&
+    awk '/^free_resources\(\)/,/^}/' "$SRC" | grep -q 'killall -q -3 majestic'; then
+    ok "the only SIGQUIT at majestic is free_resources' non---web one"
+else
+    bad "a SIGQUIT at majestic outside free_resources -- in upgrade mode that is a use-after-free"
+fi
+grep -q "Stopping web server before flashing" "$SRC" \
+    && bad "the pre-flash 'stop the web server' step is back; --web exists to keep it serving" \
+    || ok "no pre-flash stop of the web server"
+
 grep -q -- '--skip_soc' "$SRC" \
     && bad "'--skip_soc' is not an option (the parser takes --force_soc)" \
     || ok "no reference to the non-existent --skip_soc"
