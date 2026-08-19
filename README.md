@@ -1,68 +1,191 @@
-![OpenIPC logo][logo]
+# openipc-raptor
 
-## Alternative open firmware for your IP camera
-_(based on Buildroot)_
+A fork of [OpenIPC/firmware][upstream] that builds SigmaStar camera images
+running **[Raptor][raptor]** as the streamer instead of Majestic. Raptor is
+fully open source under the **GPL-3.0**, so unlike the closed binary it
+replaces, everything that touches the camera here can be read, patched and
+rebuilt.
 
-[![Telegram](https://openipc.org/images/telegram_button.svg)][telegram]
+Everything that is not Raptor is upstream's. This fork tracks
+`OpenIPC/firmware` master and merges from it; the delta is a Raptor package,
+two board targets, and a few SigmaStar fixes. Bug reports about anything else
+belong upstream.
 
+![The Raptor configuration console](docs/console.png)
 
-OpenIPC is a rapidly developing open source alternative [firmware][firmware] for 
-popular IP cameras from an [open community](https://opencollective.com/openipc).
+## What is different
 
-Historically, OpenIPC [firmware][firmware] only supported SoC manufactured by 
-HiSilicon, but as the development continues, the list of supported processors
-expands. Today, it also includes chips from _Ambarella_, _Anyka_, _Fullhan_, _Goke_,
-_GrainMedia_, _Ingenic_, _MStar_, _Novatek_, _SigmaStar_, _XiongMai_, and is 
-expected to grow further.
+**Raptor replaces Majestic as the streamer.** Where the stock image runs one
+`majestic` process, these images run a set of small daemons that share frames
+through POSIX shared-memory rings and talk over Unix control sockets. A crash
+in the RTSP parser cannot take recording down with it, and nothing that reads
+from the network shares an address space with the vendor SDK.
 
-More information about the [project][project] is available in our [website][website]
-and on the [wiki][wiki].
+## Targets
 
-## Support
+| Board | SoC | Family | Rootfs |
+|---|---|---|---|
+| `ssc377qe_raptor` | SSC377QE | infinity6c | 8192 KB |
+| `ssc30kq_raptor`  | SSC30KQ  | infinity6e | 8192 KB |
 
-OpenIPC offers two levels of support.
+Both are NOR. `make list` shows every board in the tree, upstream's included.
 
-- Free support through the community (via [chat][telegram]).
-- Paid commercial support (from the team of developers).
+These two are the boards that get tested, not the limit of what works. The
+package picks its backend from `BR2_OPENIPC_SOC_FAMILY` and the HAL is written
+per family rather than per board, so **any infinity6c or infinity6e board
+should build and run** -- as should infinity6b0, which the HAL also covers.
+Adding one is a defconfig: copy the stock `_lite_defconfig` for that board,
+swap `BR2_PACKAGE_MAJESTIC` for `BR2_PACKAGE_RAPTOR_STREAMING`, and set
+`BR2_OPENIPC_VARIANT="raptor"`. What differs between boards of one family --
+sensor, i2c bus, IR-cut GPIO, audio codec -- lives in `raptor.conf` rather than
+in code, and the sensor is probed at runtime.
 
-Please consider subscribing for paid commercial support if you intend to use our product for business.
-As a paid customer, you will get technical support and maintenance services directly from our skilled team.
-Your bug reports and feature requests will get prioritized attention and expedited solutions. It's a win-win
-strategy for both parties, that would contribute to the stability your business, and help core developers
-to work on the project full-time.
+**Ingenic should be close to free.** Raptor started on Ingenic and its HAL
+still carries T10 through T41; this fork only added the SigmaStar side.
+`RAPTOR_STREAMING_PLATFORM` is the SoC family uppercased, so a `t31` board
+already resolves to the `T31` backend with no change to the package. What is
+missing is a defconfig selecting raptor-streaming on an Ingenic target, and a
+route to the Ingenic SDK headers -- the HAL expects them at `INGENIC_HEADERS`
+and this package does not pass it. Untested: there is no Ingenic hardware on
+this bench.
 
-If you have any specific questions concerning our project, feel free to [contact us](mailto:dev@openipc.org).
+## Daemons in these images
 
+Raptor is modular and each image installs only what it needs. These boards
+ship:
 
-## Participating and Contribution
+| | Role |
+|---|---|
+| `rvd` | Owns the ISP, sensor and encoders. Publishes the `main`, `sub`, `jpeg0` and `jpeg1` rings. The only daemon that touches the vendor SDK. |
+| `rsd` | RTSP/RTSPS, Digest auth, ONVIF Profile T audio backchannel. |
+| `rad` | Audio capture and encode (G.711, L16, AAC, Opus), speaker output. |
+| `rod` | Renders OSD text and logos into shared buffers; no hardware dependency. |
+| `ric` | IR-cut day/night control -- luma plus gain-ratio, or an ADC or GPIO sensor. |
+| `rhd` | HTTP: JPEG snapshots, MJPEG, audio, and the configuration console. |
+| `rcd` | Owns `raptor.conf`. Validates against a published schema, applies what a running daemon can take live, and sequences the restarts for what it cannot. |
+| `rmq` | MQTT bridge with Home Assistant discovery. |
+| `raptorctl` | Command-line client for all of the above. |
 
-If you like what we do, and willing to intensify the development, please consider participating.
+## Building
 
-You can improve existing code and send us patches. You can add new features missing from our code.
+```sh
+make BOARD=ssc377qe_raptor all
+```
 
-You can help us to write a better documentation, proofread and correct our websites.
+That leaves the kernel, the rootfs and an installable archive in
+`output/images/`:
 
-You can just donate some money to cover the cost of development and long-term maintaining of what we believe
-is going to be the most stable, flexible, and open IP Network Camera Framework for users like yourself.
+```
+uImage.ssc377qe
+rootfs.squashfs.ssc377qe
+openipc.ssc377qe-nor-raptor-<build-id>.tgz
+openipc.ssc377qe-nor-raptor-latest.tgz -> the build above
+```
 
-You can make a financial contribution to the project at [Open Collective][contribution].
+Flash the `.tgz`; see below. `make help` covers the other targets.
 
-Thank you.
+### Where Raptor comes from
 
-<p align="center">
-<a href="https://opencollective.com/openipc/contribute/backer-14335/checkout" target="_blank"><img src="https://opencollective.com/webpack/donate/button@2x.png?color=blue" width="250" alt="Open Collective donate button"></a>
-</p>
+The package fetches four pinned commits from `github.com/johnchia` --
+`raptor`, `raptor-hal`, `raptor-common`, `raptor-ipc` -- so a build needs no
+checkout. There is a fifth pin, `sigmastar-headers`, because GitHub's source
+archives omit submodule contents and `raptor-hal` reaches the MI ABI
+declarations through one. It must be re-read from the gitlink whenever the HAL
+pin moves:
 
-[chat]: https://openipc.org/our-channels
-[contribution]: https://opencollective.com/openipc/contribute/backer-14335/checkout
+```sh
+git -C raptor-hal ls-tree <hal-pin> sigmastar-headers
+```
 
+All five live in `general/package/raptor-streaming/raptor-streaming.mk`, which
+documents the coupling at length. The build directory is named after the
+**raptor** pin alone, so run `make BOARD=<board> br-raptor-streaming-dirclean`
+first whenever any of the other four moves.
 
-[firmware]: https://github.com/openipc/firmware
-[logo]: https://openipc.org/assets/openipc-logo-black.svg
-[mit]: https://opensource.org/license/mit
+## Installing
+
+`sysupgrade` takes the archive the build just produced. It checks the md5 of
+each part and the SoC each was stamped for, then pivots into a ramfs so it is
+not reading from the partition it is about to write:
+
+```sh
+scp -O output/images/openipc.ssc377qe-nor-raptor-latest.tgz root@<board>:/tmp/fw.tgz
+ssh root@<board> 'sysupgrade --archive=/tmp/fw.tgz'
+```
+
+The board reboots itself. `cat /etc/os-release` afterwards says which build
+actually came up -- worth checking, because a kernel whose build id matches the
+running one is skipped with `Same version, nothing to update` and the reboot
+happens anyway. Add `--force_ver` to reflash an identical build.
+
+To write a single partition -- a kernel-only change, or a board that will not
+boot far enough to run `sysupgrade` -- `flashcp` does it directly:
+
+```sh
+scp -O output/images/uImage.ssc377qe          root@<board>:/tmp/uImage
+scp -O output/images/rootfs.squashfs.ssc377qe root@<board>:/tmp/rootfs.sq
+
+ssh root@<board> '/etc/init.d/S95raptor stop'
+ssh root@<board> 'flashcp /tmp/uImage /dev/mtd2'      # kernel
+ssh root@<board> 'flashcp /tmp/rootfs.sq /dev/mtd3'   # rootfs
+
+# verify against the exact byte count -- reading further returns 0xff padding
+ssh root@<board> 'head -c <bytes> /dev/mtd2 | md5sum'
+ssh root@<board> 'head -c <bytes> /dev/mtd3 | md5sum'
+ssh root@<board> reboot
+```
+
+Use `head -c`, never `dd bs=<size> count=1`: `dd` takes one short read from an
+mtd character device and hashes a partial block.
+
+## Configuring a running camera
+
+`rcd` owns `/etc/raptor.conf`. Three clients reach it, and none of them writes
+the file themselves:
+
+- **Web console** -- `http://<camera>:8080/`, the page above. It is rendered
+  from `rcd`'s own schema, so the form comes from the camera rather than a
+  second copy of the key table.
+- **`raptorctl`** on the camera: `raptorctl config get|set|apply|pending`.
+- **MQTT**, through `rmq`.
+
+A `set` never restarts anything. Keys a running daemon can take live are
+applied immediately; the rest are written and their owner recorded as running
+behind, and `apply` is the explicit step that enacts the difference.
+
+### Authentication
+
+Two credentials, deliberately separate:
+
+- **The system account** (`/etc/shadow`) authenticates the configuration API,
+  `POST /api/v1/rcd`, and nothing else authenticates it. That route can rewrite
+  the network stanza and restart the pipeline, so it takes the one secret on
+  the camera that is not also handed out to watch video.
+- **`[rtsp]` and `[http]` username/password** are the media credential --
+  RTSP Digest and HTTP Basic for snapshots and MJPEG. `rcd` writes both
+  sections from one value so a camera has one viewing account rather than two
+  that drift. This credential does **not** open the configuration API.
+
+Both are unset in a fresh image, which means media is served without
+authentication until you set it, and the configuration API is protected by
+whatever the root password is. **Change the root password.** The stock image
+ships the hash published in OpenIPC's repository.
+
+## Licence and credit
+
+This build tree is MIT, inherited from upstream OpenIPC. **Raptor itself is
+GPL-3.0** -- all four of its repositories are -- so an image built here mixes
+the two, and the Raptor daemons carry GPLv3 obligations that the rest of the
+tree does not.
+
+OpenIPC is the reason any of this boots at all: kernel, bootloader, vendor
+packaging, and the Buildroot tree are theirs. See the [project][project], the
+[website][website] and the [wiki][wiki], and consider supporting them at
+[Open Collective][opencollective].
+
 [opencollective]: https://opencollective.com/openipc
-[paypal]: https://www.paypal.com/donate/?hosted_button_id=C6F7UJLA58MBS
 [project]: https://github.com/openipc
-[telegram]: https://openipc.org/our-channels
+[raptor]: https://github.com/gtxaspec/raptor
+[upstream]: https://github.com/OpenIPC/firmware
 [website]: https://openipc.org
 [wiki]: https://github.com/openipc/wiki
