@@ -53,6 +53,11 @@ ALL_BOARDS = [
     "ssc378de_lite", "ssc378qe_lite",
     # Sigmastar [I6E]
     "ssc30kd_lite", "ssc30kq_lite", "ssc338q_lite",
+    # Raptor: this fork's own boards, Raptor in place of Majestic. They are the
+    # reason general/package/raptor-streaming and its five dependencies are
+    # built by anything at all -- left out, the package checks below report each
+    # of them as reaching no board.
+    "ssc377qe_raptor", "ssc30kq_raptor",
     # Ingenic
     "t10_lite", "t20_lite", "t21_lite", "t30_lite", "t23_lite", "t31_lite", "t40_lite",
     # Hisilicon [HI3516AV100]
@@ -157,6 +162,7 @@ SMOKE_BOARDS = [
     "nt98566_lite",           # Novatek
     "fh8852v200_lite",        # Fullhan
     "v851s_lite",             # Allwinner
+    "ssc377qe_raptor",        # the raptor variant, and the only Raptor image
     "xm530_lite",             # Xiongmai
 ]
 
@@ -185,7 +191,7 @@ NOT_BUILT = {
     "faceter-detector", "fdk-aac-openipc", "ffmpeg-openipc", "gdbserver-lite",
     "go2rtc", "herald", "hisi-gpio", "hisilicon-osdrv-hi3536dv100", "i2c-telemetry",
     "libhv-openipc", "libre-openipc", "libsrt-openipc", "linux-patcher", "matter",
-    "mavfwd", "mdnsd-openipc", "mini", "mqtt-bot", "msposd", "n3n-openipc", "nabto",
+    "mavfwd", "mini", "mqtt-bot", "msposd", "n3n-openipc", "nabto",
     "netblink", "node-exporter", "ntfy", "onvif-simple-server", "openipc-nfs-root",
     "osd-openipc", "rtl8188eus-openipc", "rtl8192eu-openipc", "rtl8811cu-openipc",
     "rtl8812au", "rtl8812au-openipc", "rtl88x2eu-openipc", "rtw-hostapd", "rubyfpv",
@@ -645,10 +651,27 @@ def self_test():
         # through a Config.in select; either one missing zeroes them out.
         (["general/package/uclibc-compat/src/uclibc-compat-static.c"],
          3, "reached via .mk _DEPENDENCIES"),
+        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 34,
+        # and the extra ten are two separate things:
+        #
+        #   - the two raptor boards, which are SigmaStar and belong here;
+        #   - eight HiSilicon and Goke *ultimate* boards, which do not.
+        #
+        # The eight arrive through divinus. general/package/divinus/divinus.mk
+        # adds `DIVINUS_DEPENDENCIES += sigmastar-osdrv-infinity6e compy` inside
+        # a conditional on $(OPENIPC_SOC_MODEL)-$(OPENIPC_VARIANT), and the
+        # dependency reader here only records a guard when it is a BR2_ symbol.
+        # An unrecognised guard reads as no guard, so every board that builds
+        # divinus looks like it depends on a SigmaStar sensor package.
+        #
+        # That is this file's stated failure direction -- unknown widens, so the
+        # cost is runner time and never coverage -- which is why the number is
+        # recorded rather than the guard taught. Narrowing it means giving those
+        # two lines a BR2_ symbol to hang on, in divinus.mk.
         (["general/package/sigmastar-osdrv-sensors/Config.in"],
-         24, "reached via Config.in select"),
+         34, "reached via Config.in select"),
         # Shared packages narrow too, just barely.
-        (["general/package/majestic/majestic.mk"], 86, "majestic is nearly everywhere"),
+        (["general/package/majestic/majestic.mk"], 87, "majestic is nearly everywhere"),
         # Board configs and kernel configs.
         (["br-ext-chip-goke/configs/gk7205v200_lite_defconfig"], 1, "one defconfig"),
         (["br-ext-chip-hisilicon/board/hi3516ev200/hi3516ev300.generic.config"],
@@ -710,7 +733,7 @@ def self_test():
         (["LICENSES/vendor.txt"], full, "LICENSES/ is not the licence file"),
         (["READMEgenerator.c"], full, "README prefix is not a readme"),
         (["general/package/majestic/README.md"],
-         86, "markdown inside a package is that package"),
+         87, "markdown inside a package is that package"),
         (["br-ext-chip-hisilicon/board/hi3516ev200/NOTES.md"],
          8, "markdown inside a board dir is that family"),
         (["general/scripts/pr_compliance_checklist.yaml"],
