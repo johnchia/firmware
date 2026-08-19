@@ -40,7 +40,7 @@
 # All four move together in practice -- a HAL change usually needs the daemon
 # change that calls it -- so bump them as a set and rebuild before trusting the
 # result. There is no test that a mixed set links.
-RAPTOR_STREAMING_VERSION = 40b66df4bfe0c426feb6ab82ae3d24b037712a08
+RAPTOR_STREAMING_VERSION = 8dbac301c242da27e46a9967b2879f1074c96dba
 RAPTOR_STREAMING_HAL_VERSION = 6af3081c964efb6d5282c5568d2bdca78eb5de92
 RAPTOR_STREAMING_COMMON_VERSION = c32a43ecd780973ea9c8e5d803729cf14ba1a23b
 RAPTOR_STREAMING_IPC_VERSION = 32438648cc03e3c731bb84c7b46f6c51a9e9604e
@@ -302,10 +302,13 @@ define RAPTOR_STREAMING_INSTALL_TARGET_CMDS
 	$(INSTALL) -m 644 $(RAPTOR_STREAMING_CONFIG_FILE) $(TARGET_DIR)/etc/raptor.conf
 	$(INSTALL) -m 755 $(@D)/raptor/config/S31raptor \
 		$(TARGET_DIR)/etc/init.d/S95raptor
-	# rhd serves the console at / from this file, and 404s without it. It is
-	# the whole web UI: one page that renders itself from rcd's schema.
+	# rhd serves whatever is at /usr/share/raptor/index.html and 404s without
+	# it, so the console is installed *as* that file while living beside
+	# upstream's demo page rather than replacing it. Keeping console.html a
+	# file upstream does not have is what stops 1600 lines of web UI turning
+	# every upstream edit to index.html into a merge conflict.
 	$(INSTALL) -m 755 -d $(TARGET_DIR)/usr/share/raptor
-	$(INSTALL) -m 644 $(@D)/raptor/rhd/index.html \
+	$(INSTALL) -m 644 $(@D)/raptor/rhd/console.html \
 		$(TARGET_DIR)/usr/share/raptor/index.html
 	# rod's default OSD font path is /usr/share/fonts/default.ttf; point it at the
 	# UbuntuMono the majestic-fonts dependency already ships rather than shipping a
