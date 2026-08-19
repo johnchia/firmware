@@ -70,8 +70,12 @@ RAPTOR_STREAMING_IPC_VERSION = 32438648cc03e3c731bb84c7b46f6c51a9e9604e
 RAPTOR_STREAMING_HEADERS_VERSION = e7dbbf274405f5bb6dee422f2c1a36699675fa79
 
 RAPTOR_STREAMING_SITE = $(call github,johnchia,raptor,$(RAPTOR_STREAMING_VERSION))
-RAPTOR_STREAMING_LICENSE = MIT
-RAPTOR_STREAMING_LICENSE_FILES = raptor/LICENSE
+# All four repos are GPL-3.0, and each ships its own copy. Declaring MIT here
+# put the wrong licence on the largest component of the image in legal-info,
+# while pointing LICENSE_FILES at a GPLv3 file.
+RAPTOR_STREAMING_LICENSE = GPL-3.0
+RAPTOR_STREAMING_LICENSE_FILES = raptor/LICENSE raptor-hal/LICENSE \
+	raptor-common/LICENSE raptor-ipc/LICENSE
 
 # Buildroot fetches one source per package, so the other three come as extra
 # downloads. Each URL is spelled the way Buildroot's own github helper spells
