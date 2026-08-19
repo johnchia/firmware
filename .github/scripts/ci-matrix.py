@@ -136,7 +136,10 @@ NO_BUILD_SCRIPTS = {
 # ALL_BOARDS, and a smoke set would build the 13 boards that were already there
 # and never the new one. It widens like anything else this file has not
 # classified.
-SMOKE_WORKFLOWS = {"build.yml"}
+# raptor-nightly.yml is this fork's own build workflow and sits here for the
+# same reason build.yml does: it decides how a build runs, so what needs proving
+# is that the steps still work, not that every image comes out the same.
+SMOKE_WORKFLOWS = {"build.yml", "raptor-nightly.yml"}
 SMOKE_SCRIPTS = {"check_target_modules.sh"}
 
 # One board per way the build can differ: every architecture, every toolchain

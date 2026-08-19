@@ -1,0 +1,237 @@
+# Nightly images for this fork's two Raptor boards.
+#
+# WHY THIS IS NOT build.yml
+#
+# Upstream's build.yml gates preflight and select on
+# `github.repository == 'OpenIPC/firmware'`, so its schedule deliberately does
+# nothing here -- a clone must not spend its owner's Actions minutes on a
+# ~96-board matrix unattended. That guard is right and is left alone. This
+# workflow is the fork's own nightly, for the two boards the fork adds, and it
+# carries the same guard pointed at this repository.
+#
+# Keeping it in a separate file also keeps the merge surface at zero. Upstream
+# revises its CI constantly; every conflict avoided here is one that would
+# otherwise have to be resolved on a file whose logic is theirs.
+#
+# WHY A SCHEDULE AND NOT A PUSH TRIGGER
+#
+# Raptor is four SHA pins, not a moving ref, so an image is a pure function of
+# this repository's HEAD. Building on every push would republish identical
+# bytes for a README edit. Building nightly *if anything changed* -- a pin bump
+# or any other commit -- publishes exactly when the image would differ, and
+# publishes nothing on a quiet week. The comparison is against what the last
+# nightly recorded in its own release notes, which is upstream's idea in
+# build.yml's preflight; the pin list is compared as well so a bump is visible
+# in the log rather than inferred from a sha.
+name: raptor-nightly
+
+on:
+  schedule:
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Build and publish even if nothing changed'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: raptor-nightly
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: raptor-nightly
+
+jobs:
+  gate:
+    name: Gate
+    if: >-
+      github.repository == 'johnchia/firmware' ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.decide.outputs.should_build }}
+      build_id:     ${{ steps.decide.outputs.build_id }}
+      head_sha:     ${{ steps.decide.outputs.head_sha }}
+      pins:         ${{ steps.decide.outputs.pins }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: decide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -eu
+          HEAD=$(git rev-parse HEAD)
+          SHORT=$(git rev-parse --short HEAD)
+          BUILD_ID="nightly-$(date -u +%Y%m%d)-${SHORT}"
+
+          # The four Raptor pins plus the headers pin, as one line. Read from
+          # the package rather than kept in step with it by hand.
+          MK=general/package/raptor-streaming/raptor-streaming.mk
+          PINS=$(sed -n 's/^RAPTOR_STREAMING\(_[A-Z]*\)\?_VERSION = \(.*\)$/\2/p' "$MK" \
+                 | cut -c1-7 | paste -sd, -)
+
+          NOTES=$(gh release view "$RELEASE_TAG" --json body -q .body 2>/dev/null || true)
+          PREV_SHA=$(printf '%s\n' "$NOTES" | sed -n 's/^sha=//p'  | head -1)
+          PREV_PINS=$(printf '%s\n' "$NOTES" | sed -n 's/^pins=//p' | head -1)
+
+          if [ "$FORCE" = "true" ]; then
+            echo "Build: forced by dispatch"
+            BUILD=true
+          elif [ "$PREV_SHA" != "$HEAD" ]; then
+            echo "Build: HEAD moved ($PREV_SHA -> $HEAD)"
+            BUILD=true
+          elif [ "$PREV_PINS" != "$PINS" ]; then
+            # Cannot normally happen without HEAD moving, since the pins live in
+            # this repository. Checked anyway: if it ever fires, something
+            # rewrote history under the release and the image really is stale.
+            echo "Build: pins moved ($PREV_PINS -> $PINS)"
+            BUILD=true
+          else
+            echo "Skip: HEAD $HEAD already published, pins unchanged ($PINS)"
+            BUILD=false
+          fi
+
+          {
+            echo "should_build=$BUILD"
+            echo "build_id=$BUILD_ID"
+            echo "head_sha=$HEAD"
+            echo "pins=$PINS"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.board }}
+    needs: gate
+    if: needs.gate.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [ssc377qe_raptor, ssc30kq_raptor]
+    env:
+      BUILD_ID:  ${{ needs.gate.outputs.build_id }}
+      BUILD_SHA: ${{ needs.gate.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare
+        run: echo "CACHE_DATE=$(date +%m)" >> "$GITHUB_ENV"
+
+      - name: ccache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ccache
+          key: raptor-${{ matrix.board }}-${{ env.CACHE_DATE }}
+
+      # The Raptor tarballs are named by commit sha, so unlike upstream's
+      # moving-ref packages they are content-addressed and a stale cache cannot
+      # feed the build an old revision. No purge step is needed here.
+      - name: dl cache
+        uses: actions/cache@v4
+        with:
+          path: output/dl
+          key: raptor-dl-${{ env.CACHE_DATE }}
+          restore-keys: raptor-dl-
+
+      - name: Build
+        run: |
+          set -eu
+          mkdir -p /tmp/ccache
+          ln -sfn /tmp/ccache "$HOME/.ccache"
+          make BOARD=${{ matrix.board }} all
+
+      # The bootloader is built by the defconfig (BR2_PACKAGE_SIGMASTAR_UBOOT),
+      # so this only assembles what is already in images/. It is worth carrying:
+      # a .tgz is a sysupgrade of a camera that already runs this firmware,
+      # while the .bin is the only artefact that can put it on a camera that
+      # does not -- and the bootloader is what picks the 8192k rootfs layout
+      # these boards need, so the stock one cannot serve their rootfs at all.
+      #
+      # The flash descriptor at 0x9000 is the placeholder every from-source
+      # build writes, the same one OpenIPC's own published u-boot carries. To
+      # keep a specific unit's proven bytes, pass SNI_REF=<dump of its mtd0> to
+      # `make fullimage` locally instead.
+      - name: Full NOR image
+        run: make BOARD=${{ matrix.board }} fullimage
+
+      - name: Checksums
+        run: |
+          cd output/images
+          for f in openipc-*-nor-full.bin; do
+            [ -e "$f" ] || continue
+            md5sum "$f" > "$f.md5sum"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: raptor-${{ matrix.board }}
+          if-no-files-found: error
+          retention-days: 2
+          path: |
+            output/images/openipc.*.tgz
+            output/images/openipc-*-nor-full.bin
+            output/images/openipc-*-nor-full.bin.md5sum
+
+  publish:
+    name: Publish
+    needs: [gate, build]
+    # Publish whatever built. One board failing must not deny the other its
+    # image, which is upstream's rule in build.yml for the same reason.
+    if: always() && needs.gate.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - id: download
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          path: dist
+          merge-multiple: true
+
+      - id: collect
+        run: |
+          set -eu
+          count=$(find dist -type f 2>/dev/null | wc -l | tr -d '[:space:]')
+          echo "Collected ${count} asset(s):"
+          ls -la dist 2>/dev/null || true
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+          # A matrix that went green must have produced artifacts; zero after
+          # that is a failed download, not an empty build.
+          if [ "${{ needs.build.result }}" = "success" ] && [ "$count" -eq 0 ]; then
+            echo "::error::no assets although every board built"
+            exit 1
+          fi
+
+      - name: Publish
+        if: steps.collect.outputs.count != '0'
+        env:
+          GH_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO:   ${{ github.repository }}
+          BUILD_ID:  ${{ needs.gate.outputs.build_id }}
+          HEAD_SHA:  ${{ needs.gate.outputs.head_sha }}
+          PINS:      ${{ needs.gate.outputs.pins }}
+        run: |
+          set -euo pipefail
+          NOTES=$(printf '%s\n' \
+            "Raptor nightly \`${BUILD_ID}\`" \
+            "" \
+            "\`.tgz\` upgrades a camera already running this firmware:" \
+            "\`sysupgrade --archive=<file>\`. \`-nor-full.bin\` is a whole-flash" \
+            "image including the bootloader, for a camera that is not." \
+            "" \
+            "sha=${HEAD_SHA}" \
+            "pins=${PINS}")
+
+          # The tag is rolling: the same release is rewritten each time, so a
+          # download URL for "the current nightly" stays valid. --clobber
+          # replaces an asset of the same name rather than failing on it.
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --title "Raptor nightly ${BUILD_ID}" --notes "$NOTES"
+          else
+            gh release create "$RELEASE_TAG" --title "Raptor nightly ${BUILD_ID}" \
+              --notes "$NOTES" --prerelease
+          fi
+          find dist -type f -print0 | xargs -0 gh release upload "$RELEASE_TAG" --clobber

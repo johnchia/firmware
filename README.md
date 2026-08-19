@@ -82,7 +82,23 @@ openipc.ssc377qe-nor-raptor-<build-id>.tgz
 openipc.ssc377qe-nor-raptor-latest.tgz -> the build above
 ```
 
-Flash the `.tgz`; see below. `make help` covers the other targets.
+`make BOARD=ssc377qe_raptor fullimage` then assembles the whole-flash
+`openipc-ssc377qe-nor-full.bin` from those pieces plus the bootloader the
+build already produced. See Installing for which of the two you want.
+`make help` covers the other targets.
+
+### Nightlies
+
+`.github/workflows/raptor-nightly.yml` builds both boards and publishes both
+artefacts to the rolling `raptor-nightly` release. It runs on a schedule but
+only builds when the image would actually differ: Raptor is four commit pins
+rather than a moving branch, so an image is a function of this repository's
+HEAD, and the gate compares HEAD and the pin list against what the previous
+nightly recorded in its own release notes. A quiet week publishes nothing.
+
+Upstream's `build.yml` is untouched, and its schedule still does nothing here
+-- it is gated on the canonical repository on purpose, so a clone cannot spend
+its owner's Actions minutes on a 96-board matrix unattended.
 
 ### Where Raptor comes from
 
@@ -103,6 +119,16 @@ documents the coupling at length. The build directory is named after the
 first whenever any of the other four moves.
 
 ## Installing
+
+Two artefacts, and which you need depends on what the camera runs now:
+
+| | Use it when |
+|---|---|
+| `openipc.<soc>-nor-raptor-<id>.tgz` | The camera already runs this firmware. `sysupgrade` takes it directly. |
+| `openipc-<soc>-nor-full.bin` | It does not. A whole-flash image, bootloader included -- and the bootloader is what selects the 8192k rootfs layout these boards need, so a camera on the stock one cannot serve this rootfs at all. |
+
+Both come out of a local build, and both are published by the nightly on the
+rolling `raptor-nightly` release.
 
 `sysupgrade` takes the archive the build just produced. It checks the md5 of
 each part and the SoC each was stamped for, then pivots into a ramfs so it is
