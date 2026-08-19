@@ -1,0 +1,60 @@
+From: John Chia <john@johnchia.com>
+Subject: [PATCH] build: name the version without a git checkout
+
+The MVXV version string carries a short commit hash, and it is what `ver`
+prints on the board -- the only way to tell one bootloader build from
+another once it is in flash. It was read straight from `git rev-parse`,
+which fails when the tree did not come from a clone.
+
+Buildroot unpacks a release tarball, so there is no .git to read: git
+prints nothing, ms_gen_mvxv_h.py dies on the missing argument, and the
+build stops at the version header for want of a version.
+
+  fatal: not a git repository: '.'
+  ms_gen_mvxv_h.py: error: argument --changelist: expected one argument
+
+UBOOT_CHANGELIST lets a build that already knows its own revision -- the
+package pins it by commit -- pass it in, and still falls back to git for
+a developer checkout.
+
+Keep it to 8 characters: ms_gen_mvxv_h.py pads shorter values to a fixed
+field, and a longer one shifts everything after it.
+
+Carried here rather than in the pinned branch so that the pin stays
+commit-identical to openipc/u-boot-sigmastar master.
+
+Signed-off-by: John Chia <john@johnchia.com>
+diff --git a/Makefile b/Makefile
+index 82754b8..9110269 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1175,13 +1175,28 @@ define filechk_uboot.release
+ 	echo "$(UBOOTVERSION)$$($(CONFIG_SHELL) $(srctree)/scripts/setlocalversion $(srctree))"
+ endef
+ 
++# The changelist is the short commit hash that ends up inside the MVXV version
++# string, which is what `ver` prints on the board -- the only way to tell one
++# bootloader build from another once it is in flash.
++#
++# It used to be read straight from `git rev-parse`, which fails when the tree
++# did not come from a clone. A build system that unpacks a release tarball --
++# Buildroot's sigmastar-uboot package does exactly that -- has no .git, git
++# prints nothing, and ms_gen_mvxv_h.py then dies on a missing argument, so the
++# build stops at the version header for want of a version. Setting
++# UBOOT_CHANGELIST lets such a build pass the identity it already knows.
++#
++# Keep it to 8 characters: the script pads shorter values with '#' to a fixed
++# field, and a longer one shifts everything after it in a fixed-width string.
++UBOOT_CHANGELIST ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
++
+ # Store (new) UBOOTRELEASE string in include/config/uboot.release
+ include/config/uboot.release: include/config/auto.conf FORCE
+ 	@echo '  GCC version: $(shell $(CC) -dumpversion)'
+ 	@echo '  MVXV'
+ 	@echo chip_id $(MS_PLATFORM_ID)
+ 	@python3 ms_gen_mvxv_h.py include/ms_version.h --comp_id CM_UBT1501 \
+-		--changelist $$(git rev-parse --short HEAD) --chip_id $(MS_PLATFORM_ID)
++		--changelist $(UBOOT_CHANGELIST) --chip_id $(MS_PLATFORM_ID)
+ 	$(call filechk,uboot.release)
+ 
+ # Things we need to do before we recursively start building the kernel

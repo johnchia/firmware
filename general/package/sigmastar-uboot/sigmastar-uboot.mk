@@ -16,32 +16,41 @@
 # and .github/workflows/uboot.yml builds that artefact by cloning
 # openipc/u-boot-sigmastar. A fork can therefore never appear in either.
 #
-# WHAT THE FORK CARRIES
+# WHAT THE PIN CARRIES
 #
-# The rootfs partition size, which is decided here and nowhere else:
-# common/cmd_sf.c picks 5120k or 8192k from the squashfs it finds, and both
-# raptor boards want the larger layout. See BR2_OPENIPC_ROOTFS_PART_KB in
-# ssc30kq_raptor_defconfig.
+# Nothing of our own: the pin is johnchia/u-boot-sigmastar master, which is
+# commit-identical to openipc/u-boot-sigmastar master. The package exists for
+# the packaging reason above -- to get a locally built boot container into
+# `make fullimage` -- not to change the bootloader.
 #
-# It used to carry a second thing: ethaddr derived from the SPI NOR part's
-# factory 64-bit unique ID, because the Infinity6C die-ID registers read zero
-# and every board built from one image otherwise answered to OpenIPC's shared
-# fallback 00:00:23:34:45:66. The rootfs now does that itself, from
-# /proc/flash_uid, folding the same eight bytes the same way, so a board does
-# not change address when the derivation moves -- verified on SSC377QE, where
-# both sources read 114a3f3b09914824 and both derive 02:2a:43:ae:48:25. Doing
-# it in one place is the point; see ethaddr_provision in
-# general/overlay/etc/init.d/rcS. Removed in u-boot-sigmastar 2136e33, which
-# also drops the uidraw and uidstat variables the bootloader used to publish.
+# It briefly carried two things, and both are gone:
 #
-# Worth knowing before anyone reinstates it: the bootloader read needed
-# CONFIG_MS_NOR_ONEBIN, and that symbol does not add a driver -- it replaces
-# spi_flash_probe with an implementation that drives the FSP/QSPI block
-# directly, which fails on Infinity6E. A 6E board flashed with it reaches the
-# console and never finds its kernel. That is why the 6E half of the port was
-# reverted (b686d0d), and why userspace is the better home for this.
+#   - ethaddr derived from the SPI NOR part's factory unique ID, because the
+#     Infinity6C die-ID registers read zero. The rootfs does that now, from
+#     /proc/flash_uid, folding the same eight bytes the same way; see
+#     ethaddr_provision in general/overlay/etc/init.d/rcS. Board-verified on
+#     SSC377QE: both sources read 114a3f3b09914824 and both derive
+#     02:2a:43:ae:48:25, so nothing changed address when the derivation moved.
+#     The work is parked on the branch feat/ethaddr-from-flash-uid rather than
+#     deleted.
+#
+#   - CONFIG_ENV_OVERWRITE, which flips ethaddr's env flags from "mo" (MAC,
+#     write-once) to "ma". It went with the branch. If a userspace fw_setenv of
+#     ethaddr is ever refused with "Can't overwrite", that is what to reinstate.
+#
+# NOT a reason to fork: the rootfs partition size. common/cmd_sf.c reads the
+# squashfs it finds and sets rootmtd to 5120k or 8192k, and sstar-common.h puts
+# ${rootmtd} in the bootargs -- both upstream, unmodified. An earlier revision
+# of this comment claimed the 8192k layout needed this package. It does not; a
+# stock OpenIPC bootloader selects it too.
+#
+# One patch is carried, and it is packaging rather than bootloader: upstream's
+# Makefile reads the version string's commit hash from `git rev-parse`, which
+# has nothing to read in an unpacked tarball, and the build dies at the version
+# header. See the patch beside this file. It is here rather than in the pinned
+# branch precisely so the pin stays commit-identical to upstream.
 
-SIGMASTAR_UBOOT_VERSION = 2136e33b2506e7d1612ce9681a1d4978fd625259
+SIGMASTAR_UBOOT_VERSION = bf77aff5d44f34d14b89b3f4014aa8dda9834794
 SIGMASTAR_UBOOT_SITE = $(call github,johnchia,u-boot-sigmastar,$(SIGMASTAR_UBOOT_VERSION))
 SIGMASTAR_UBOOT_LICENSE = GPL-2.0+
 SIGMASTAR_UBOOT_LICENSE_FILES = Licenses/gpl-2.0.txt

@@ -125,7 +125,7 @@ Two artefacts, and which you need depends on what the camera runs now:
 | | Use it when |
 |---|---|
 | `openipc.<soc>-nor-raptor-<id>.tgz` | The camera already runs this firmware. `sysupgrade` takes it directly. |
-| `openipc-<soc>-nor-full.bin` | It does not. A whole-flash image, bootloader included -- and the bootloader is what selects the 8192k rootfs layout these boards need, so a camera on the stock one cannot serve this rootfs at all. |
+| `openipc-<soc>-nor-full.bin` | It runs the factory firmware, or the flash is in an unknown state. A whole-flash image, bootloader included, written with a programmer or from U-Boot. |
 
 Both come out of a local build, and both are published by the nightly on the
 rolling `raptor-nightly` release.

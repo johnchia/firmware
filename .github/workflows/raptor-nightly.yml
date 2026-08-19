@@ -146,10 +146,9 @@ jobs:
 
       # The bootloader is built by the defconfig (BR2_PACKAGE_SIGMASTAR_UBOOT),
       # so this only assembles what is already in images/. It is worth carrying:
-      # a .tgz is a sysupgrade of a camera that already runs this firmware,
-      # while the .bin is the only artefact that can put it on a camera that
-      # does not -- and the bootloader is what picks the 8192k rootfs layout
-      # these boards need, so the stock one cannot serve their rootfs at all.
+      # a .tgz is a sysupgrade of a camera that already runs OpenIPC, while the
+      # .bin is a whole-flash image for one that runs the factory firmware, or
+      # whose flash is in an unknown state.
       #
       # The flash descriptor at 0x9000 is the placeholder every from-source
       # build writes, the same one OpenIPC's own published u-boot carries. To
@@ -218,9 +217,9 @@ jobs:
           NOTES=$(printf '%s\n' \
             "Raptor nightly \`${BUILD_ID}\`" \
             "" \
-            "\`.tgz\` upgrades a camera already running this firmware:" \
+            "\`.tgz\` upgrades a camera already running OpenIPC:" \
             "\`sysupgrade --archive=<file>\`. \`-nor-full.bin\` is a whole-flash" \
-            "image including the bootloader, for a camera that is not." \
+            "image including the bootloader, for one that is not." \
             "" \
             "sha=${HEAD_SHA}" \
             "pins=${PINS}")
