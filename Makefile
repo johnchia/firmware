@@ -12,44 +12,11 @@ ifneq ($(strip $(DIVINUS_SRCDIR)),)
 BR_MAKE += DIVINUS_OVERRIDE_SRCDIR=$(abspath $(DIVINUS_SRCDIR))
 endif
 
-# Build Raptor from a checkout instead of the four commits pinned in
-# general/package/raptor-streaming. RAPTOR_SRCDIR is the *parent* directory
-# holding raptor, raptor-hal, raptor-common, raptor-ipc and compy, because
-# raptor's Makefile reaches its siblings through relative paths.
-# The package is raptor-streaming because Buildroot already has a `raptor`
-# (raptor2, the RDF library); the knob here keeps the short name.
-ifneq ($(strip $(RAPTOR_SRCDIR)),)
-BR_MAKE += RAPTOR_STREAMING_OVERRIDE_SRCDIR=$(abspath $(RAPTOR_SRCDIR))
-endif
-
 # Build the bootloader from a checkout instead of the commit pinned in
 # general/package/sigmastar-uboot. The pin is a fork, so testing a change there
 # otherwise means pushing it first.
 ifneq ($(strip $(UBOOT_SRCDIR)),)
 BR_MAKE += SIGMASTAR_UBOOT_OVERRIDE_SRCDIR=$(abspath $(UBOOT_SRCDIR))
-endif
-
-# An overridden source tree is invisible to Buildroot's staleness tracking. The
-# package's .stamp_built has no prerequisite anywhere inside RAPTOR_SRCDIR, so a
-# plain image build after editing the daemons re-uses whatever binaries the
-# previous build left behind -- and the image still gets a current-looking
-# /etc/openipc-build-id, because that id describes *this* repository and the
-# raptor checkout is not part of it. Observed on 2026-07-26: an image built to
-# carry an audio fix, whose rad was the build from before the fix, reported as
-# a successful build of the current tree.
-#
-# Dropping the package's build stamps before the image build costs one relink
-# and makes the image mean what its build id says. It is a separate make
-# invocation rather than Buildroot's <pkg>-rebuild for the reason documented at
-# raptor-local below: on GNU make 4.3 that rule's .WAIT is ignored and it can
-# evaluate the build before the stamps are gone.
-#
-# (A DIVINUS_SRCDIR build has the identical exposure and is left alone here.)
-ifneq ($(strip $(RAPTOR_SRCDIR)),)
-RAPTOR_RESYNC = $(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
-	RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" br-raptor-streaming-clean-for-rebuild
-else
-RAPTOR_RESYNC = true
 endif
 
 CONFIG = $(error variable BOARD not defined)
@@ -74,7 +41,6 @@ endif
 all: repack-final timer
 
 build: defconfig
-	@$(RAPTOR_RESYNC)
 	@$(BR_MAKE) all -j$(shell nproc)
 
 br-%: defconfig
@@ -107,10 +73,13 @@ divinus-pinned:
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) br-divinus-dirclean
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) br-divinus
 
-.PHONY: raptor-local
+.PHONY: uboot-local
 
-# Re-sync the local checkout and rebuild just Raptor, leaving the rest of the
-# image alone. Use this to iterate on the daemons without a full image build.
+# An overridden source tree has no prerequisite Buildroot can see, so a plain
+# build after editing U-Boot re-installs the container from the previous one. On
+# mtd0 that is worse than elsewhere -- the flash succeeds, the board boots the
+# old bootloader, and the change appears not to work. Hence the explicit
+# clean-for-rebuild first.
 #
 # Two sequential invocations rather than Buildroot's <pkg>-rebuild, which does
 # not work here and fails *silently*. Buildroot 2024.02 defines it as
@@ -125,22 +94,6 @@ divinus-pinned:
 # question entirely.
 #
 # (divinus-local above uses br-divinus-rebuild and has the same exposure.)
-raptor-local:
-	@test -n "$(strip $(RAPTOR_SRCDIR))" || { \
-		echo "RAPTOR_SRCDIR is required (parent directory of the raptor repos)"; exit 2; }
-	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
-		RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" \
-		br-raptor-streaming-clean-for-rebuild
-	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
-		RAPTOR_SRCDIR="$(abspath $(RAPTOR_SRCDIR))" br-raptor-streaming
-
-.PHONY: uboot-local
-
-# Same two-step for the bootloader, and for the same reason as above: an
-# overridden source tree has no prerequisite Buildroot can see, so a plain build
-# after editing U-Boot re-installs the container from the previous one. On mtd0
-# that is worse than elsewhere -- the flash succeeds, the board boots the old
-# bootloader, and the change appears not to work.
 uboot-local:
 	@test -n "$(strip $(UBOOT_SRCDIR))" || { \
 		echo "UBOOT_SRCDIR is required (path to a u-boot-sigmastar checkout)"; exit 2; }
@@ -180,9 +133,6 @@ help:
 	@printf "Divinus development:\n \
 	- make BOARD=<board> DIVINUS_SRCDIR=/path/to/divinus divinus-local\n \
 	- make BOARD=<board> divinus-pinned\n\n"
-	@printf "Raptor development (RAPTOR_SRCDIR is the parent of the raptor repos):\n \
-	- make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor\n \
-	- make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor raptor-local\n\n"
 	@printf "Bootloader (sigmastar-uboot; the pin is a fork of openipc/u-boot-sigmastar):\n \
 	- make BOARD=<board> br-sigmastar-uboot - build it alone\n \
 	- make BOARD=<board> UBOOT_SRCDIR=~/u-boot-sigmastar uboot-local\n\n"

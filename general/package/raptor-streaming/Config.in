@@ -10,10 +10,9 @@ config BR2_PACKAGE_RAPTOR_STREAMING
 	  Multi-daemon streaming system: video, RTSP, audio, OSD and
 	  day/night control, talking to the SoC through a pluggable HAL.
 
-	  This package has no download site. Raptor is developed as
-	  sibling repositories and the SigmaStar backend is not upstream
-	  yet, so a local checkout must be supplied:
-
-	    make BOARD=<board> RAPTOR_SRCDIR=/path/to/parent raptor-local
+	  Raptor is developed as four sibling repositories, each pinned
+	  by commit in raptor-streaming.mk, plus the sigmastar-headers
+	  submodule the HAL reaches for the MI declarations. The build
+	  fetches all five, so no checkout is needed.
 
 	  https://github.com/gtxaspec/raptor

@@ -8,8 +8,7 @@
 # Buildroot already ships package/raptor (raptor2, the RDF parsing library), and
 # two packages of the same name is a hard error -- "Package 'raptor' defined a
 # second time". The project calls itself the Raptor Streaming System, hence this
-# name. The user-facing knob stays RAPTOR_SRCDIR; only the Buildroot variable
-# prefix carries the longer name.
+# name.
 #
 # Raptor is developed as four sibling repositories -- raptor (the daemons),
 # raptor-hal (SoC backends), raptor-common (shared library) and raptor-ipc
@@ -28,9 +27,8 @@
 # This used to have no download site at all: the SigmaStar work lived on
 # unpushed branches, so a local checkout was the only valid source and an image
 # could not be rebuilt by anyone who did not have one. The branches are pushed
-# now, so each repository is pinned here and the build fetches them. A checkout
-# stays available as the developer path -- RAPTOR_SRCDIR, exactly as Divinus
-# uses DIVINUS_SRCDIR -- but it is no longer required to build an image.
+# now, so each repository is pinned here and the build fetches them. Pins are
+# the only source; to build a change, push it and move the pin.
 #
 # The pins are on **johnchia**, not gtxaspec: the sigmastar branch exists only on
 # the forks (`git ls-remote --heads origin sigmastar` is empty on all four).
@@ -117,24 +115,7 @@ define RAPTOR_STREAMING_LAYOUT_SIBLINGS
 	$(call RAPTOR_STREAMING_UNPACK,sigmastar-headers,$(RAPTOR_STREAMING_HEADERS_VERSION),$(@D)/raptor-hal/sigmastar-headers)
 endef
 
-# Extract hooks do not run on the override path -- Buildroot replaces download,
-# extract and patch with a single rsync there -- which is correct: a developer
-# checkout already has this layout, that being the layout the project is
-# developed in.
 RAPTOR_STREAMING_POST_EXTRACT_HOOKS += RAPTOR_STREAMING_LAYOUT_SIBLINGS
-
-# The parent directory holds more than the five repositories: ref/ is a ~100 MB
-# documentation mirror and sigmastar-sdk/ a vendor drop, neither of which the
-# build reads. Object files, archives and linked daemons are excluded because a
-# developer checkout is normally full of products from direct make invocations,
-# and Buildroot's source tree must not inherit them.
-RAPTOR_STREAMING_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = \
-	--exclude ref --exclude sigmastar-sdk --exclude compy \
-	--exclude '*.o' --exclude '*.a' --exclude '*.so' \
-	--exclude '.built' \
-	--exclude 'rss_build_info.c' \
-	--exclude 'build' \
-	$(foreach d,$(RAPTOR_STREAMING_DAEMONS) $(RAPTOR_STREAMING_TOOLS),--exclude $(d)/$(d))
 
 # The HAL dlopens the MI libraries rather than linking them, so this is an
 # install-order dependency rather than a link-time one: the vendor bundle and
@@ -205,26 +186,17 @@ RAPTOR_STREAMING_CONFIG_FILE = $(@D)/raptor/config/raptor.conf
 
 # The hash in the daemons' startup banner, which during a soak is how you tell
 # which build is on the board. raptor's own Makefile derives it with
-# `git rev-parse`, and neither source it is given here has a .git to read: an
-# unpacked tarball never had one, and Buildroot's override rsync drops it. So it
-# is passed in -- the pin for a pinned build, the checkout's HEAD for an
-# overridden one, which is the revision each actually built.
-ifneq ($(RAPTOR_STREAMING_OVERRIDE_SRCDIR),)
-RAPTOR_STREAMING_BUILD_HASH = $(shell git -C $(RAPTOR_STREAMING_OVERRIDE_SRCDIR)/raptor \
-	describe --always --dirty=+ --abbrev=7 --match=nothing 2>/dev/null || echo unknown)
-else
+# `git rev-parse`, and an unpacked source archive has no .git to read, so it is
+# passed in from the pin instead.
 RAPTOR_STREAMING_BUILD_HASH = $(shell echo $(RAPTOR_STREAMING_VERSION) | cut -c1-7)
-endif
 
-# $(@D)/raptor is where both paths must have put the source: the extract hook
-# for a pinned build, the rsync for an overridden one. Checking it costs nothing
-# and turns "no such file or directory" deep in a sub-make into a sentence.
-define RAPTOR_STREAMING_CHECK_SRCDIR
+# $(@D)/raptor is where the extract hook must have put the source. Checking it
+# costs nothing and turns "no such file or directory" deep in a sub-make into a
+# sentence.
+define RAPTOR_STREAMING_CHECK_SOURCE
 	test -d $(@D)/raptor || { \
-		echo "*** No Raptor source in $(@D)."; \
-		echo "*** A pinned build unpacks it there; RAPTOR_SRCDIR=/path/to/parent"; \
-		echo "*** overrides that with a checkout holding raptor/, raptor-hal/,"; \
-		echo "*** raptor-common/ and raptor-ipc/ as siblings."; \
+		echo "*** No Raptor source in $(@D) -- the extract hook did not run,"; \
+		echo "*** or the archive layout changed. Try a dirclean."; \
 		exit 1; }
 	test -n "$$(ls -A $(@D)/raptor-hal/sigmastar-headers 2>/dev/null)" || { \
 		echo "*** raptor-hal/sigmastar-headers is missing or empty."; \
@@ -251,14 +223,13 @@ endef
 # in raptor/Makefile, by building each sibling library through a stamp -- which
 # is why this file no longer needs MAKE1 to serialise the build.
 #
-# It is still not safe to drop this, because prerequisites are necessary but not
-# sufficient here. Buildroot's override rsync copies with -a, preserving each
-# file's mtime from the developer's checkout, and updates in place without
-# deleting anything. Check out an older revision of raptor-hal and its sources
-# arrive *older* than the archive the previous build left behind, so make is
-# correct to conclude there is nothing to do -- and the image silently ships HAL
-# code that is not the code in the checkout. mtimes cannot answer "is this the
-# tree I asked for"; deleting the products can.
+# It is kept because it costs one relink and makes "rebuilt" mean rebuilt, and
+# because it is the cheap half of a trap the pins set. $(@D) is named after
+# RAPTOR_STREAMING_VERSION alone, so moving the HAL, common or IPC pin does not
+# change it: the extract hook has already run, its stamp says so, and the build
+# directory keeps the sibling sources the *previous* pins unpacked. Deleting the
+# products cannot fix that -- only `make br-raptor-streaming-dirclean` can, and
+# it is the required first step whenever any pin below the first one moves.
 #
 # The daemon and tool binaries go too, so a library-only change relinks them.
 # The stamps must go with the archives: a stamp that outlives the archive it
@@ -271,7 +242,7 @@ define RAPTOR_STREAMING_CLEAN_PRODUCTS
 endef
 
 define RAPTOR_STREAMING_BUILD_CMDS
-	$(call RAPTOR_STREAMING_CHECK_SRCDIR)
+	$(call RAPTOR_STREAMING_CHECK_SOURCE)
 	$(call RAPTOR_STREAMING_CLEAN_PRODUCTS)
 	$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/raptor \
 		PLATFORM=$(RAPTOR_STREAMING_PLATFORM) \

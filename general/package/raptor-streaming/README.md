@@ -1,45 +1,40 @@
-# ssc30kq Raptor image
+# raptor-streaming
 
-`ssc30kq_raptor` is a Majestic-free, Divinus-free image in which Raptor owns the
-camera. It exists so the SigmaStar Infinity6E backend can be soaked on its own
-platform instead of being hand-staged onto another streamer's rootfs.
+The Buildroot package that builds Raptor and installs it as the streamer.
 
-## Building
+## Where the source comes from
 
-Raptor has no download site. It is developed as sibling repositories and its
-SigmaStar backend is on unpushed branches, so a local checkout is currently the
-only source. `RAPTOR_SRCDIR` is the **parent** directory holding them:
+Raptor is developed as four sibling repositories, and its top-level Makefile
+reaches the others through relative paths, so the tree this package builds is
+the parent directory holding all four:
 
 ```
-~/raptor
+<build dir>
 ├── raptor          # the daemons
-├── raptor-hal      # SoC backends (INFINITY6E lives here)
+├── raptor-hal      # SoC backends (sigmastar-headers is a submodule of this)
 ├── raptor-common   # librss_common.so
 └── raptor-ipc      # librss_ipc.so
 ```
+
+Each is pinned by commit in `raptor-streaming.mk`, along with a fifth pin for
+`sigmastar-headers` — GitHub's source archives omit submodule contents, so the
+headers have to be fetched separately and moved into place. The pins are the
+only source; to build a change, push it and move the pin.
 
 A developer checkout normally has `compy` alongside these too, but this package
 does not use it from there — compy comes from the `compy` Buildroot package, so
 the image never links a `build-arm/libcompy.a` that only exists because someone
 built it by hand.
 
-```sh
-make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor
-```
-
-To iterate on the daemons without rebuilding the image, re-sync and rebuild just
-this package:
-
-```sh
-make BOARD=ssc30kq_raptor RAPTOR_SRCDIR=~/raptor raptor-local
-```
-
-Forgetting `RAPTOR_SRCDIR` fails with an explanation rather than a missing-path
-error.
+> `$(@D)` is named after the **raptor** pin alone. Moving the HAL, common, IPC
+> or headers pin does not change it, and the already-extracted build directory
+> keeps the sibling sources the previous pins unpacked. Run
+> `make BOARD=<board> br-raptor-streaming-dirclean` first whenever any pin other
+> than raptor's moves.
 
 ## What is in the image
 
-Five daemons, started in dependency order by `/etc/init.d/S95raptor`:
+Daemons, started in dependency order by `/etc/init.d/S95raptor`:
 
 | daemon | role |
 | --- | --- |
@@ -48,9 +43,15 @@ Five daemons, started in dependency order by `/etc/init.d/S95raptor`:
 | `rad` | audio |
 | `rod` | OSD text rendering |
 | `ric` | IR-cut day/night; exits immediately while `[ircut] enabled = false` |
+| `rhd` | HTTP: snapshots, MJPEG, audio, and the configuration console |
+| `rcd` | owns `/etc/raptor.conf`; the other daemons are its clients |
+| `rmq` | MQTT bridge with Home Assistant discovery |
 
 plus `raptorctl` for runtime control, `librss_common.so`, `librss_ipc.so`, and
 `/etc/raptor.conf` (the board file from the Raptor tree, comments included).
+
+The console page is installed from `raptor/rhd/console.html` to
+`/usr/share/raptor/index.html`, which is the path `rhd` reads at runtime.
 
 The vendor MI libraries are **not** installed by this package. The OSDRV package
 installs its full bundle whenever Majestic is not selected, which is the case
@@ -78,7 +79,7 @@ logread | grep -E 'rvd|rsd|rad|rod'   # the daemons log to syslog
 rvd -f -d -c /etc/raptor.conf
 ```
 
-- `rtsp://CAMERA_IP:554/stream0` — 2560x1440 H.264 at 30 fps, overlays on
-- `rtsp://CAMERA_IP:554/stream1` — 640x360 at 5 fps, overlays deliberately
+- `rtsp://CAMERA_IP:554/stream0` — the main stream, overlays on
+- `rtsp://CAMERA_IP:554/stream1` — the sub stream, overlays deliberately
   **off**, so that a region appearing on one stream and not the other confirms
   per-port attach
