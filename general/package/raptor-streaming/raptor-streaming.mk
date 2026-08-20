@@ -39,7 +39,7 @@
 # change that calls it -- so bump them as a set and rebuild before trusting the
 # result. There is no test that a mixed set links.
 RAPTOR_STREAMING_VERSION = 4f6455d848d321801bbaa6df8d7388145fbd4872
-RAPTOR_STREAMING_HAL_VERSION = 4f2d9d995a51feeb80acae6ad11732609cf01d0c
+RAPTOR_STREAMING_HAL_VERSION = 709ddeb32fd51f8919006f9c07e179c720c652bb
 RAPTOR_STREAMING_COMMON_VERSION = c32a43ecd780973ea9c8e5d803729cf14ba1a23b
 RAPTOR_STREAMING_IPC_VERSION = 32438648cc03e3c731bb84c7b46f6c51a9e9604e
 
@@ -65,7 +65,7 @@ RAPTOR_STREAMING_IPC_VERSION = 32438648cc03e3c731bb84c7b46f6c51a9e9604e
 # fetched: mk/sigmastar.mk overrides SDK_INCLUDE, and the -I for the Ingenic tree
 # is inside `ifneq ($(VENDOR),sigmastar)`, so nothing on these boards reads it.
 # An Ingenic raptor target here would need it added the same way.
-RAPTOR_STREAMING_HEADERS_VERSION = e7dbbf274405f5bb6dee422f2c1a36699675fa79
+RAPTOR_STREAMING_HEADERS_VERSION = bec7aedf4e9f5a4a618fa580b19acca3ea691582
 
 RAPTOR_STREAMING_SITE = $(call github,johnchia,raptor,$(RAPTOR_STREAMING_VERSION))
 # All four repos are GPL-3.0, and each ships its own copy. Declaring MIT here
