@@ -1,0 +1,33 @@
+#!/bin/sh
+# S41setup -- come up in setup mode when there is nothing to come up on.
+#
+# After S40network rather than before it, and that is deliberate. S40network
+# loads the radio's driver, which has to have happened before there is a wlan0
+# to make an access point out of; and on an unprovisioned camera its own
+# `ifup wlan0` has already failed harmlessly, because /etc/wireless/wpa-conf
+# refuses to write a network block with no ssid in it. So there is nothing to
+# skip and nothing to coordinate -- S40network is upstream's and stays
+# untouched.
+#
+# Before S95raptor, which is what matters on the other side: rhd reads
+# /run/portal_mode once, when it starts.
+
+case "$1" in
+	start)
+		/etc/wireless/setup-mode start
+		;;
+	stop)
+		# Nothing. The camera is on its way down, and tearing the access
+		# point off the radio first would only make the last thing an
+		# operator sees be the network disappearing early.
+		;;
+	restart | reload)
+		/etc/wireless/setup-mode start
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart}"
+		exit 1
+		;;
+esac
+
+exit 0

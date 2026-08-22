@@ -1,0 +1,232 @@
+#!/bin/sh
+#
+# setup-mode -- Raise or lower the setup access point.
+#
+# A camera nobody has given a network to has to be reachable somehow, so it
+# becomes an access point of its own and serves one page on it. This is the
+# whole of that: the supplicant in AP mode, an address, a DHCP server, a DNS
+# server that answers every name with the camera, and the flag that tells rhd
+# to serve the setup page instead of the console.
+#
+# Three callers, and between them they are the entire state machine:
+#
+#   S41setup, at boot                 start   -- no network to join
+#   rcd, before enacting a credential stop    -- there is one now
+#   rcd, after reverting one          start    -- there is not, after all
+#
+# Both verbs decide for themselves whether there is anything to do, so all
+# three callers can be unconditional. `start` is a no-op on a camera that has
+# a network or has no radio; `stop` is a no-op on one that is not in setup
+# mode or still has nothing to leave it for. That matters most on the revert
+# path, where rcd calls stop and then start a few hundred milliseconds apart
+# and only one of them may act.
+#
+# What is deliberately absent: a timeout. The reference implementation tears
+# its portal down after ten minutes, which leaves a camera with no network at
+# all until somebody power-cycles it. A camera in setup mode stays in setup
+# mode.
+
+IFACE=wlan0
+ADDR=172.16.0.1
+PREFIX=24
+SUBNET=172.16.0.0
+FLAG=/run/portal_mode
+CONF=/tmp/wpa_ap.conf
+CTRL=/run/wpa_supplicant
+APCONF=/etc/wireless/ap-conf
+DHCP_CONF=/etc/wireless/udhcpd-portal.conf
+DNS_CONF=/etc/wireless/dnsd-portal.conf
+LEASES=/run/udhcpd-portal.leases
+RAPTOR_CONF=/etc/raptor.conf
+
+WPA=/usr/sbin/wpa_supplicant
+UDHCPD=$(command -v udhcpd)
+DNSD=$(command -v dnsd)
+
+say() { echo "setup-mode: $*"; }
+
+# The same question S40network and rcd both ask: the boot environment names a
+# radio and the kernel found one. Either alone is a camera with no interface
+# to raise an access point on.
+radio_present() {
+	[ -n "$(fw_printenv -n wlandev 2>/dev/null)" ] || return 1
+	[ -e "/sys/class/net/$IFACE" ]
+}
+
+# Provisioned is one variable, not a file and not a flag of our own -- see
+# rcd_wifi.h. The boot path reads it directly because rcd is not running yet
+# when the mode is decided, which is what keeps the two of them agreeing.
+provisioned() {
+	[ -n "$(fw_printenv -n wlanssid 2>/dev/null)" ]
+}
+
+# rhd picks its bind address and its page from the flag once, when it starts,
+# so the mode cannot be changed under a listening socket.
+#
+# Restarted here rather than through /etc/init.d/S95raptor because that script
+# asks rcd whether each daemon is enabled -- and rcd is what calls this, from
+# inside the single loop it would have to answer on. It would be waiting for
+# itself. The two-line start below is the price of not deadlocking.
+restart_rhd() {
+	[ -x /usr/bin/rhd ] || return 0
+	pidof rhd >/dev/null 2>&1 || return 0
+
+	say "restarting rhd"
+	stop_wait /usr/bin/rhd
+	start-stop-daemon -S -b -x /usr/bin/rhd -- -c "$RAPTOR_CONF"
+}
+
+# Stop something, and do not come back until it is gone.
+#
+# `start-stop-daemon -K` returns as soon as the signal is sent, and `-S`
+# refuses to start a second copy of a binary that is still there. Killing and
+# starting on consecutive lines is therefore a race, and it is one the radio
+# loses: the access point failed to come up with
+#
+#	/usr/sbin/wpa_supplicant is already running
+#
+# a few milliseconds after being told to stop. `-K -t` is the same matcher -S
+# uses, asked instead of acted on, so this waits on exactly the condition that
+# would refuse.
+stop_wait() {
+	[ -n "$1" ] || return 0
+	start-stop-daemon -K -q -x "$1"
+	i=0
+	while [ $i -lt 50 ] && start-stop-daemon -K -t -q -x "$1" >/dev/null 2>&1; do
+		usleep 100000
+		i=$((i + 1))
+	done
+	[ $i -lt 50 ] || say "$1 will not stop"
+}
+
+ap_down() {
+	# `ifdown` before anything else, and it is not only politeness to a
+	# client that may be running.
+	#
+	# ifupdown remembers which interfaces it has configured, and `ifup` on
+	# one it already lists prints "interface wlan0 already configured" and
+	# does nothing. Taking the radio for an access point with `ip` alone
+	# leaves that record standing, so the `ifup` that later brings the
+	# camera back to the network it has just been given is refused, the
+	# radio never associates, and the guard reverts a credential that was
+	# correct. Everything looks like a wrong passphrase.
+	ifdown -f "$IFACE" >/dev/null 2>&1
+
+	stop_wait "$UDHCPD"
+	stop_wait "$DNSD"
+	stop_wait "$WPA"
+
+	# The supplicant unlinks this on a clean exit and leaves it behind on
+	# any other, and a stale one is refused by the next supplicant with
+	# "ctrl_iface exists and seems to be in use - cannot override it".
+	# On a camera whose only interface is the radio, that is the camera.
+	rm -f "$CTRL/$IFACE" "/run/wpa_supplicant.$IFACE.pid"
+
+	ip route del "$SUBNET/$PREFIX" dev "$IFACE" 2>/dev/null
+	ip addr flush dev "$IFACE" 2>/dev/null
+	return 0
+}
+
+ap_up() {
+	# Nothing else may be holding the radio. A client supplicant that never
+	# associated is the ordinary case here: on an unprovisioned camera
+	# S40network has already tried and failed to bring wlan0 up as a
+	# client, because the generator refuses to write a network block with
+	# no ssid in it.
+	ap_down
+
+	"$APCONF" "$IFACE" > "$CONF" || return 1
+
+	start-stop-daemon -S -x "$WPA" -- \
+		-B -i "$IFACE" -D nl80211 -c "$CONF" \
+		-P "/run/wpa_supplicant.$IFACE.pid" || return 1
+
+	# The AP is up when the supplicant says so. Polled rather than slept:
+	# the driver takes about a second to start beaconing and this runs
+	# inside an rcd request on the revert path.
+	i=0
+	while [ $i -lt 50 ]; do
+		wpa_cli -p "$CTRL" -i "$IFACE" status 2>/dev/null |
+			grep -q '^wpa_state=COMPLETED' && break
+		usleep 100000
+		i=$((i + 1))
+	done
+	if [ $i -ge 50 ]; then
+		say "the radio did not come up as an access point"
+		return 1
+	fi
+
+	ip link set "$IFACE" up
+	ip addr add "$ADDR/$PREFIX" dev "$IFACE" || return 1
+	ip route replace "$SUBNET/$PREFIX" dev "$IFACE"
+
+	if [ -n "$UDHCPD" ]; then
+		: > "$LEASES"
+		start-stop-daemon -S -x "$UDHCPD" -- -S -I "$ADDR" "$DHCP_CONF"
+	else
+		say "no udhcpd: nothing will hand out an address"
+	fi
+
+	# Without this a phone reaches the camera only by typing its address,
+	# and no operating system opens a setup sheet by itself. Said out loud
+	# rather than left to be noticed, because everything else still works
+	# and the symptom is "the portal does not pop up".
+	if [ -n "$DNSD" ]; then
+		start-stop-daemon -S -x "$DNSD" -- -d -i "$ADDR" -c "$DNS_CONF"
+	else
+		say "no dnsd: the setup page will not open by itself"
+	fi
+
+	return 0
+}
+
+start() {
+	radio_present || return 0
+	if provisioned; then
+		say "already has a network to join"
+		return 0
+	fi
+	[ -f "$FLAG" ] && return 0
+
+	say "no network configured; raising the setup access point"
+	if ! ap_up; then
+		say "could not raise the setup access point"
+		ap_down
+		return 1
+	fi
+
+	# Written only once the address is on the interface. rhd binds it and
+	# nothing else, so a flag set before the address exists is an rhd that
+	# cannot bind at all -- and then the camera has neither a portal nor a
+	# console.
+	echo "$ADDR" > "$FLAG"
+	restart_rhd
+	say "setup access point up on $ADDR"
+}
+
+stop() {
+	[ -f "$FLAG" ] || return 0
+	provisioned || return 0
+
+	say "a network has been configured; lowering the setup access point"
+	ap_down
+	rm -f "$FLAG"
+	restart_rhd
+}
+
+case "$1" in
+	start | stop)
+		$1
+		;;
+	status)
+		if [ -f "$FLAG" ]; then
+			echo "setup mode, on $(cat $FLAG)"
+		else
+			echo "not in setup mode"
+		fi
+		;;
+	*)
+		echo "Usage: $0 {start|stop|status}"
+		exit 1
+		;;
+esac

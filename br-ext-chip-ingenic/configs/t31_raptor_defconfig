@@ -96,6 +96,12 @@ BR2_PACKAGE_WIRELESS_TOOLS=y
 BR2_PACKAGE_WPA_SUPPLICANT=y
 BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
 BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
+# Setup mode raises an access point of its own, and this is what lets the
+# supplicant be one: `mode=2` in a network block is rejected without it. No
+# hostapd -- the ATBM driver advertises NL80211_IFTYPE_AP and leaves the AP
+# state machine in userspace, so one supplicant binary serves both modes and
+# the camera carries one less daemon it uses for a few minutes of its life.
+BR2_PACKAGE_WPA_SUPPLICANT_AP_SUPPORT=y
 
 # Bootloader.
 #

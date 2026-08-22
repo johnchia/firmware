@@ -1,0 +1,43 @@
+#!/bin/sh
+#
+# The supplicant configuration for setup mode, on stdout.
+#
+# The same radio and the same binary as client mode; only the network block
+# differs. There is no hostapd here and no second driver: the ATBM part
+# advertises NL80211_IFTYPE_AP and leaves the AP state machine in userspace,
+# which is what `mode=2` drives.
+#
+# The name is generated rather than stored, because it has to be different on
+# every camera and there is nowhere to store it before the camera has been set
+# up. The last two octets of the radio's own address are the only thing on a
+# fresh unit that is already unique -- the same source the hostname uses, so a
+# camera answers to the same two characters before and after it is set up.
+
+iface=${1:-wlan0}
+
+mac=$(cat "/sys/class/net/$iface/address" 2>/dev/null)
+if [ -z "$mac" ]; then
+	echo "# no $iface to read an address from" >&2
+	exit 1
+fi
+suffix=$(echo "$mac" | awk -F: '{print $5 $6}' | tr 'a-f' 'A-F')
+
+echo "ctrl_interface=/run/wpa_supplicant"
+# Nothing here is ever written back. The credentials this camera is about to
+# be given go to the boot environment, and /etc/wireless/wpa-conf builds the
+# client configuration from there; a supplicant that saved its own would put a
+# second, staler copy on the flash.
+echo "update_config=0"
+echo
+echo "network={"
+printf '\tssid="RAPTOR-%s"\n' "$suffix"
+echo "	mode=2"
+# Channel 1. Fixed rather than chosen: picking a quiet channel means scanning,
+# and the AP is up for the few minutes it takes to type a passphrase.
+echo "	frequency=2412"
+# Open, and it has to be. The passphrase the owner is about to type is the one
+# they do not have yet, so there is nothing to authenticate with -- which is
+# why the page derives the PSK in the browser and the camera never hears the
+# plaintext even here.
+echo "	key_mgmt=NONE"
+echo "}"
