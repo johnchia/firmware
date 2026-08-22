@@ -1,0 +1,26 @@
+# Wyze Cam v3 -- the SD-card environment overlay.
+#
+# Copy to a FAT32 card as uenv.txt. At boot `loaduenv` imports it into the
+# saved environment, runs saveenv, and stamps uenv.done on the card so the
+# next boot skips it; delete that stamp to apply it again, or set
+# enable_updates=false to disable the mechanism. Comment lines and blank lines
+# are skipped by `env import -t`.
+#
+# THIS FILE IS NOT THE LAYOUT
+#
+# The partition table, boot command and recovery verbs live in
+# wyze-v3.env.txt, which is built into mtd1 with the image. This file exists
+# only for the things that cannot be built in because they are per unit --
+# in practice, the wifi credentials, which is the whole reason a camera with
+# no Ethernet and no serial header can be brought up at all before the setup
+# portal exists.
+#
+# Anything set here overrides the built-in environment and is written to
+# flash, so it survives until the next full flash. Keep it minimal: a stray
+# mtdparts or data_addr here silently outranks the one the image shipped
+# with, and data_addr is what the reset button erases.
+
+# Fill these in. /etc/wireless/wpa-conf accepts either a passphrase (8-63
+# characters) or a 64-character hex PSK.
+#wlanssid=
+#wlanpass=

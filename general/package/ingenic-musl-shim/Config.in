@@ -1,0 +1,18 @@
+config BR2_PACKAGE_INGENIC_MUSL_SHIM
+	bool "ingenic-musl-shim"
+	depends on BR2_TOOLCHAIN_USES_MUSL
+	help
+	  The libc symbols Ingenic's libimp.so and libalog.so were linked
+	  against and musl does not define.
+
+	  The vendor libraries are uClibc builds, so they leave
+	  __assert, __fgetc_unlocked, __pthread_register_cancel and
+	  __pthread_unregister_cancel undefined as strong references. On a
+	  musl image nothing resolves them, and the program that loads
+	  libimp fails at relocation rather than at a call site.
+
+	  Static archive, staging only: the consumer links it with
+	  --whole-archive --export-dynamic so the symbols are exported from
+	  the executable, which is where the vendor library looks for them.
+
+	  https://github.com/gtxaspec/ingenic-musl

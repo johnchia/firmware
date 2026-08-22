@@ -1,0 +1,145 @@
+# Architecture
+BR2_mipsel=y
+BR2_mips_xburst=y
+# BR2_MIPS_SOFT_FLOAT is not set
+BR2_MIPS_FP32_MODE_32=y
+
+# Toolchain
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
+BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/openipc/firmware/releases/download/$(OPENIPC_TOOLCHAIN).tgz"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="mipsel-openipc-linux-musl"
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_3_10=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_MUSL=y
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+
+# Kernel
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/$(OPENIPC_KERNEL).tar.gz"
+BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/t31.generic.config"
+BR2_LINUX_KERNEL_LZMA=y
+
+# Filesystem
+BR2_PACKAGE_BUSYBOX_CONFIG="$(BR2_EXTERNAL)/package/busybox/busybox.config"
+# fw_printenv/fw_setenv. Not optional here: S40network reads wlandev, wlanssid
+# and wlanpass out of the U-Boot environment to bring the radio up, and rcd
+# asks the same question to decide which interface the camera has. A build
+# without these is a camera with no network on a board with no Ethernet.
+BR2_PACKAGE_UBOOT_TOOLS=y
+# BR2_PACKAGE_IFUPDOWN_SCRIPTS is not set
+BR2_TARGET_ROOTFS_CPIO=y
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+
+# OpenIPC
+BR2_OPENIPC_SOC_VENDOR="ingenic"
+BR2_OPENIPC_SOC_MODEL="t31"
+BR2_OPENIPC_SOC_FAMILY="t31"
+BR2_OPENIPC_VARIANT="raptor"
+# The Wyze Cam v3 this targets has 16MB of NOR. The partition table is the
+# bootloader's, not this build's -- see PLAN-captive-portal.md -- and the
+# rootfs slot in it is 8192KB, which is what the image has to fit.
+BR2_OPENIPC_FLASH_SIZE="16"
+BR2_OPENIPC_ROOTFS_PART_KB="8192"
+# One sensor per target, as everywhere else: the GC2053 the Wyze v3 carries.
+# raptor probes the sensor at runtime regardless, so a board with a different
+# part still streams -- it falls back to generic tuning and the colour is
+# wrong, which is the cost every other single-sensor target already carries.
+BR2_OPENIPC_SNS_MODEL="gc2053"
+
+# Packages
+#
+# Raptor owns the camera on this image. Majestic is carried anyway, as the
+# reference encoder to cross-check against when the IMP stack refuses
+# something and it is not clear whether the fault is Raptor's or the SoC's --
+# worth more here than on SigmaStar, since this is the first Ingenic target in
+# this tree. It does not start on its own: the raptor-streaming post-build hook
+# renames S95majestic to K95majestic.
+BR2_PACKAGE_DROPBEAR_OPENIPC=y
+BR2_PACKAGE_INGENIC_OSDRV_T31=y
+# The uClibc symbols libimp.so and libalog.so leave undefined. Without it every
+# daemon that links the HAL fails at relocation on this musl toolchain.
+BR2_PACKAGE_INGENIC_MUSL_SHIM=y
+BR2_PACKAGE_IPCTOOL=y
+BR2_PACKAGE_JSONFILTER=y
+BR2_PACKAGE_LIBCURL_OPENIPC=y
+BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
+# BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
+BR2_PACKAGE_LIBEVENT_OPENIPC=y
+BR2_PACKAGE_LIBOGG_OPENIPC=y
+BR2_PACKAGE_MAJESTIC=y
+BR2_PACKAGE_MBEDTLS_OPENIPC=y
+# mDNS-SD, so the camera answers to <hostname>.local. On a wireless camera with
+# no Ethernet and a DHCP address, being findable by name is not a convenience.
+BR2_PACKAGE_MDNSD_OPENIPC=y
+# The client library only; rmq publishes to a broker elsewhere.
+BR2_PACKAGE_MOSQUITTO=y
+# BR2_PACKAGE_MOSQUITTO_BROKER is not set
+BR2_PACKAGE_OPUS_OPENIPC=y
+BR2_PACKAGE_OPUS_OPENIPC_FIXED_POINT=y
+BR2_PACKAGE_RAPTOR_STREAMING=y
+BR2_PACKAGE_YAML_CLI=y
+
+# Wireless. The AltoBeam ATBM6031 over SDIO is the only network interface this
+# board has: the Wyze v3 has no Ethernet PHY. `wlandev=atbm603x-t31-wyze-v3`
+# in the U-Boot environment is what selects the bring-up sequence in
+# /etc/wireless/sdio, and wlanssid/wlanpass are the credentials.
+BR2_PACKAGE_ATBM60XX=y
+BR2_PACKAGE_ATBM60XX_MODEL_603X=y
+BR2_PACKAGE_ATBM60XX_INTERFACE_SDIO=y
+BR2_PACKAGE_WIRELESS_TOOLS=y
+BR2_PACKAGE_WPA_SUPPLICANT=y
+BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
+BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
+
+# Bootloader.
+#
+# Built from source, pinned to the commit whose build is on the bench board:
+# gtxaspec/u-boot ingenic-t-series, mainline U-Boot with the Ingenic T-series
+# port. The 2013.07 ISVP tree (openipc/u-boot-ingenic) is the other Ingenic
+# lineage and is NOT interchangeable -- it has no fatwrite, no DM/DT MMC and
+# no button-at-boot, so it cannot run the SD-card recovery path this board
+# depends on. Pin a commit, never the branch: the bootloader is the one thing
+# on this camera that cannot be fixed from a shell.
+BR2_TARGET_UBOOT=y
+BR2_TARGET_UBOOT_BUILD_SYSTEM_KCONFIG=y
+BR2_TARGET_UBOOT_CUSTOM_GIT=y
+BR2_TARGET_UBOOT_CUSTOM_REPO_URL="https://github.com/gtxaspec/u-boot.git"
+BR2_TARGET_UBOOT_CUSTOM_REPO_VERSION="83982542774ce53a41d60c85e835aa9c4b746388"
+BR2_TARGET_UBOOT_BOARD_DEFCONFIG="isvp_t31x_sfcnor"
+BR2_TARGET_UBOOT_FORMAT_CUSTOM=y
+# T31 does its DDR bring-up in the TPL, not the SPL, so the bootable
+# container is u-boot-with-tpl-lzma.bin. u-boot.bin alone is the payload
+# without the loader in front of it and does not boot.
+BR2_TARGET_UBOOT_FORMAT_CUSTOM_NAME="u-boot-with-tpl-lzma.bin"
+BR2_TARGET_UBOOT_CONFIG_FRAGMENT_FILES="$(BR2_EXTERNAL)/../br-ext-chip-ingenic/board/t31/uboot.config"
+BR2_TARGET_UBOOT_NEEDS_DTC=y
+BR2_TARGET_UBOOT_NEEDS_PYTHON3=y
+BR2_TARGET_UBOOT_NEEDS_PYLIBFDT=y
+BR2_TARGET_UBOOT_NEEDS_PYELFTOOLS=y
+
+# Per-board device tree: SD slot power (48, active low), card detect (59) and
+# the reset button (51). Without the first two the bootloader cannot read the
+# card, and the recovery path is decorative.
+BR2_PACKAGE_INGENIC_UBOOT=y
+BR2_PACKAGE_INGENIC_UBOOT_GPIO_MMC_CD="59"
+BR2_PACKAGE_INGENIC_UBOOT_GPIO_MMC_POWER="48"
+BR2_PACKAGE_INGENIC_UBOOT_GPIO_MMC_POWER_ACTIVE_LOW=y
+BR2_PACKAGE_INGENIC_UBOOT_GPIO_BUTTON_RESET="51"
+
+# The environment is data in mtd1, not compiled into U-Boot, so the layout and
+# the recovery verbs live in a text file and are readable back off the chip.
+BR2_PACKAGE_HOST_UBOOT_TOOLS=y
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE=y
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SOURCE="$(BR2_EXTERNAL)/../br-ext-chip-ingenic/board/t31/wyze-v3.env.txt"
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
+
+# fw_env.config is board-specific and the shared overlay has none, so this
+# board appends its own. Buildroot applies overlays in order, so anything here
+# wins over general/overlay with no merge surface upstream.
+BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL)/overlay $(BR2_EXTERNAL)/../br-ext-chip-ingenic/board/t31/overlay"

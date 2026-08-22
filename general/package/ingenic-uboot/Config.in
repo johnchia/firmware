@@ -1,0 +1,44 @@
+config BR2_PACKAGE_INGENIC_UBOOT
+	bool "ingenic-uboot"
+	depends on BR2_TARGET_UBOOT
+	help
+	  Board hooks for Buildroot's U-Boot package on Ingenic T-series.
+
+	  The Ingenic U-Boot device tree is per-SoC, but the SD-slot power,
+	  card-detect and reset-button lines are per-board. This injects them
+	  into the build copy of the leaf .dts. Without them U-Boot never
+	  powers or detects the card slot, so the bootloader's SD-card
+	  recovery path does nothing -- which on a camera with no Ethernet
+	  and no serial header is the difference between recoverable and a
+	  SPI clip.
+
+if BR2_PACKAGE_INGENIC_UBOOT
+
+config BR2_PACKAGE_INGENIC_UBOOT_GPIO_MMC_CD
+	string "SD card-detect gpio"
+	default "-1"
+	help
+	  Board gpio number wired to the card-detect switch, or -1 if the
+	  board has none (U-Boot then keeps the dtsi's broken-cd probe).
+
+config BR2_PACKAGE_INGENIC_UBOOT_GPIO_MMC_POWER
+	string "SD slot power gpio"
+	default "-1"
+	help
+	  Board gpio number gating power to the SD slot, or -1 if the slot
+	  is permanently powered.
+
+config BR2_PACKAGE_INGENIC_UBOOT_GPIO_MMC_POWER_ACTIVE_LOW
+	bool "SD slot power gpio is active low"
+	help
+	  Say y when the slot is powered by driving the gpio low.
+
+config BR2_PACKAGE_INGENIC_UBOOT_GPIO_BUTTON_RESET
+	string "Factory-reset button gpio"
+	default "-1"
+	help
+	  Board gpio number of the reset button, or -1 if the board has
+	  none. CONFIG_BUTTON_CMD reads it once early in main_loop and runs
+	  button_cmd_0 from the environment if it is held at boot.
+
+endif

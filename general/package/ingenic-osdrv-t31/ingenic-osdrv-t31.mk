@@ -9,6 +9,18 @@ INGENIC_OSDRV_T31_SITE =
 INGENIC_OSDRV_T31_LICENSE = MIT
 INGENIC_OSDRV_T31_LICENSE_FILES = LICENSE
 
+# The vendor libraries have to be linkable, not just present in the image.
+# Majestic never needed this -- it arrives prebuilt -- but anything compiled
+# here against the IMP SDK carries -limp -lalog on its link line and looks for
+# them in the sysroot. Only the libraries go to staging: the sensor blobs and
+# the load scripts are runtime files with nothing to link against.
+INGENIC_OSDRV_T31_INSTALL_STAGING = YES
+
+define INGENIC_OSDRV_T31_INSTALL_STAGING_CMDS
+	$(INSTALL) -m 755 -d $(STAGING_DIR)/usr/lib
+	$(INSTALL) -m 644 -t $(STAGING_DIR)/usr/lib $(INGENIC_OSDRV_T31_PKGDIR)/files/lib/*.so
+endef
+
 ifeq ($(OPENIPC_SNS_MODEL),)
 define INGENIC_OSDRV_T31_INSTALL_TARGET_CMDS
 	$(INSTALL) -m 755 -d $(TARGET_DIR)/etc/sensor

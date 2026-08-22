@@ -4,6 +4,31 @@ BR_LINK = https://github.com/buildroot/buildroot/archive
 BR_FILE = /tmp/buildroot-$(BR_VER).tar.gz
 BR_CONF = $(TARGET)/openipc_defconfig
 TARGET ?= $(PWD)/output
+
+# TARGET is ours and must not reach a package's ./configure.
+#
+# A variable set on the make command line is exported to every sub-process, and
+# `make BOARD=<board> TARGET=<dir>` -- the way to build a second board without
+# overwriting the first one's output -- therefore puts TARGET in the environment
+# of every configure script Buildroot runs. autoconf's AX_ENABLE_BUILDDIR macro
+# reads exactly that name:
+#
+#   test ".$TARGET" = "." && TARGET="$target"
+#   test ".$ax_enable_builddir" = ".auto" && ax_enable_builddir="$TARGET"
+#
+# so libffi re-execs its configure inside a directory named after our output
+# path, computes a relative --srcdir by counting the components of it, and dies
+# on "../../../../.././configure: No such file or directory". Invisible on the
+# default path, because `TARGET ?=` is not a command-line variable and so is not
+# exported at all.
+#
+# Two things carry it and both have to be stopped: `unexport` covers the
+# environment, and the MAKEOVERRIDES filter covers MAKEFLAGS, through which a
+# command-line variable reaches a sub-make and is re-exported by it. Only
+# TARGET is filtered, so V=1 and every other override still propagate -- and
+# every recipe here that recurses passes TARGET explicitly anyway.
+unexport TARGET
+MAKEOVERRIDES := $(filter-out TARGET=%,$(MAKEOVERRIDES))
 export CMAKE_POLICY_VERSION_MINIMUM := 3.5
 
 # Use an explicit local checkout for Divinus development without changing the
@@ -107,6 +132,14 @@ defconfig: prepare
 	@echo --- $(or $(CONFIG),$(error variable BOARD not found))
 	@cat $(CONFIG) $(PWD)/general/openipc.fragment > $(BR_CONF)
 	@grep -s '^BR2_GLOBAL_PATCH_DIR=' $(CONFIG) >> $(BR_CONF) || true
+# The fragment is concatenated after the board config, so it wins every
+# conflict -- including BR2_ROOTFS_OVERLAY, which it hardcodes to the shared
+# overlay alone. A board that needs a file of its own (fw_env.config is the
+# case in hand: its offsets and sector size are per-SoC, and the shared
+# overlay cannot carry a value that is right for every vendor) re-states the
+# whole list, shared directory included, and it is appended back here. Same
+# idiom as BR2_GLOBAL_PATCH_DIR above, and inert for boards that set neither.
+	@grep -s '^BR2_ROOTFS_OVERLAY=' $(CONFIG) >> $(BR_CONF) || true
 	@$(BR_MAKE) BR2_DEFCONFIG=$(BR_CONF) defconfig
 
 prepare:
@@ -215,6 +248,26 @@ FULLIMAGE_UBOOT = $(strip $(if $(strip $(UBOOT_BIN)),$(abspath $(UBOOT_BIN)),\
 	$(TARGET)/images/u-boot-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor.bin))
 
 fullimage: defconfig
+ifeq ($(BR2_OPENIPC_SOC_VENDOR),"ingenic")
+	@test -n "$(strip $(UBOOT_BIN))" -o -f "$(TARGET)/images/u-boot-with-tpl-lzma.bin" || { \
+		echo "no bootloader at $(TARGET)/images/u-boot-with-tpl-lzma.bin"; \
+		echo "enable BR2_TARGET_UBOOT in the board defconfig and build, or run"; \
+		echo "  make BOARD=$(BOARD) br-uboot"; \
+		echo "or point UBOOT_BIN at one built elsewhere (the TPL container,"; \
+		echo "not u-boot.bin)"; \
+		exit 2; }
+	@test -n "$(strip $(UBOOT_ENV_BIN))" -o -f "$(TARGET)/images/uboot-env.bin" || { \
+		echo "no environment at $(TARGET)/images/uboot-env.bin"; \
+		echo "enable BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE and point"; \
+		echo "BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SOURCE at the board's"; \
+		echo "env text file. Without it the board boots on U-Boot's"; \
+		echo "compiled-in default, which has no SD-card recovery in it."; \
+		exit 2; }
+	@$(SHELL) $(PWD)/general/scripts/make_full_image_ingenic.sh \
+		"$(TARGET)/images" \
+		"$(subst ",,$(BR2_OPENIPC_SOC_MODEL))" \
+		"$(TARGET)/images/openipc-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor-full.bin"
+else
 	@test -f "$(FULLIMAGE_UBOOT)" || { \
 		echo "no boot container at $(FULLIMAGE_UBOOT)"; \
 		echo "enable BR2_PACKAGE_SIGMASTAR_UBOOT and build, or run"; \
@@ -229,6 +282,7 @@ fullimage: defconfig
 		"$(subst ",,$(BR2_OPENIPC_SOC_MODEL))" \
 		"$(TARGET)/images/openipc-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor-full.bin" \
 		$(if $(strip $(SNI_REF)),"$(abspath $(SNI_REF))")
+endif
 
 # The rootfs size limit is a property of the *partition table*, not of the flash
 # chip. Deriving it from BR2_OPENIPC_FLASH_SIZE assumes the two agree, and they

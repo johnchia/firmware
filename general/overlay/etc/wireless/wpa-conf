@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+# The supplicant configuration for client mode, on stdout, from the U-Boot
+# environment.
+#
+# Two things this does that the inline `wpa_passphrase` it replaces could not.
+#
+# A 64-hex `wlanpass` is taken as the pre-derived PSK. `wpa_passphrase` cannot
+# accept one -- WPA passphrases are 8 to 63 characters, so it rejects 64 as too
+# long -- and a camera provisioned over an open setup network is exactly where
+# the plaintext should never have travelled. Both forms end up as the same
+# `psk=` line; only the derivation moves.
+#
+# And `ctrl_interface`, without which there is no `wpa_cli`: no `status`, no
+# `signal_poll`, no `scan_results`. That is the difference between diagnosing a
+# radio that will not associate and guessing at it.
+
+ssid=$(fw_printenv -n wlanssid 2>/dev/null)
+pass=$(fw_printenv -n wlanpass 2>/dev/null)
+
+echo "ctrl_interface=/run/wpa_supplicant"
+echo "update_config=1"
+echo
+
+if [ -z "$ssid" ]; then
+	# Nothing to join. An empty network block is not a configuration, so
+	# say so and let the caller fail rather than starting a supplicant that
+	# will sit there forever.
+	echo "# no wlanssid in the U-Boot environment" >&2
+	exit 1
+fi
+
+echo "network={"
+printf '\tssid="%s"\n' "$ssid"
+echo "	scan_ssid=1"
+case "$pass" in
+	"")
+		echo "	key_mgmt=NONE" ;;
+	????????????????????????????????????????????????????????????????)
+		# 64 characters. Hex is the only 64-character secret WPA has, so
+		# check it is hex and pass it through unquoted, which is what
+		# tells the supplicant it is a key and not a passphrase.
+		case "$pass" in
+			*[!0-9A-Fa-f]*)
+				printf '\tpsk="%s"\n' "$pass" ;;
+			*)
+				printf '\tpsk=%s\n' "$pass" ;;
+		esac ;;
+	*)
+		printf '\tpsk="%s"\n' "$pass" ;;
+esac
+echo "}"

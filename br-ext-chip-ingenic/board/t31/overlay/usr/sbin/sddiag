@@ -1,0 +1,127 @@
+#!/bin/sh
+#
+# Write a boot report to the SD card. Usage: sddiag <stage>
+#
+# This board has no serial header and no Ethernet, so a camera that booted
+# cleanly but failed to associate is indistinguishable from one that never
+# booted. The card slot is the only channel left, and U-Boot has proved it
+# works.
+#
+# Called twice, and which reports appear is the primary signal:
+#
+#   early  S01, before anything in rcS that could block. Proves the kernel
+#          ran, /init pivoted and userspace started.
+#   late   S99, after networking. Carries dmesg and the syslog buffer.
+#
+#   neither -> userspace never started; look at the U-Boot breadcrumbs
+#   early only -> an rcS script between S01 and S99 is blocking
+#   both -> the boot completed and the answer is in the late report
+
+STAGE=${1:-late}
+MNT=/tmp/sdcard
+MMC=/sys/devices/platform/jzmmc_v1.2.0/present
+PART=/dev/mmcblk0p1
+SLOT_POWER_GPIO=48
+SD_ROUTE=unknown
+
+log() { echo "sddiag[$STAGE]: $*"; }
+
+wait_for_part() {
+	i=0
+	while [ ! -b "$PART" ] && [ $i -lt 20 ]; do
+		usleep 250000 2>/dev/null || sleep 1
+		i=$((i + 1))
+	done
+	[ -b "$PART" ]
+}
+
+try_mount() {
+	mkdir -p "$MNT"
+	mount -t vfat -o rw "$PART" "$MNT" 2>/dev/null
+}
+
+find_card() {
+	modprobe vfat 2>/dev/null
+
+	# The jzmmc driver has no card-detect line wired on this board, so it
+	# exposes a manual trigger instead -- the same one /etc/wireless/sdio
+	# uses to make the SDIO radio enumerate on mmc1. mmc0 is the card slot.
+	if [ -f "$MMC" ] && [ "$(cat $MMC)" = "N" ]; then
+		echo INSERT > "$MMC"
+	fi
+
+	if wait_for_part && try_mount; then
+		SD_ROUTE=direct
+		return 0
+	fi
+
+	# The slot's 3.3V rail is gated by an active-low gpio, and U-Boot may
+	# drop it on handover. Driving it is deliberately the second attempt,
+	# not the first: the same rail feeds the radio, so a board that is
+	# already working is never touched.
+	log "no card yet, powering the slot on gpio $SLOT_POWER_GPIO"
+	gpio clear "$SLOT_POWER_GPIO" 2>/dev/null
+	[ -f "$MMC" ] && echo INSERT > "$MMC" 2>/dev/null
+	if wait_for_part && try_mount; then
+		SD_ROUTE="after-gpio$SLOT_POWER_GPIO"
+		return 0
+	fi
+	return 1
+}
+
+common() {
+	echo "=== stage ===";            echo "$STAGE"
+	echo; echo "=== sd route ===";   echo "$SD_ROUTE"
+	echo; echo "=== uname ===";      uname -a
+	echo; echo "=== cmdline ===";    cat /proc/cmdline
+	echo; echo "=== uptime ===";     cat /proc/uptime
+	echo; echo "=== mtd ===";        cat /proc/mtd
+	echo; echo "=== mounts ===";     cat /proc/mounts
+	echo; echo "=== block ===";      ls -la /dev/mmcblk* 2>&1
+	echo; echo "=== mmc hosts ===";  for h in /sys/devices/platform/jzmmc_v1.2.*; do
+		echo "$h present=$(cat $h/present 2>&1)"
+	done
+	# The slot and the radio share a rail and nothing in userspace drives
+	# it, so whether it survived U-Boot decides whether either exists.
+	# Reading debugfs does not disturb the pin; exporting via sysfs would.
+	echo; echo "=== gpio ===";       cat /sys/kernel/debug/gpio 2>&1
+	echo; echo "=== u-boot env ==="; fw_printenv 2>&1
+	echo; echo "=== memory ===";     cat /proc/meminfo
+	echo; echo "=== processes ==="; ps
+}
+
+late_only() {
+	echo; echo "=== modules ===";     lsmod
+	echo; echo "=== firmware ===";    ls -la /lib/firmware 2>&1
+	echo; echo "=== interfaces ==="; ip addr 2>&1
+	echo; echo "=== routes ===";      ip route 2>&1
+	echo; echo "=== iwconfig ===";    iwconfig 2>&1
+	echo; echo "=== wpa status ==="; wpa_cli -i wlan0 status 2>&1
+	echo; echo "=== wpa conf ===";    cat /tmp/wpa_supplicant.conf 2>&1
+	echo; echo "=== proc wireless ==="; cat /proc/net/wireless 2>&1
+	# syslogd runs with a 64K circular buffer, so this carries the init
+	# scripts and daemons -- S40network, wpa_supplicant, the raptor
+	# daemons -- none of which reach the kernel ring.
+	echo; echo "=== syslog ===";      logread 2>&1
+}
+
+find_card || { log "no writable card, giving up"; exit 0; }
+
+# No RTC, so every boot would otherwise land on the same filename and the
+# interesting one -- the first -- would be the one overwritten.
+n=0
+while [ -f "$MNT/sddiag-$STAGE-$n.txt" ] && [ $n -lt 99 ]; do
+	n=$((n + 1))
+done
+out="$MNT/sddiag-$STAGE-$n.txt"
+
+log "writing $out"
+{
+	common
+	[ "$STAGE" = late ] && late_only
+	echo; echo "=== dmesg ===";  dmesg
+} > "$out" 2>&1
+
+sync
+umount "$MNT" 2>/dev/null
+log done

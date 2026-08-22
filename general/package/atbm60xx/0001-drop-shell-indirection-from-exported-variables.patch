@@ -1,0 +1,59 @@
+Drop the shell indirection from the exported variables
+
+The driver's top-level Makefile turns on export-all (a bare `export`, line 66)
+and then defines twelve variables as `?= $(shell echo $(SOMETHING))`. Under
+kbuild that combination is quadratic: make rebuilds the exported environment
+before every $(shell ...) call, and each rebuild walks the whole variable set
+looking for recursive values it must not expand. The kernel build issues
+thousands of $(shell ...) calls -- cc-option alone accounts for dozens -- so a
+`make M=<dir> modules` burns CPU indefinitely without emitting a single
+`CC [M]` line. With `make -d` it is unmistakable: 388k lines in thirty seconds,
+almost all of them
+
+  Makefile:67: not recursively expanding SDIO_HOST to export to shell function
+
+`$(shell echo $(X))` is `$(X)` with the whitespace squeezed, and none of these
+values contain anything a shell would transform, so expanding them directly is
+equivalent and leaves nothing recursive in the exported set. The module then
+builds in about two minutes.
+
+Fixing the variables rather than removing the `export` keeps the change to the
+smallest thing that is actually wrong: Makefile.build.kernel reads several of
+these from the environment, and this tree passes the CONFIG_ATBM_* values on
+the command line, where make exports them regardless.
+
+Signed-off-by: John Chia <john@johnchia.com>
+
+--- a/Makefile
++++ b/Makefile
+@@ -64,18 +64,18 @@
+ endif
+ 
+ export
+-SDIO_HOST      ?= $(shell echo $(CONFIG_ATBM_SDIO_MMCx))
+-IF1NAME        ?= $(shell echo $(CONFIG_ATBM_WIFIIF1_NAME))
+-IF2NAME        ?= $(shell echo $(CONFIG_ATBM_WIFIIF2_NAME))
+-FW             ?= $(shell echo $(CONFIG_ATBM_FW_NAME))
+-MODULES_NAME   ?= $(shell echo $(CONFIG_ATBM_MODULE_NAME))
+-USBVID		   ?= $(shell echo $(CONFIG_ATBM_USB_VID))
+-USBPID		   ?= $(shell echo $(CONFIG_ATBM_USB_PID))
+-SDIOVID			?=$(shell echo $(CONFIG_ATBM_SDIO_VID))
+-SDIOPID			?=$(shell echo $(CONFIG_ATBM_SDIO_PID))
+-MODDRVNAME	   ?= $(shell echo $(CONFIG_ATBM_MODULE_DRIVER_NAME))
+-PLFDEVNAME	   ?= $(shell echo $(CONFIG_ATBM_PLATFORM_DEVICE_NAME))
+-MODPMSTAYAWK   ?= $(shell echo $(CONFIG_ATBM_MODULE_PM_STAYAWK))
++SDIO_HOST      ?= $(CONFIG_ATBM_SDIO_MMCx)
++IF1NAME        ?= $(CONFIG_ATBM_WIFIIF1_NAME)
++IF2NAME        ?= $(CONFIG_ATBM_WIFIIF2_NAME)
++FW             ?= $(CONFIG_ATBM_FW_NAME)
++MODULES_NAME   ?= $(CONFIG_ATBM_MODULE_NAME)
++USBVID		   ?= $(CONFIG_ATBM_USB_VID)
++USBPID		   ?= $(CONFIG_ATBM_USB_PID)
++SDIOVID			?= $(CONFIG_ATBM_SDIO_VID)
++SDIOPID			?= $(CONFIG_ATBM_SDIO_PID)
++MODDRVNAME	   ?= $(CONFIG_ATBM_MODULE_DRIVER_NAME)
++PLFDEVNAME	   ?= $(CONFIG_ATBM_PLATFORM_DEVICE_NAME)
++MODPMSTAYAWK   ?= $(CONFIG_ATBM_MODULE_PM_STAYAWK)
+ 
+ SAEAUTHEN      ?= $(CONFIG_ATBM_FUNC_SAE_AUTHEN)
+ LOAD_FW_H      ?= $(CONFIG_ATBM_USE_FIRMWARE_H)

@@ -7,9 +7,43 @@
 ATBM60XX_SITE = $(call github,openipc,atbm_60xx,$(ATBM60XX_VERSION))
 ATBM60XX_VERSION = HEAD
 
+# THE RADIO NEEDS A FIRMWARE FILE, AND THIS PACKAGE SHIPPED NONE
+#
+# `atbm_get_hw_type` in hal_apollo/fwio.c returns FIRMWARE_DEFAULT_PATH and
+# nothing else -- the chip-version switch that would pick a per-part name is
+# inside `#if 0` -- and with CONFIG_FW_NAME undefined that string is the bare
+# "fw.bin". So the driver calls request_firmware() for /lib/firmware/fw.bin on
+# every probe. The other build, which compiles the blob into the module through
+# CONFIG_USE_FW_H, is not what this package selects and nothing here defines
+# that symbol.
+#
+# Without the file the module loads, the probe fails and the interface never
+# appears. On a camera whose only interface is that radio -- the Wyze v3 has no
+# Ethernet PHY -- that is indistinguishable from a bad flash, and there is no
+# console to tell the difference.
+#
+# The blobs are in the driver's own source tree, one per bus. Both are "Ares B",
+# which is the family 603x belongs to; there is none here for 601x, 602x or
+# 6041, so those models get no file and behave as before rather than getting a
+# firmware for a different part.
+ifeq ($(BR2_PACKAGE_ATBM60XX_INTERFACE_SDIO),y)
+ATBM60XX_FIRMWARE = Ares_B_Chip_IPC_SDIO_svn14195_24M_6031_6031B.bin
+endif
+ifeq ($(BR2_PACKAGE_ATBM60XX_INTERFACE_USB),y)
+ATBM60XX_FIRMWARE = Ares_B_Chip_NVR_IPC_USB_svn14195_24M_6012B_6032.bin
+endif
+
+ifneq ($(ATBM60XX_FIRMWARE),)
+define ATBM60XX_INSTALL_FIRMWARE
+	$(INSTALL) -D -m 644 $(@D)/firmware/$(ATBM60XX_FIRMWARE) \
+		$(TARGET_DIR)/lib/firmware/fw.bin
+endef
+endif
+
 define ATBM60XX_INSTALL_TARGET_CMDS
 	$(INSTALL) -m 755 -d $(TARGET_DIR)/usr/share/atbm60xx_conf
 	$(INSTALL) -m 644 -t $(TARGET_DIR)/usr/share/atbm60xx_conf $(ATBM60XX_PKGDIR)/files/*.txt
+	$(ATBM60XX_INSTALL_FIRMWARE)
 endef
 
 ATBM60XX_MODULE_MAKE_OPTS = KSRC=$(LINUX_DIR)

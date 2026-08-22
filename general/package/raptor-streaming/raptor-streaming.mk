@@ -38,8 +38,8 @@
 # All four move together in practice -- a HAL change usually needs the daemon
 # change that calls it -- so bump them as a set and rebuild before trusting the
 # result. There is no test that a mixed set links.
-RAPTOR_STREAMING_VERSION = 002dacdd8e3ac40084ff8b10614afdf0ddac1748
-RAPTOR_STREAMING_HAL_VERSION = 591bc51b04e45478d93e511ffebc15f00a0c2bb5
+RAPTOR_STREAMING_VERSION = 8d538178efc4759e374cb2f044d0285acbbd7b41
+RAPTOR_STREAMING_HAL_VERSION = 3f335ffb18e83a4bc28b423bee84552e82512165
 RAPTOR_STREAMING_COMMON_VERSION = c32a43ecd780973ea9c8e5d803729cf14ba1a23b
 RAPTOR_STREAMING_IPC_VERSION = 0a81744459ebf73568d14e38602f7b990e3df85e
 
@@ -61,11 +61,22 @@ RAPTOR_STREAMING_IPC_VERSION = 0a81744459ebf73568d14e38602f7b990e3df85e
 # submodule has, made explicit because Buildroot cannot follow the gitlink for a
 # source it did not clone.
 #
-# raptor-hal's other submodule, gtxaspec/ingenic-headers, is deliberately not
-# fetched: mk/sigmastar.mk overrides SDK_INCLUDE, and the -I for the Ingenic tree
-# is inside `ifneq ($(VENDOR),sigmastar)`, so nothing on these boards reads it.
-# An Ingenic raptor target here would need it added the same way.
+# raptor-hal has one such submodule per vendor and a build needs exactly the one
+# its backend reads: johnchia/sigmastar-headers for the MI backends, which reach
+# it as -Isigmastar-headers/<family> (mk/sigmastar.mk), and gtxaspec/ingenic-headers
+# for the Ingenic one, whose SDK_INCLUDE defaults to
+# ingenic-headers/$(PLATFORM)/<sdk-version>/<lang>. Fetching both would work and
+# is not free -- ingenic-headers carries every part from A1 to T41 -- so the
+# vendor picks, and each pin is read from the gitlink the same way.
+ifeq ($(OPENIPC_SOC_VENDOR),ingenic)
+RAPTOR_STREAMING_HEADERS_OWNER = gtxaspec
+RAPTOR_STREAMING_HEADERS_NAME = ingenic-headers
+RAPTOR_STREAMING_HEADERS_VERSION = f573958ebe2a851a6ba0493288b47bc0122daf36
+else
+RAPTOR_STREAMING_HEADERS_OWNER = johnchia
+RAPTOR_STREAMING_HEADERS_NAME = sigmastar-headers
 RAPTOR_STREAMING_HEADERS_VERSION = bec7aedf4e9f5a4a618fa580b19acca3ea691582
+endif
 
 RAPTOR_STREAMING_SITE = $(call github,johnchia,raptor,$(RAPTOR_STREAMING_VERSION))
 # All four repos are GPL-3.0, and each ships its own copy. Declaring MIT here
@@ -85,7 +96,7 @@ RAPTOR_STREAMING_EXTRA_DOWNLOADS = \
 	$(call github,johnchia,raptor-hal,$(RAPTOR_STREAMING_HAL_VERSION))/raptor-hal-$(RAPTOR_STREAMING_HAL_VERSION).tar.gz \
 	$(call github,johnchia,raptor-common,$(RAPTOR_STREAMING_COMMON_VERSION))/raptor-common-$(RAPTOR_STREAMING_COMMON_VERSION).tar.gz \
 	$(call github,johnchia,raptor-ipc,$(RAPTOR_STREAMING_IPC_VERSION))/raptor-ipc-$(RAPTOR_STREAMING_IPC_VERSION).tar.gz \
-	$(call github,johnchia,sigmastar-headers,$(RAPTOR_STREAMING_HEADERS_VERSION))/sigmastar-headers-$(RAPTOR_STREAMING_HEADERS_VERSION).tar.gz
+	$(call github,$(RAPTOR_STREAMING_HEADERS_OWNER),$(RAPTOR_STREAMING_HEADERS_NAME),$(RAPTOR_STREAMING_HEADERS_VERSION))/$(RAPTOR_STREAMING_HEADERS_NAME)-$(RAPTOR_STREAMING_HEADERS_VERSION).tar.gz
 
 # The source tree is the parent directory, so the main tarball must NOT be
 # flattened into it the way Buildroot flattens every other package: raptor has to
@@ -112,14 +123,20 @@ define RAPTOR_STREAMING_LAYOUT_SIBLINGS
 	$(call RAPTOR_STREAMING_UNPACK,raptor-hal,$(RAPTOR_STREAMING_HAL_VERSION),$(@D)/raptor-hal)
 	$(call RAPTOR_STREAMING_UNPACK,raptor-common,$(RAPTOR_STREAMING_COMMON_VERSION),$(@D)/raptor-common)
 	$(call RAPTOR_STREAMING_UNPACK,raptor-ipc,$(RAPTOR_STREAMING_IPC_VERSION),$(@D)/raptor-ipc)
-	$(call RAPTOR_STREAMING_UNPACK,sigmastar-headers,$(RAPTOR_STREAMING_HEADERS_VERSION),$(@D)/raptor-hal/sigmastar-headers)
+	$(call RAPTOR_STREAMING_UNPACK,$(RAPTOR_STREAMING_HEADERS_NAME),$(RAPTOR_STREAMING_HEADERS_VERSION),$(@D)/raptor-hal/$(RAPTOR_STREAMING_HEADERS_NAME))
 endef
 
 RAPTOR_STREAMING_POST_EXTRACT_HOOKS += RAPTOR_STREAMING_LAYOUT_SIBLINGS
 
-# The HAL dlopens the MI libraries rather than linking them, so this is an
-# install-order dependency rather than a link-time one: the vendor bundle and
-# the kernel modules have to be in the image for the daemons to do anything.
+# On SigmaStar the HAL dlopens the MI libraries rather than linking them, so the
+# osdrv entry is an install-order dependency rather than a link-time one: the
+# vendor bundle and the kernel modules have to be in the image for the daemons
+# to do anything. On Ingenic it is both -- the daemons carry -limp -lalog on
+# their link line -- which is why that package installs to staging as well.
+#
+# Spelled from the vendor and family rather than named, so the two osdrv
+# packages resolve from the defconfig: sigmastar-osdrv-infinity6c and
+# ingenic-osdrv-t31.
 #
 # faac and opus, by contrast, are genuine link-time dependencies -- of rad, and
 # now of rsd too. Upstream's AAC=1 declares both an encoder (-lfaac) and a
@@ -130,7 +147,16 @@ RAPTOR_STREAMING_POST_EXTRACT_HOOKS += RAPTOR_STREAMING_LAYOUT_SIBLINGS
 # carried -lhelix-aac all along. AAC=1 is one switch for the two libraries, so
 # an image that wants AAC out of rad has to supply the decoder as well.
 RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
-	sigmastar-osdrv-$(OPENIPC_SOC_FAMILY) faac helix-aac opus mosquitto
+	$(OPENIPC_SOC_VENDOR)-osdrv-$(OPENIPC_SOC_FAMILY) faac helix-aac opus mosquitto
+
+# The uClibc symbols Ingenic's libimp leaves undefined, which musl does not
+# define. raptor's Makefile looks for libmuslshim.a in the sysroot on its own
+# and links it with --whole-archive --export-dynamic; all this has to do is put
+# it there first. Conditional because a SigmaStar image links no vendor library
+# at all, and a uClibc image would want the other shim.
+ifeq ($(BR2_PACKAGE_INGENIC_MUSL_SHIM),y)
+RAPTOR_STREAMING_DEPENDENCIES += ingenic-musl-shim
+endif
 
 # libmdnsd, for finding a service on the LAN rather than being told where it is
 # -- rmq's broker address is the case in hand.
@@ -198,12 +224,12 @@ define RAPTOR_STREAMING_CHECK_SOURCE
 		echo "*** No Raptor source in $(@D) -- the extract hook did not run,"; \
 		echo "*** or the archive layout changed. Try a dirclean."; \
 		exit 1; }
-	test -n "$$(ls -A $(@D)/raptor-hal/sigmastar-headers 2>/dev/null)" || { \
-		echo "*** raptor-hal/sigmastar-headers is missing or empty."; \
-		echo "*** The MI declarations are a submodule of raptor-hal, and neither a"; \
-		echo "*** GitHub tarball nor a checkout that has not run 'git submodule"; \
-		echo "*** update' carries them. Without it the build fails one file at a"; \
-		echo "*** time on missing i6c_*.h."; \
+	test -n "$$(ls -A $(@D)/raptor-hal/$(RAPTOR_STREAMING_HEADERS_NAME) 2>/dev/null)" || { \
+		echo "*** raptor-hal/$(RAPTOR_STREAMING_HEADERS_NAME) is missing or empty."; \
+		echo "*** The vendor SDK declarations are a submodule of raptor-hal, and"; \
+		echo "*** neither a GitHub tarball nor a checkout that has not run 'git"; \
+		echo "*** submodule update' carries them. Without it the build fails one"; \
+		echo "*** file at a time on missing headers."; \
 		exit 1; }
 endef
 
@@ -285,6 +311,12 @@ define RAPTOR_STREAMING_INSTALL_TARGET_CMDS
 	$(INSTALL) -m 755 -d $(TARGET_DIR)/usr/share/raptor
 	$(INSTALL) -m 644 $(@D)/raptor/rhd/console.html \
 		$(TARGET_DIR)/usr/share/raptor/index.html
+	# The setup page, which rhd serves in place of the console when the boot
+	# path has put the camera in setup mode. Under its own name rather than
+	# swapped in: which of the two is served is decided per request, so both
+	# have to be on the flash at once.
+	$(INSTALL) -m 644 $(@D)/raptor/rhd/portal.html \
+		$(TARGET_DIR)/usr/share/raptor/portal.html
 	# rod's default OSD font path is /usr/share/fonts/default.ttf; point it at the
 	# UbuntuMono the majestic-fonts dependency already ships rather than shipping a
 	# second copy. Relative target so it resolves under any root.
