@@ -37,6 +37,7 @@ APCONF=/etc/wireless/ap-conf
 DHCP_CONF=/etc/wireless/udhcpd-portal.conf
 DNS_CONF=/etc/wireless/dnsd-portal.conf
 LEASES=/run/udhcpd-portal.leases
+SCAN_CACHE=/run/wifi-scan.cache
 RAPTOR_CONF=/etc/raptor.conf
 
 WPA=/usr/sbin/wpa_supplicant
@@ -120,7 +121,7 @@ ap_down() {
 	# any other, and a stale one is refused by the next supplicant with
 	# "ctrl_iface exists and seems to be in use - cannot override it".
 	# On a camera whose only interface is the radio, that is the camera.
-	rm -f "$CTRL/$IFACE" "/run/wpa_supplicant.$IFACE.pid"
+	rm -f "$CTRL/$IFACE" "/run/wpa_supplicant.$IFACE.pid" "$SCAN_CACHE"
 
 	ip route del "$SUBNET/$PREFIX" dev "$IFACE" 2>/dev/null
 	ip addr flush dev "$IFACE" 2>/dev/null
@@ -155,6 +156,27 @@ ap_up() {
 		say "the radio did not come up as an access point"
 		return 1
 	fi
+
+	# Keep the one scan this radio is going to do.
+	#
+	# wpa_supplicant scans while it is bringing the access point up, and
+	# that is the last scan there will be: once the radio is beaconing the
+	# driver will not leave the channel, so `wpa_cli scan` answers OK and
+	# no results ever arrive -- `iwlist` says it more plainly, "Interface
+	# doesn't support scanning". cfg80211 expires the entries from that
+	# first scan about two minutes later, and from then on the list is
+	# empty for the rest of the session. On a camera sitting in setup mode
+	# waiting for somebody to walk over with a phone, that is every
+	# session: the list was full in testing only because the tests looked
+	# within the first minute.
+	#
+	# So it is captured here, while it is still there, and rcd serves this
+	# when the radio has nothing live to offer. A snapshot is the honest
+	# answer -- the networks around a camera do not change much while
+	# somebody types a passphrase, and the page can always be told a name
+	# that is not in the list.
+	wpa_cli -p "$CTRL" -i "$IFACE" scan_results > "$SCAN_CACHE" 2>/dev/null
+	say "kept $(grep -c "	" "$SCAN_CACHE" 2>/dev/null) networks from the last scan"
 
 	ip link set "$IFACE" up
 	ip addr add "$ADDR/$PREFIX" dev "$IFACE" || return 1
