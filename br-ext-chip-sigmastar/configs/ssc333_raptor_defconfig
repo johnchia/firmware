@@ -156,18 +156,45 @@ BR2_OPENIPC_SNS_MODEL="sc3336"
 #
 # RAM IS THE OTHER CEILING, AND IT IS NOT A BUILD SETTING
 #
-# The bootloader hands Linux 27632 KB of the 64MB part, the rest being the 32MB
-# MMA carveout, and the SHM rings come out of that -- /dev/shm is real RAM, and
-# `Shmem:` reads 0 kB on this kernel, so do not measure it from free(1). The
-# shipped raptor.conf is sized for the 16MB boards and this one has no way to
-# override it: the config is global to the tree, which the raptor-streaming
-# package says outright. Two things to know before tuning one of these:
+# The bootloader hands Linux 27696 KB of the 64MB part -- that is MemTotal, the
+# rest being the 32MB MMA carveout -- and the SHM rings come out of it, because
+# /dev/shm is real RAM. It IS measurable, contrary to what this note used to
+# say: `Shmem:` in /proc/meminfo reports it and free(1)'s shared column carries
+# the same figure. Note that both count every tmpfs page rather than the rings
+# alone -- /tmp is tmpfs here too -- so `du -sk /dev/shm` is the number to read
+# when it is the rings you are sizing.
 #
-#   - the encode ceiling is 3MP @ 20fps, not 25;
-#   - a ring's slot is bitrate/fps, so LOWERING a stream's fps ENLARGES its
-#     ring. A 512kbps sub at 5fps wants 819KB a slot and hits the 4MiB cap even
-#     at 8 slots, where the same sub at the main's fps needs 1.6MB in total.
-#     `[ring] main_slots = 8` and `sub_slots = 8` are what this board wants.
+# The config is still global to the tree, which the raptor-streaming package
+# says outright, but the stock defaults no longer need a board override --
+# raptor sizes and gates these itself now, and this board runs the shipped
+# raptor.conf with no [stream0] block at all. What to know before tuning one:
+#
+#   - the vendor rates this part at 3MP @ 20fps and raptor warns above it, but
+#     the silicon beats its own rating: 2304x1296 H.264 at 30fps measures 901
+#     frames in 30s, no drops. Treat the rating as where to look when an
+#     encoder misbehaves, not as a number to configure down to pre-emptively.
+#
+#   - the JPEG encoder will not carry a 3MP snapshot channel while the H.264
+#     channel is also at 3MP, so raptor defaults [stream0] jpeg off here and
+#     snapshots come from the sub stream. Forcing it back on gets a channel
+#     that allocates its ring and then never produces a frame, behind a
+#     /snap.jpg that answers 503 after the client's timeout.
+#
+#   - a ring slot is bitrate/fps, so LOWERING a stream's fps ENLARGES its ring.
+#     Slots are a fixed FRAME count, which at a lower rate is a longer stretch
+#     of time and so more bytes: a 3Mbps main at 30fps takes 1.53MB, the same
+#     stream at 15fps takes 3.05MB.
+#
+#   - do NOT set `[ring] main_slots = 8`. This note used to recommend it, off
+#     an arithmetic slip: the "819KB a slot" it cited is the 8-slot TOTAL under
+#     raptor's old I-frame multiplier, not a per-slot size, and it never came
+#     near the 4MiB cap it claimed to hit. Slots are the retained-frame window
+#     a stalled client reads back through -- 32 is ~1.1s at 30fps, 8 would be
+#     ~0.27s -- and on a board whose only usable interface is WiFi, that
+#     cushion is what absorbs radio hiccups. The memory pressure behind the
+#     advice is gone regardless: raptor was sizing every ring as if for an
+#     all-intra stream, and now that it does not, the stock 32 slots cost less
+#     than 8 used to.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
 BR2_PACKAGE_IPCTOOL=y
 BR2_PACKAGE_JSONFILTER=y
