@@ -1,0 +1,227 @@
+# Architecture
+BR2_arm=y
+BR2_cortex_a7=y
+BR2_ARM_FPU_NEON_VFPV4=y
+BR2_ARM_INSTRUCTIONS_THUMB2=y
+
+# Toolchain
+#
+# musl, and that is the family's choice rather than this variant's: the
+# Infinity6B0 vendor libraries declare no libc at all and resolve plain POSIX
+# from whatever the process has already loaded, so they run under it. The
+# Infinity6E ones do not -- libmi_sys.so there carries NEEDED: libc.so.6 -- which
+# is why that family is glibc and this one is not. Do not build raptor for this
+# board with the 6E toolchain sitting on the same bench; a glibc-linked rvd does
+# not reach its entry point on this rootfs.
+#
+# One residue to know about rather than fix: libcam_os_wrapper.so wants __stdin
+# and __fgetc_unlocked, which are uClibc spellings that musl does not define and
+# nothing in the image supplies. They sit on a console/debug path that has never
+# run. If that library ever misbehaves around logging, this is why, and it will
+# not look like a libc problem from inside raptor.
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
+BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/openipc/firmware/releases/download/$(OPENIPC_TOOLCHAIN).tgz"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="arm-openipc-linux-musleabihf"
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_4_9=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_MUSL=y
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+
+# Kernel
+#
+# Upstream's, unlike the other two raptor targets, and the difference is worth
+# stating because it looks like an oversight.
+#
+# ssc30kq_raptor and ssc377qe_raptor build from a fork of openipc/linux for one
+# commit: /proc/flash_uid, the NOR part's factory unique ID, which rcS folds into
+# a MAC address so that every camera from one image does not answer to
+# 00:00:23:34:45:66. That commit is on the fork's sigmastar-infinity6c and
+# sigmastar-infinity6e branches. It is NOT on sigmastar-infinity6b0, which is
+# still commit-identical to upstream, so pointing this line at the fork would
+# fetch exactly the same source and only suggest otherwise.
+#
+# The consequence is confined to eth0. ethaddr_provision in rcS finds no
+# /proc/flash_uid, leaves the shared address alone, and the wired interface is
+# the same on every unit -- which on this board is a wired interface nobody
+# uses. wlan0 takes its address from the RTL8188FU's own EFUSE, so the radio,
+# the hostname and the setup access point's SSID are all per-unit regardless.
+#
+# Port the commit if a fleet ever needs distinct wired addresses: it is one
+# patch against drivers/sstar/flash, which this family has too.
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/$(OPENIPC_KERNEL).tar.gz"
+BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/infinity6b0-ssc009a.config"
+# Eight symbols off the shared config, all of them the NFS client, which is
+# 440KB of modules nothing on this board loads. A fragment rather than a
+# forked config so the other 3000 symbols keep following upstream; see the
+# file for the reasoning.
+BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/ssc333-raptor.fragment"
+BR2_LINUX_KERNEL_UIMAGE=y
+BR2_LINUX_KERNEL_XZ=y
+
+# Filesystem
+BR2_PACKAGE_BUSYBOX_CONFIG="$(BR2_EXTERNAL)/package/busybox/busybox.config"
+BR2_PACKAGE_ZLIB=y
+# BR2_PACKAGE_IFUPDOWN_SCRIPTS is not set
+# fw_printenv/fw_setenv, and not optional. S40network reads wlandev out of the
+# U-Boot environment to decide there is a radio at all, /etc/network/interfaces
+# reads wlanssid and wlanpass to join a network, and rcd asks the same question
+# to decide which interface the camera has. Without these the board has no
+# network path that anyone configures.
+BR2_PACKAGE_UBOOT_TOOLS=y
+BR2_TARGET_ROOTFS_CPIO=y
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+# Fail the build, not the flash, when the rootfs outgrows its partition. See the
+# ceiling note below for why 5120KB is the real number here.
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/ssc333-post-image.sh"
+
+# OpenIPC
+BR2_OPENIPC_SOC_VENDOR="sigmastar"
+BR2_OPENIPC_SOC_MODEL="ssc333"
+BR2_OPENIPC_SOC_FAMILY="infinity6b0"
+BR2_OPENIPC_VARIANT="raptor"
+BR2_OPENIPC_FLASH_SIZE="8"
+# A HARD CEILING, AND THE TIGHTEST OF ANY RAPTOR TARGET
+#
+# The 16MB boards state 8192 here because U-Boot reconfigures to a larger rootfs
+# once the squashfs crosses 5116KB (common/cmd_sf.c). That branch is unreachable
+# on 8MB: 256k boot + 64k env + 2048k kernel + 8192k rootfs is 10560k on an
+# 8192k part. So this board is on the small layout permanently --
+#
+#   0x00000000  256k  boot
+#   0x00040000   64k  env
+#   0x00050000 2048k  kernel
+#   0x00250000 5120k  rootfs
+#   0x00750000  704k  rootfs_data
+#
+# -- and 5120 is not a policy, it is the partition. It also happens to be what
+# ROOTFS_CAP_KB defaults to for an 8MB part, so this line changes nothing today;
+# it is here because the number is load-bearing and should not have to be
+# rederived from a conditional in the top-level Makefile.
+#
+# Every setting on the camera lives in the 704k of rootfs_data behind it, so a
+# rootfs that overruns does not fail to boot -- it eats the overlay, and the
+# symptom is settings that silently do not persist.
+BR2_OPENIPC_ROOTFS_PART_KB="5120"
+# One sensor, the SC3336 the bring-up board carries. This narrows /etc/sensors
+# from all fifteen tuning blobs to one, which is 1387KB of the 5120 -- on this
+# part that is not an optimisation, it is the difference between fitting and not.
+# raptor probes the sensor at runtime either way, so a board with a different
+# part still streams; it falls back to generic tuning and the colour is wrong.
+BR2_OPENIPC_SNS_MODEL="sc3336"
+
+# Packages
+#
+# Raptor owns the camera on this image: there is no Majestic and no Divinus, so
+# the OSDRV package installs the full Infinity6B0 vendor library bundle on its
+# own (see its BR2_PACKAGE_MAJESTIC condition) and the HAL dlopens what it needs
+# from there. That bundle is 1692KB of rootfs, of which libmi_ive.so alone is
+# 700KB and has no caller in this image -- the first lever to pull if this board
+# runs out of room, along with libmi_vdf, libmi_iqserver, libmi_ao, libmi_shadow,
+# libmi_divp and libMD_LINUX.
+#
+# Raptor is fetched from pinned commits on github.com/johnchia (the sigmastar
+# branches are not upstream yet), so this target builds with no checkout. To
+# build one instead:
+#
+#   make BOARD=ssc333_raptor RAPTOR_SRCDIR=/path/to/raptor-parent
+#
+# The HAL backend follows the family: infinity6b0 -> PLATFORM=INFINITY6B0, which
+# raptor-hal accepts and compiles from src/star/ against the infinity6e MI
+# headers. That header reuse is deliberate and upstream agrees with it -- 6, 6E
+# and 6B0 are one HAL with one struct set, and only 6C and M6 diverge.
+#
+# THE SHIPPED raptor.conf CARRIES NO BOARD SETTINGS
+#
+# Every image installs the generic raptor.conf; general/overlay/etc/raptor.conf
+# is what an image changes, and that is global rather than per-board. The IR-cut
+# GPIOs in particular are board wiring, not an SSC333 property, so nothing here
+# states them and nothing rediscovers them -- unset pins mean a filter that never
+# moves. Set them per camera in the overlay before trusting day/night.
+#
+# Dropped against ssc333_lite, and why: majestic and majestic-webui because
+# raptor replaces them; libevent, libogg, opus and yaml-cli because they were
+# majestic's dependencies (raptor pulls its own opus, and faac and helix-aac,
+# through the package); wireguard, exfat and vtund because none of them is on
+# this camera's path and the 5120KB above is spent elsewhere. libcurl stays:
+# sysupgrade's network path is built on it, and losing that would leave this
+# board upgradable only from a file already on it.
+#
+# libschrift (rod's glyph rasteriser) and majestic-fonts (the TrueType file it
+# loads) are pulled in by the Raptor package rather than listed here.
+#
+# RAM IS THE OTHER CEILING, AND IT IS NOT A BUILD SETTING
+#
+# The bootloader hands Linux 27632 KB of the 64MB part, the rest being the 32MB
+# MMA carveout, and the SHM rings come out of that -- /dev/shm is real RAM, and
+# `Shmem:` reads 0 kB on this kernel, so do not measure it from free(1). The
+# shipped raptor.conf is sized for the 16MB boards and this one has no way to
+# override it: the config is global to the tree, which the raptor-streaming
+# package says outright. Two things to know before tuning one of these:
+#
+#   - the encode ceiling is 3MP @ 20fps, not 25;
+#   - a ring's slot is bitrate/fps, so LOWERING a stream's fps ENLARGES its
+#     ring. A 512kbps sub at 5fps wants 819KB a slot and hits the 4MiB cap even
+#     at 8 slots, where the same sub at the main's fps needs 1.6MB in total.
+#     `[ring] main_slots = 8` and `sub_slots = 8` are what this board wants.
+BR2_PACKAGE_DROPBEAR_OPENIPC=y
+BR2_PACKAGE_IPCTOOL=y
+BR2_PACKAGE_JSONFILTER=y
+BR2_PACKAGE_LIBCURL_OPENIPC=y
+BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
+# BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
+BR2_PACKAGE_MBEDTLS_OPENIPC=y
+# mDNS-SD, so the camera answers to <hostname>.local and its services can be
+# found without knowing the address. On a camera whose only usable interface is
+# a DHCP-addressed radio, being findable by name is not a convenience.
+#
+# It is also how rmq finds the MQTT broker with no [mqtt] host configured, and
+# that half is a BUILD-TIME dependency: raptor's Makefile looks for libmdnsd in
+# the sysroot and compiles rmq's discovery to stubs when it is absent. Without
+# this line the camera does not fail to find a broker, it never looks.
+BR2_PACKAGE_MDNSD_OPENIPC=y
+# The client library only. rmq links libmosquitto, so the Raptor package depends
+# on mosquitto unconditionally and it is built for this target whether or not it
+# is selected here; selecting it is what makes the broker's `default y` visible
+# so it can be turned off.
+BR2_PACKAGE_MOSQUITTO=y
+# BR2_PACKAGE_MOSQUITTO_BROKER is not set
+BR2_PACKAGE_RAPTOR_STREAMING=y
+BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6B0=y
+
+# Wireless. The RTL8188FU over USB is the interface this camera is actually used
+# on -- the SoC has an EMAC and the board exposes no socket for it.
+#
+# `wlandev=rtl8188fu-generic` in the U-Boot environment is what selects the
+# bring-up in /etc/wireless/usb, and wlanssid/wlanpass are the credentials.
+# S40network takes an unset wlandev as "this board has no radio" and falls
+# through to eth0, so a unit flashed with an empty environment comes up with no
+# network at all. Setting it is part of provisioning a board, not of this build.
+BR2_PACKAGE_RTL8188FU_OPENIPC=y
+BR2_PACKAGE_WIRELESS_TOOLS=y
+BR2_PACKAGE_WPA_SUPPLICANT=y
+BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
+BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
+# Setup mode raises an access point of its own, and this is what lets the
+# supplicant be one: `mode=2` in a network block is rejected without it. No
+# hostapd, on the same reasoning as the T31 target -- one binary serves both
+# modes.
+#
+# The radio can do it. The vendor driver is not a mac80211 one, so this is worth
+# stating rather than assuming: 8188fu.ko on the bench board registers
+# rtw_cfg80211_ops and defines cfg80211_rtw_start_ap, and wlan0 has a phy80211
+# link, so it is a real cfg80211 phy that implements the AP entry point and
+# -D nl80211 is the right driver for it. What has not been done is drive it --
+# the lite image the bench board runs was built without this symbol, so its
+# supplicant refuses mode=2 before the driver is ever asked.
+#
+# general/package/rtw-hostapd exists for Realtek parts whose AP state machine
+# will not run in the supplicant, and is the fallback if /etc/wireless/setup-mode
+# comes up with no beacon.
+BR2_PACKAGE_WPA_SUPPLICANT_AP_SUPPORT=y

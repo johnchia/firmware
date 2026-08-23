@@ -25,17 +25,26 @@ from the network shares an address space with the vendor SDK.
 
 | Board | SoC | Family | Rootfs |
 |---|---|---|---|
-| `ssc377qe_raptor` | SSC377QE | infinity6c | 8192 KB |
-| `ssc30kq_raptor`  | SSC30KQ  | infinity6e | 8192 KB |
+| `ssc377qe_raptor` | SSC377QE | infinity6c  | 8192 KB |
+| `ssc30kq_raptor`  | SSC30KQ  | infinity6e  | 8192 KB |
+| `ssc333_raptor`   | SSC333   | infinity6b0 | 5120 KB |
 
-Both are NOR. `make list` shows every board in the tree, upstream's included.
+All three are NOR. `make list` shows every board in the tree, upstream's
+included.
 
-These two are the boards that get tested, not the limit of what works. The
+`ssc333_raptor` is the odd one and worth reading its defconfig before copying
+it: an 8MB part, where the other two are 16MB. U-Boot's two-layout rule cannot
+hand out the larger rootfs on a chip that small, so 5120 KB is the partition
+rather than a policy, and the image is built against that ceiling -- one sensor
+tuning blob, no WireGuard, no exFAT, no vtund. It is also the only one whose
+network is a USB radio (RTL8188FU) rather than Ethernet.
+
+These are the boards that get tested, not the limit of what works. The
 package picks its backend from `BR2_OPENIPC_SOC_FAMILY` and the HAL is written
-per family rather than per board, so **any infinity6c or infinity6e board
-should build and run** -- as should infinity6b0, which the HAL also covers.
-Adding one is a defconfig: copy the stock `_lite_defconfig` for that board,
-swap `BR2_PACKAGE_MAJESTIC` for `BR2_PACKAGE_RAPTOR_STREAMING`, and set
+per family rather than per board, so **any infinity6c, infinity6e or
+infinity6b0 board should build and run**. Adding one is a defconfig: copy the
+stock `_lite_defconfig` for that board, swap `BR2_PACKAGE_MAJESTIC` for
+`BR2_PACKAGE_RAPTOR_STREAMING`, and set
 `BR2_OPENIPC_VARIANT="raptor"`. What differs between boards of one family --
 sensor, i2c bus, IR-cut GPIO, audio codec -- lives in `raptor.conf` rather than
 in code, and the sensor is probed at runtime.

@@ -1,0 +1,25 @@
+# Kernel deltas for ssc333_raptor, applied on top of infinity6b0-ssc009a.config.
+#
+# A fragment rather than a forked config, because the delta is eight symbols
+# against three thousand and a copy would drift the moment upstream touched
+# theirs. Buildroot merges this after the base file, so anything not named here
+# is whatever the shared config says.
+#
+# THIS IS A SPACE CHANGE, NOT A FEATURE CHANGE
+#
+# The rootfs partition on this board is 5120KB and cannot grow -- see the
+# ceiling note in the defconfig. The NFS client is 440KB of that, in modules
+# nothing loads: no init script mounts an NFS share, /etc/fstab has none, and a
+# camera whose only interface is a 2.4GHz radio is not a plausible NFS client.
+# It is a module set the shared config carries for boards with room for it.
+#
+# If a board of this family ever does want NFS, it wants its own defconfig
+# without this fragment rather than a rootfs 440KB closer to the ceiling.
+# CONFIG_NFS_FS is not set
+# CONFIG_NFS_V2 is not set
+# CONFIG_NFS_V3 is not set
+# CONFIG_NFS_V4 is not set
+# CONFIG_NFSD is not set
+# CONFIG_LOCKD is not set
+# CONFIG_SUNRPC is not set
+# CONFIG_ROOT_NFS is not set
