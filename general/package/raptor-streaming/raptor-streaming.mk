@@ -199,6 +199,16 @@ RAPTOR_STREAMING_TOOLS = raptorctl
 # INFINITY6E, infinity6c -> INFINITY6C.
 RAPTOR_STREAMING_PLATFORM = $(shell echo $(OPENIPC_SOC_FAMILY) | tr '[:lower:]' '[:upper:]')
 
+# The part, passed alongside the family because some encoder facts do not
+# survive being generalised to one: ssc333, ssc335 and ssc337 are all
+# infinity6b0, and are rated 3M@20, 3M@30 and 5M@20 respectively. raptor keys
+# its per-part caps off this and treats an empty value as unmeasured, which is
+# the right answer for a family build, so this is unconditional.
+#
+# It has to come from the build because it cannot be read on the board: the
+# chip ID is family-wide, and ipctool reports model SSC33X for all three.
+RAPTOR_STREAMING_SOC_MODEL = $(OPENIPC_SOC_MODEL)
+
 # One config for every board. This used to pick a raptor-$(SOC_MODEL).conf when
 # raptor shipped one, which made the config a per-part fork that drifted from the
 # default it was copied from; raptor deleted those and this follows.
@@ -272,6 +282,7 @@ define RAPTOR_STREAMING_BUILD_CMDS
 	$(call RAPTOR_STREAMING_CLEAN_PRODUCTS)
 	$(TARGET_MAKE_ENV) $(MAKE) -C $(@D)/raptor \
 		PLATFORM=$(RAPTOR_STREAMING_PLATFORM) \
+		SOC_MODEL=$(RAPTOR_STREAMING_SOC_MODEL) \
 		AAC=1 OPUS=1 \
 		CROSS_COMPILE="$(TARGET_CROSS)" \
 		SYSROOT="$(STAGING_DIR)" \
