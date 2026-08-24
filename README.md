@@ -8,7 +8,7 @@ rebuilt.
 
 Everything that is not Raptor is upstream's. This fork tracks
 `OpenIPC/firmware` master and merges from it; the delta is a Raptor package,
-two board targets, and a few SigmaStar fixes. Bug reports about anything else
+three board targets, and a few SigmaStar fixes. Bug reports about anything else
 belong upstream.
 
 ![The Raptor configuration console](docs/console.png)
@@ -98,9 +98,9 @@ build already produced. See Installing for which of the two you want.
 
 ### Nightlies
 
-`.github/workflows/raptor-nightly.yml` builds both boards and publishes both
-artefacts to the rolling `raptor-nightly` release. It runs on a schedule but
-only builds when the image would actually differ: Raptor is four commit pins
+`.github/workflows/raptor-nightly.yml` builds all three boards and publishes
+their artefacts to the rolling `raptor-nightly` release. It runs on a schedule
+but only builds when the image would actually differ: Raptor is four commit pins
 rather than a moving branch, so an image is a function of this repository's
 HEAD, and the gate compares HEAD and the pin list against what the previous
 nightly recorded in its own release notes. A quiet week publishes nothing.
@@ -137,7 +137,10 @@ Two artefacts, and which you need depends on what the camera runs now:
 | `openipc-<soc>-nor-full.bin` | It runs the factory firmware, or the flash is in an unknown state. A whole-flash image, bootloader included, written with a programmer or from U-Boot. |
 
 Both come out of a local build, and both are published by the nightly on the
-rolling `raptor-nightly` release.
+rolling `raptor-nightly` release -- except on `ssc333_raptor`, which builds no
+bootloader and so has only the `.tgz`. That board joins its network on
+credentials held in the U-Boot environment, which a whole-flash write erases,
+and its only interface is the radio those credentials are for.
 
 `sysupgrade` takes the archive the build just produced. It checks the md5 of
 each part and the SoC each was stamped for, then pivots into a ramfs so it is

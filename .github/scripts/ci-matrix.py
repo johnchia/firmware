@@ -57,7 +57,7 @@ ALL_BOARDS = [
     # reason general/package/raptor-streaming and its five dependencies are
     # built by anything at all -- left out, the package checks below report each
     # of them as reaching no board.
-    "ssc377qe_raptor", "ssc30kq_raptor",
+    "ssc377qe_raptor", "ssc30kq_raptor", "ssc333_raptor",
     # Ingenic
     "t10_lite", "t20_lite", "t21_lite", "t30_lite", "t23_lite", "t31_lite", "t40_lite",
     # Hisilicon [HI3516AV100]
@@ -654,10 +654,10 @@ def self_test():
         # through a Config.in select; either one missing zeroes them out.
         (["general/package/uclibc-compat/src/uclibc-compat-static.c"],
          3, "reached via .mk _DEPENDENCIES"),
-        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 34,
-        # and the extra ten are two separate things:
+        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 35,
+        # and the extra eleven are two separate things:
         #
-        #   - the two raptor boards, which are SigmaStar and belong here;
+        #   - the three raptor boards, which are SigmaStar and belong here;
         #   - eight HiSilicon and Goke *ultimate* boards, which do not.
         #
         # The eight arrive through divinus. general/package/divinus/divinus.mk
@@ -672,7 +672,7 @@ def self_test():
         # recorded rather than the guard taught. Narrowing it means giving those
         # two lines a BR2_ symbol to hang on, in divinus.mk.
         (["general/package/sigmastar-osdrv-sensors/Config.in"],
-         34, "reached via Config.in select"),
+         35, "reached via Config.in select"),
         # Shared packages narrow too, just barely.
         (["general/package/majestic/majestic.mk"], 87, "majestic is nearly everywhere"),
         # Board configs and kernel configs.

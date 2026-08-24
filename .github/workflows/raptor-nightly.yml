@@ -1,4 +1,4 @@
-# Nightly images for this fork's two Raptor boards.
+# Nightly images for this fork's three Raptor boards.
 #
 # WHY THIS IS NOT build.yml
 #
@@ -6,7 +6,7 @@
 # `github.repository == 'OpenIPC/firmware'`, so its schedule deliberately does
 # nothing here -- a clone must not spend its owner's Actions minutes on a
 # ~96-board matrix unattended. That guard is right and is left alone. This
-# workflow is the fork's own nightly, for the two boards the fork adds, and it
+# workflow is the fork's own nightly, for the boards the fork adds, and it
 # carries the same guard pointed at this repository.
 #
 # Keeping it in a separate file also keeps the merge surface at zero. Upstream
@@ -111,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        board: [ssc377qe_raptor, ssc30kq_raptor]
+        board: [ssc377qe_raptor, ssc30kq_raptor, ssc333_raptor]
     env:
       BUILD_ID:  ${{ needs.gate.outputs.build_id }}
       BUILD_SHA: ${{ needs.gate.outputs.head_sha }}
@@ -164,8 +164,23 @@ jobs:
       # build writes, the same one OpenIPC's own published u-boot carries. To
       # keep a specific unit's proven bytes, pass SNI_REF=<dump of its mtd0> to
       # `make fullimage` locally instead.
+      #
+      # A target that does not build one gets the .tgz alone rather than
+      # failing the board. ssc333_raptor is that case: its only interface is
+      # the radio, and the credentials it joins a network with live in the
+      # U-Boot environment a full image erases, so a whole-flash write there
+      # produces a camera that has to be opened rather than reflashed. The
+      # condition reads the defconfig instead of naming boards, so a target
+      # that gains the package gains the image with it.
       - name: Full NOR image
-        run: make BOARD=${{ matrix.board }} fullimage
+        run: |
+          set -eu
+          cfg=$(ls br-ext-chip-*/configs/${{ matrix.board }}_defconfig)
+          if grep -q '^BR2_PACKAGE_SIGMASTAR_UBOOT=y' "$cfg"; then
+            make BOARD=${{ matrix.board }} fullimage
+          else
+            echo "no bootloader package in $cfg -- publishing the sysupgrade tarball only"
+          fi
 
       - name: Checksums
         run: |
@@ -229,7 +244,8 @@ jobs:
             "" \
             "\`.tgz\` upgrades a camera already running OpenIPC:" \
             "\`sysupgrade --archive=<file>\`. \`-nor-full.bin\` is a whole-flash" \
-            "image including the bootloader, for one that is not." \
+            "image including the bootloader, for one that is not -- carried for" \
+            "the boards whose defconfig builds a bootloader." \
             "" \
             "sha=${HEAD_SHA}" \
             "pins=${PINS}")
