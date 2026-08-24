@@ -5,14 +5,63 @@ BR2_mips_xburst=y
 BR2_MIPS_FP32_MODE_32=y
 
 # Toolchain
-BR2_TOOLCHAIN_EXTERNAL=y
-BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
-BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
-BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/openipc/firmware/releases/download/$(OPENIPC_TOOLCHAIN).tgz"
-BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="mipsel-openipc-linux-musl"
-BR2_TOOLCHAIN_EXTERNAL_HEADERS_3_10=y
-BR2_TOOLCHAIN_EXTERNAL_CUSTOM_MUSL=y
-BR2_TOOLCHAIN_EXTERNAL_CXX=y
+#
+# uClibc-ng, built here, rather than the prebuilt musl external toolchain the
+# rest of this vendor directory uses. The C library is not a preference on this
+# target -- it is the ABI the vendor libraries were compiled against, and they
+# are the whole reason the board is interesting.
+#
+# libimp.so, libalog.so and libsysutils.so carry no DT_NEEDED at all: every libc
+# entry point they use is left undefined for the global scope to satisfy, and
+# they were built against uClibc. `nm -D --undefined-only libimp.so` names
+# __assert, not __assert_fail, which is what says so. Three kinds of gap follow
+# from running them on musl, and only the first is a matter of missing symbols:
+#
+#   1. __assert, __fgetc_unlocked, __pthread_register_cancel,
+#      __pthread_unregister_cancel and __pthread_unwind_next do not exist in
+#      musl. A static shim linked --whole-archive --export-dynamic into every
+#      executable that loads libimp supplies them, which is what
+#      ingenic-musl-shim did.
+#   2. mmap, lseek and readdir have the same names in both libraries and
+#      different ABIs. musl's off_t is 64-bit everywhere, so mmap's sixth
+#      argument -- on the stack, in o32 -- is eight bytes where the vendor
+#      library pushes four, and lseek's third argument moves. A shim can only
+#      fix these by displacing musl's own implementations inside the
+#      executable, for every caller, not just the vendor library's.
+#   3. stat differs in struct layout, and cannot be fixed by a definition at
+#      all without knowing which of the two layouts the caller meant.
+#
+# uClibc-ng removes all three by construction: enabling LFS gives it mmap64 and
+# lseek64 as separate entry points and leaves the base names 32-bit, which is
+# exactly the shape the vendor library was compiled for. The shim is then not
+# needed, and neither is the class of bug it exists to paper over.
+#
+# The internal backend, not a prebuilt uClibc release, so the libc that the
+# image runs is the one this tree configured: NPTL rather than linuxthreads,
+# which the vendor libraries' __pthread_* imports require. t31glibc_lite is the
+# in-tree precedent for building an Ingenic toolchain here, and thingino's
+# xburst1 uClibc toolchain -- gcc, headers 3.10, WCHAR and LOCALE on -- is the
+# working reference for this exact SoC.
+BR2_TOOLCHAIN_BUILDROOT_VENDOR="openipc"
+BR2_TOOLCHAIN_BUILDROOT_UCLIBC=y
+BR2_KERNEL_HEADERS_VERSION=y
+BR2_DEFAULT_KERNEL_VERSION="3.10.14"
+BR2_PACKAGE_HOST_LINUX_HEADERS_CUSTOM_3_10=y
+BR2_GCC_VERSION_13_X=y
+BR2_PTHREADS_NATIVE=y
+BR2_TOOLCHAIN_BUILDROOT_WCHAR=y
+BR2_TOOLCHAIN_BUILDROOT_LOCALE=y
+BR2_TOOLCHAIN_BUILDROOT_CXX=y
+# Not optional, and not a preference. general/openipc.fragment sets
+# BR2_SSP_REGULAR for every board, and that option depends on
+# BR2_TOOLCHAIN_HAS_SSP -- which musl selects unconditionally and uClibc
+# selects only from here. Without this line kconfig drops BR2_SSP_REGULAR
+# without a word and the image is built with no stack protector at all.
+BR2_TOOLCHAIN_BUILDROOT_USE_SSP=y
+# uClibc's own ldd, which musl provided as a symlink to the loader. Worth the
+# few kilobytes on the first target here that runs vendor blobs it did not
+# link: "which libc symbol is missing" is the question this board asks.
+BR2_UCLIBC_INSTALL_UTILS=y
 
 # Kernel
 BR2_LINUX_KERNEL=y
@@ -52,17 +101,15 @@ BR2_OPENIPC_SNS_MODEL="gc2053"
 
 # Packages
 #
-# Raptor owns the camera on this image. Majestic is carried anyway, as the
-# reference encoder to cross-check against when the IMP stack refuses
-# something and it is not clear whether the fault is Raptor's or the SoC's --
-# worth more here than on SigmaStar, since this is the first Ingenic target in
-# this tree. It does not start on its own: the raptor-streaming post-build hook
-# renames S95majestic to K95majestic.
+# Raptor owns the camera on this image, and here it is the only thing that can:
+# no majestic. The other raptor targets carry it defused as the reference
+# encoder to cross-check against, but OpenIPC publishes one prebuilt majestic
+# per SoC family and it is linked against musl -- ELF interpreter
+# /lib/ld-musl-mipsel.so.1, DT_NEEDED libc.so -- so on a uClibc rootfs it does
+# not load at all. Carrying two megabytes of an eight-megabyte rootfs for a
+# binary that cannot start is worse than not having the cross-check.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
 BR2_PACKAGE_INGENIC_OSDRV_T31=y
-# The uClibc symbols libimp.so and libalog.so leave undefined. Without it every
-# daemon that links the HAL fails at relocation on this musl toolchain.
-BR2_PACKAGE_INGENIC_MUSL_SHIM=y
 BR2_PACKAGE_IPCTOOL=y
 BR2_PACKAGE_JSONFILTER=y
 BR2_PACKAGE_LIBCURL_OPENIPC=y
@@ -72,7 +119,6 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
 BR2_PACKAGE_LIBEVENT_OPENIPC=y
 BR2_PACKAGE_LIBOGG_OPENIPC=y
-BR2_PACKAGE_MAJESTIC=y
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
 # mDNS-SD, so the camera answers to <hostname>.local. On a wireless camera with
 # no Ethernet and a DHCP address, being findable by name is not a convenience.

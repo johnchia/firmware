@@ -152,8 +152,13 @@ RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
 # The uClibc symbols Ingenic's libimp leaves undefined, which musl does not
 # define. raptor's Makefile looks for libmuslshim.a in the sysroot on its own
 # and links it with --whole-archive --export-dynamic; all this has to do is put
-# it there first. Conditional because a SigmaStar image links no vendor library
-# at all, and a uClibc image would want the other shim.
+# it there first.
+#
+# Conditional, and no in-tree target selects it: a SigmaStar image links no
+# vendor library at all, and t31_raptor now builds a uClibc toolchain, where
+# the vendor libraries need nothing added. The shim only ever closed the
+# missing-symbol half of the gap -- mmap, lseek, stat and readdir have the same
+# names in both libraries and different ABIs, and no definition fixes that.
 ifeq ($(BR2_PACKAGE_INGENIC_MUSL_SHIM),y)
 RAPTOR_STREAMING_DEPENDENCIES += ingenic-musl-shim
 endif
