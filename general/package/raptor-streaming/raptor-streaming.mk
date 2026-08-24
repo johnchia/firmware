@@ -149,20 +149,6 @@ RAPTOR_STREAMING_POST_EXTRACT_HOOKS += RAPTOR_STREAMING_LAYOUT_SIBLINGS
 RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
 	$(OPENIPC_SOC_VENDOR)-osdrv-$(OPENIPC_SOC_FAMILY) faac helix-aac opus mosquitto
 
-# The uClibc symbols Ingenic's libimp leaves undefined, which musl does not
-# define. raptor's Makefile looks for libmuslshim.a in the sysroot on its own
-# and links it with --whole-archive --export-dynamic; all this has to do is put
-# it there first.
-#
-# Conditional, and no in-tree target selects it: a SigmaStar image links no
-# vendor library at all, and t31_raptor now builds a uClibc toolchain, where
-# the vendor libraries need nothing added. The shim only ever closed the
-# missing-symbol half of the gap -- mmap, lseek, stat and readdir have the same
-# names in both libraries and different ABIs, and no definition fixes that.
-ifeq ($(BR2_PACKAGE_INGENIC_MUSL_SHIM),y)
-RAPTOR_STREAMING_DEPENDENCIES += ingenic-musl-shim
-endif
-
 # libmdnsd, for finding a service on the LAN rather than being told where it is
 # -- rmq's broker address is the case in hand.
 #

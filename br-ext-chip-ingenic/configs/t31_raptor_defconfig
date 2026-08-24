@@ -20,8 +20,8 @@ BR2_MIPS_FP32_MODE_32=y
 #   1. __assert, __fgetc_unlocked, __pthread_register_cancel,
 #      __pthread_unregister_cancel and __pthread_unwind_next do not exist in
 #      musl. A static shim linked --whole-archive --export-dynamic into every
-#      executable that loads libimp supplies them, which is what
-#      ingenic-musl-shim did.
+#      executable that loads libimp is enough for these, and is as far as a
+#      shim can get.
 #   2. mmap, lseek and readdir have the same names in both libraries and
 #      different ABIs. musl's off_t is 64-bit everywhere, so mmap's sixth
 #      argument -- on the stack, in o32 -- is eight bytes where the vendor
