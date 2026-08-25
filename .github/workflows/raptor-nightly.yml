@@ -1,4 +1,4 @@
-# Nightly images for this fork's three Raptor boards.
+# Nightly images for this fork's four Raptor boards.
 #
 # WHY THIS IS NOT build.yml
 #
@@ -111,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        board: [ssc377qe_raptor, ssc30kq_raptor, ssc333_raptor]
+        board: [ssc377qe_raptor, ssc30kq_raptor, ssc333_raptor, t31_raptor]
     env:
       BUILD_ID:  ${{ needs.gate.outputs.build_id }}
       BUILD_SHA: ${{ needs.gate.outputs.head_sha }}
@@ -135,9 +135,12 @@ jobs:
           restore-keys: raptor-dl-
 
       # The Raptor tarballs are named by commit sha, so a stale cache cannot
-      # feed those an old revision -- but the image is not only Raptor. These
-      # boards pull sigmastar-osdrv-sensors, which upstream pins to HEAD, and a
-      # moving ref keeps a constant download filename. The cache key is the
+      # feed those an old revision -- but the image is not only Raptor. The
+      # SigmaStar boards pull sigmastar-osdrv-sensors, which upstream pins to
+      # HEAD, and a moving ref keeps a constant download filename. The delete
+      # is by filename pattern rather than by package, so it covers any other
+      # moving ref a board picks up later -- t31_raptor's ingenic-opensdk and
+      # atbm60xx among them. The cache key is the
       # month and actions/cache only saves on a miss, so that tarball would be
       # frozen for weeks and the nightly would quietly ship old vendor drivers.
       # Same reasoning and same patterns as build.yml's own purge step.
@@ -154,8 +157,9 @@ jobs:
           ln -sfn /tmp/ccache "$HOME/.ccache"
           make BOARD=${{ matrix.board }} all
 
-      # The bootloader is built by the defconfig (BR2_PACKAGE_SIGMASTAR_UBOOT),
-      # so this only assembles what is already in images/. It is worth carrying:
+      # The bootloader is built by the defconfig -- BR2_PACKAGE_SIGMASTAR_UBOOT
+      # on SigmaStar, BR2_TARGET_UBOOT on Ingenic -- so this only assembles
+      # what is already in images/. It is worth carrying:
       # a .tgz is a sysupgrade of a camera that already runs OpenIPC, while the
       # .bin is a whole-flash image for one that runs the factory firmware, or
       # whose flash is in an unknown state.
@@ -169,14 +173,22 @@ jobs:
       # failing the board. ssc333_raptor is that case: its only interface is
       # the radio, and the credentials it joins a network with live in the
       # U-Boot environment a full image erases, so a whole-flash write there
-      # produces a camera that has to be opened rather than reflashed. The
-      # condition reads the defconfig instead of naming boards, so a target
-      # that gains the package gains the image with it.
+      # produces a camera that has to be opened rather than reflashed.
+      #
+      # t31_raptor has the same shape and not the same consequence, which is
+      # why it builds one. Its environment is erased by a full write too and it
+      # is equally radio-only, but an unprovisioned Wyze v3 raises its own
+      # access point and serves the setup portal (S41setup), and the pinned
+      # bootloader can be driven from an SD card. A blanked unit there talks
+      # its way back; a blanked ssc333 has to be opened.
+      #
+      # The condition reads the defconfig instead of naming boards, so a target
+      # that gains a bootloader gains the image with it.
       - name: Full NOR image
         run: |
           set -eu
           cfg=$(ls br-ext-chip-*/configs/${{ matrix.board }}_defconfig)
-          if grep -q '^BR2_PACKAGE_SIGMASTAR_UBOOT=y' "$cfg"; then
+          if grep -qE '^BR2_(PACKAGE_SIGMASTAR_UBOOT|TARGET_UBOOT)=y' "$cfg"; then
             make BOARD=${{ matrix.board }} fullimage
           else
             echo "no bootloader package in $cfg -- publishing the sysupgrade tarball only"

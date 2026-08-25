@@ -58,8 +58,12 @@ ALL_BOARDS = [
     # built by anything at all -- left out, the package checks below report each
     # of them as reaching no board.
     "ssc377qe_raptor", "ssc30kq_raptor", "ssc333_raptor",
-    # Ingenic
+    # Ingenic. t31_raptor is a Raptor board and belongs with the three above by
+    # kind; it sits here because the vendor groupings are what a reader scans
+    # for, and it is the only Ingenic board that carries ingenic-uboot --
+    # left out, that package reaches no board and --self-test says so.
     "t10_lite", "t20_lite", "t21_lite", "t30_lite", "t23_lite", "t31_lite", "t40_lite",
+    "t31_raptor",
     # Hisilicon [HI3516AV100]
     "hi3516av100_lite", "hi3516av100_neo", "hi3516dv100_lite",
     # Hisilicon [HI3516CV100]
@@ -160,6 +164,15 @@ SMOKE_BOARDS = [
     "gk7205v200_lite",        # Goke
     "ssc338q_lite",           # SigmaStar
     "t31_lite",               # Ingenic, the only mips
+    # The only board in the matrix that builds its own toolchain rather than
+    # downloading one, and so the only one that can prove a CI-plumbing change
+    # still works for that shape. It is also the most expensive entry here by
+    # some way -- a gcc and uClibc bootstrap, not a package build -- and it is
+    # carried anyway because the trigger is narrow: SMOKE_WORKFLOWS is build.yml
+    # and raptor-nightly.yml, which change rarely, and the alternative is that
+    # an edit to either reaches master having never once run a from-source
+    # toolchain.
+    "t31_raptor",             # the only from-source toolchain (uClibc)
     "rv1126_lite",            # Rockchip, and UBI with no squashfs
     "gm8136_lite",            # GrainMedia, the only uclibc toolchain
     "nt98566_lite",           # Novatek
@@ -331,6 +344,20 @@ class Tree:
             found = re.search(rf'^{option}="([^"]*)"', body, re.M)
             return found.group(1) if found else "?"
 
+        # An external toolchain is named by its tuple. A board that builds its
+        # own has no prefix to read, and string() answers "?" for a symbol that
+        # is not there -- so keying on it alone puts every such board in the
+        # same bucket as a defconfig that is simply malformed. Name the libc
+        # instead: a toolchain compiled here, against the vendor's C library
+        # rather than a downloaded tarball, is the slowest and most fragile
+        # shape the matrix has, and the class should say so rather than shrug.
+        toolchain = string("BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX")
+        if toolchain == "?" and re.search(r"^BR2_TOOLCHAIN_BUILDROOT", body, re.M):
+            toolchain = "buildroot-" + next(
+                (libc for libc in ("uclibc", "musl", "glibc")
+                 if re.search(rf"^BR2_TOOLCHAIN_BUILDROOT_{libc.upper()}=y", body, re.M)),
+                "glibc")
+
         if re.search(r"^BR2_aarch64=y", body, re.M):
             architecture = "aarch64"
         elif re.search(r"^BR2_mips", body, re.M):
@@ -344,7 +371,15 @@ class Tree:
         return {
             "vendor:" + path[len(self.root) + 1:].split(os.sep)[0][len("br-ext-chip-"):],
             "arch:" + architecture,
-            "toolchain:" + string("BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX"),
+            # An external toolchain is named by its tuple. A board that builds
+            # its own has no prefix to read, and keying on the missing symbol
+            # put every such board in one nameless "toolchain:" bucket -- which
+            # is also the bucket a malformed defconfig lands in. Name the libc
+            # instead, so the class says what actually differs about the build:
+            # a toolchain compiled here, against the vendor's C library rather
+            # than a downloaded tarball, is the slowest and most fragile shape
+            # the matrix has and is worth being able to see.
+            "toolchain:" + toolchain,
             "rootfs:" + rootfs,
             "variant:" + string("BR2_OPENIPC_VARIANT"),
         }
