@@ -115,6 +115,13 @@ jobs:
     env:
       BUILD_ID:  ${{ needs.gate.outputs.build_id }}
       BUILD_SHA: ${{ needs.gate.outputs.head_sha }}
+      # Buildroot's default download directory is $(TOPDIR)/dl, and TOPDIR is
+      # the Buildroot source tree -- output/buildroot-<BR_VER>/dl, a path that
+      # moves every time the Makefile's BR_VER is bumped. Buildroot reads this
+      # environment variable before it reads .config, specifically so a caller
+      # can pin the directory; pinning it is what lets the cache step below
+      # name a path that does not rot.
+      BR2_DL_DIR: ${{ github.workspace }}/dl
     steps:
       - uses: actions/checkout@v4
 
@@ -127,12 +134,17 @@ jobs:
           path: /tmp/ccache
           key: raptor-${{ matrix.board }}-${{ env.CACHE_DATE }}
 
+      # Keyed per board rather than once for the matrix. The four jobs run in
+      # parallel and would otherwise race to save one key: actions/cache takes
+      # the first writer and the rest get a non-fatal conflict, so whichever
+      # board finished first would decide what the next run finds. Per board it
+      # is deterministic, and each entry holds only what that board fetches.
       - name: dl cache
         uses: actions/cache@v4
         with:
-          path: output/dl
-          key: raptor-dl-${{ env.CACHE_DATE }}
-          restore-keys: raptor-dl-
+          path: dl
+          key: raptor-dl-${{ matrix.board }}-${{ env.CACHE_DATE }}
+          restore-keys: raptor-dl-${{ matrix.board }}-
 
       # The Raptor tarballs are named by commit sha, so a stale cache cannot
       # feed those an old revision -- but the image is not only Raptor. The
@@ -144,11 +156,18 @@ jobs:
       # month and actions/cache only saves on a miss, so that tarball would be
       # frozen for weeks and the nightly would quietly ship old vendor drivers.
       # Same reasoning and same patterns as build.yml's own purge step.
+      #
+      # It runs unguarded on purpose. The `2>/dev/null || true` this used to
+      # carry is what let the wrong directory go unnoticed: find printed
+      # nothing because there was nothing at the path, and a purge that never
+      # purged looked exactly like a purge with nothing to do.
       - name: Refresh moving-ref package downloads
         run: |
-          find output/dl -type f -regextype posix-extended \
+          set -eu
+          mkdir -p "$BR2_DL_DIR"
+          find "$BR2_DL_DIR" -type f -regextype posix-extended \
             -regex '.*[-.](HEAD|master|main|dist)\.tar\.(gz|bz2|xz)' \
-            -print -delete 2>/dev/null || true
+            -print -delete
 
       - name: Build
         run: |
