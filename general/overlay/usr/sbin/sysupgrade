@@ -480,6 +480,15 @@ free_resources() {
 		sleep 1
 	fi
 	/etc/init.d/S99rc.local stop
+	# Raptor is the streamer on the boards that carry it, so it holds what
+	# majestic holds elsewhere and has to go the same way. A plain stop, not
+	# majestic's gutting: no console here drives an upgrade the way
+	# /ws/upgrade does, so there is nothing left to keep alive for. Its stop
+	# also unlinks /dev/shm/rss_ring_*, and that is tmpfs -- the video rings
+	# come back as free RAM to unpack the image into, which is the whole point
+	# of this function on a 64MB board. Guarded because most images have no
+	# such script.
+	[ -x /etc/init.d/S95raptor ] && /etc/init.d/S95raptor stop
 	/etc/init.d/S60crond stop
 	/etc/init.d/S49ntpd stop
 	/etc/init.d/S02klogd stop
@@ -501,7 +510,8 @@ free_resources() {
 #
 # free_resources runs before the download, because dropping the page cache is
 # how a small camera finds the RAM to unpack the image -- so by the time a
-# download or checksum fails, syslog, klogd, ntpd and cron are already stopped.
+# download or checksum fails, syslog, klogd, ntpd, cron -- and the streamer on a
+# Raptor board -- are already stopped.
 # The reboot used to hide that: everything came back on the way up. Now that a
 # pre-flash failure leaves the camera running, it has to be undone explicitly,
 # or a refused upgrade silently costs the user their logging and their cron jobs
@@ -512,7 +522,7 @@ restore_resources() {
 	[ "1" = "$services_stopped" ] || return 0
 	echo_c 37 "\nRestarting the services stopped for the upgrade"
 	local s
-	for s in S01syslogd S02klogd S49ntpd S60crond S99rc.local; do
+	for s in S01syslogd S02klogd S49ntpd S60crond S95raptor S99rc.local; do
 		[ -x /etc/init.d/$s ] && /etc/init.d/$s start >/dev/null 2>&1
 	done
 	# majestic needs restarting, not starting: it is still running, just gutted.
