@@ -900,7 +900,7 @@ echo "=== Part 2: invariants in $SRC ==="
 # --connect-timeout and --speed-limit/--speed-time are curl's, not ours.
 for opt in $(grep -oE '\-\-[a-z_]+' "$SRC" | sort -u); do
     case "$opt" in
-        --force_*|--wipe_overlay|--no_reboot|--no_update|--no_ramfs|--help|--web|--url|--archive|--kernel|--rootfs|--channel|--build|--list*|--connect*|--speed*) continue ;;
+        --force_*|--wipe_overlay|--no_reboot|--no_update|--self_update|--no_ramfs|--help|--web|--url|--archive|--kernel|--rootfs|--channel|--build|--list*|--connect*|--speed*) continue ;;
     esac
     bad "message references '$opt', which the option parser does not accept"
 done

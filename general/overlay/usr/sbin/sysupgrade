@@ -823,8 +823,15 @@ sync_time() {
 	echo_c 33 "$(date)"
 }
 
+# Does this run fetch anything over the network? -k/-r/--url/--channel/--build
+# do; an image named as a file on the command line does not. Kept as a test on
+# $args, which is what the self-update check has always keyed on.
+remote_op() {
+	echo "$args" | grep -E "\-(k|r|w|url|channel|build)" >/dev/null 2>&1
+}
+
 self_update() {
-	if echo "$args" | grep -E "\-(k|r|w|url|channel|build)" >/dev/null 2>&1; then
+	if remote_op; then
 		sync_time
 		# The WebUI flow must not re-exec a freshly downloaded sysupgrade: a
 		# pre-patch master copy would reject --web. Time is synced; carry on.
@@ -837,7 +844,11 @@ self_update() {
 				echo "A new version is available, trying to activate updated script..."
 				chmod +x /tmp/sysupgrade
 				echo -e "Done. Restarting...\n"
-				exec /tmp/sysupgrade $args
+				# Without --self_update, which is this fork's and which the
+				# script now taking over has never heard of: it parses its
+				# arguments before it does anything, and rejects an unknown one
+				# outright. The flag has already done its work by here.
+				exec /tmp/sysupgrade $(echo "$args" | sed 's/--self_update//')
 				exit 1
 			else
 				echo "Same version. No update required."
@@ -991,7 +1002,9 @@ Where:
   -x, --no_reboot       Do not reboot after updating. Ignored when the update
                         rewrites the flash the camera is running from, which
                         no running system survives.
-  -z, --no_update       Do not update self.
+  -z, --no_update       Do not update self. Accepted, and the default.
+      --self_update     Replace this script with OpenIPC's before upgrading.
+                        Off by default here: this copy is not upstream's.
       --no_ramfs        Flash from the rootfs instead of moving into RAM first.
                         Reinstates the failure this guards against; for board
                         bring-up only.
@@ -1129,7 +1142,7 @@ for i in "$@"; do
 			update_kernel=1
 			update_rootfs=1
 			remote_update=1
-			skip_selfupdate=1
+			want_selfupdate=
 			archive="${i#*=}"
 			shift
 			;;
@@ -1159,8 +1172,15 @@ for i in "$@"; do
 			shift
 			;;
 
+		--self_update)
+			want_selfupdate=1
+			shift
+			;;
+
+		# Now the default, and still accepted: it is what every existing caller
+		# and every set of written-down instructions passes to get it.
 		-z | --no_update)
-			skip_selfupdate=1
+			want_selfupdate=
 			shift
 			;;
 
@@ -1240,7 +1260,21 @@ fi
 	echo_c 37 "\nTry '$(basename "$0") --help' for options." &&
 	exit 0
 
-[ "1" != "$skip_selfupdate" ] && self_update
+# Self-update is opt-in here, where upstream has it on by default. What it
+# fetches is OpenIPC's copy of this script, and this one is not that copy:
+# everything the fork has taught it -- stopping Raptor along with the other
+# services, for one -- is replaced mid-run by a version that never heard of it,
+# and what flashed the camera is then not what the operator read. --self_update
+# asks for it in the case where being handed upstream's script is the point.
+#
+# The clock still gets set. sync_time is the half of this that every fetch
+# below wants, and losing it was only ever a side effect of not self-updating:
+# -z meant no new script AND no time sync.
+if [ "1" = "$want_selfupdate" ]; then
+	self_update
+elif remote_op; then
+	sync_time
+fi
 
 create_lock
 free_resources
