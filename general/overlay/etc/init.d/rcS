@@ -199,7 +199,7 @@ ethaddr_provision() {
 }
 
 # ---------------------------------------------------------------------------
-# A NAME OF ITS OWN: openipc-<soc>-<last 4 hex of the MAC>
+# A NAME OF ITS OWN: openipc-<soc>-<sensor>-<last 4 hex of the MAC>
 # ---------------------------------------------------------------------------
 #
 # The packaged hostname is BR2_TARGET_GENERIC_HOSTNAME, "openipc-$(SOC_MODEL)",
@@ -207,10 +207,21 @@ ethaddr_provision() {
 # then the same host by name -- in a lease table, in syslog, and at a shell
 # prompt, which is where it bites with two boards on the desk.
 #
-# The MAC is the identity that is already per-unit, so the suffix is taken from
-# there rather than invented and stored. Nothing is generated and nothing
+# The sensor is what upstream names a camera after, and it is the field that
+# says what the box is: two SoC-identical cameras are usually two different
+# products, and the sensor is the difference. It cannot be the whole name,
+# because it is a model and not a unit -- four cameras of one model share it.
+#
+# The MAC is the identity that is already per-unit, so the last field is taken
+# from there rather than invented and stored. Nothing is generated and nothing
 # persisted that could drift: the name is a function of the hardware and comes
 # out the same on every boot, including after a firstboot wipe.
+#
+# The sensor field is optional, because the sensor is not known as early as the
+# MAC: the vendor load script detects it and writes it to the environment at
+# S70, so a unit flashed for the first time reads back nothing here. That boot
+# gets openipc-<soc>-<mac4>, and the next one -- deriving from the packaged name
+# again, not from what it wrote -- fills the sensor in.
 #
 # busybox is built with CONFIG_IFUPDOWN_UDHCPC_CMD_OPTIONS="-x
 # hostname:$(hostname) ...", so ifup already tells the DHCP server what this
@@ -221,9 +232,10 @@ ethaddr_provision() {
 # no MAC simply keeps the packaged name.
 #
 # This is also why the overlay carries no init.d script that names the camera:
-# one would run in the S?? loop below, after this, and a name derived from the
-# SoC and sensor is shared by every unit of the same model -- which is the
-# collision this replaces, arriving one step later.
+# one would run in the S?? loop below, after this, and replace a name that is
+# per-unit with one every unit of the model shares -- the collision this exists
+# to remove, arriving one step later. Upstream's convention is adopted here as
+# the sensor field instead, which is the part of it that carries information.
 
 HOSTNAME_FILE=/etc/hostname
 HOSTS_FILE=/etc/hosts
@@ -263,6 +275,53 @@ mac_suffix() {
 	esac
 }
 
+# The sensor the vendor load script wrote to the environment, normalised the way
+# `show_fullname` in /etc/profile normalises it, so the two agree on what a
+# sensor is called: lowercase, everything from the first underscore dropped
+# (imx307_2l is an imx307), and anything left that is not a letter or digit
+# removed. Empty is a valid answer -- see the note above on S70.
+sensor_name() {
+	echo "$SENSOR" | tr 'A-Z' 'a-z' | sed -e 's/_.*$//' -e 's/[^a-z0-9]//g'
+}
+
+# Whether a name is one this script may replace: the packaged name, or the
+# packaged name with a suffix of its own on it -- <mac4>, or <sensor>-<mac4>
+# from a boot where the sensor was already known.
+#
+# `set_fullname` in /etc/profile writes <soc>-<sensor>, and someone may simply
+# have chosen a name; overwriting either on every boot would make the setting
+# look broken. Hence the exactness of the match -- four hex digits rather than
+# four of anything, and a sensor field that is one unbroken run of letters and
+# digits -- so that a chosen name which happens to start with the packaged
+# prefix is still left alone.
+hostname_owned() {
+	local name=$1
+	local base=$2
+	local rest=
+
+	[ "$name" = "$base" ] && return 0
+
+	case "$name" in
+		"$base"-*) rest=${name#"$base"-} ;;
+		*) return 1 ;;
+	esac
+
+	case "$rest" in
+		# openipc-<soc>-<mac4>: the sensor was not known when it was written.
+		[0-9a-f][0-9a-f][0-9a-f][0-9a-f]) return 0 ;;
+		*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+		*) return 1 ;;
+	esac
+
+	# Whatever precedes the MAC has to look like a sensor and nothing else. A
+	# name with a second dash in it was written by a person, not by this.
+	case "${rest%-*}" in
+		'' | *[!a-z0-9]*) return 1 ;;
+	esac
+
+	return 0
+}
+
 # Buildroot writes the packaged hostname into /etc/hosts as well, as the
 # 127.0.1.1 entry -- the Debian convention that lets the machine resolve its own
 # name. Renaming the host without it leaves that line pointing at a name nothing
@@ -282,10 +341,7 @@ update_hosts() {
 	[ -z "$current" ] && return 0
 	[ "$current" = "$want" ] && return 0
 
-	case "$current" in
-		"$base" | "$base"-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-		*) return 0 ;;
-	esac
+	hostname_owned "$current" "$base" || return 0
 
 	tab=$(printf '\t')
 	sed -i "s|^127\.0\.1\.1[[:space:]].*|127.0.1.1${tab}${want}|" "$HOSTS_FILE"
@@ -294,6 +350,7 @@ update_hosts() {
 hostname_derive() {
 	local base=
 	local current=
+	local sensor=
 	local suffix=
 	local want=
 
@@ -303,19 +360,12 @@ hostname_derive() {
 	[ -r "$HOSTNAME_ROM" ] && read -r base < "$HOSTNAME_ROM"
 	[ -z "$base" ] && return 0
 
-	want="$base-$suffix"
+	sensor=$(sensor_name)
+	want="$base${sensor:+-$sensor}-$suffix"
 
 	[ -r "$HOSTNAME_FILE" ] && read -r current < "$HOSTNAME_FILE"
 
-	# Only the packaged name and a name this wrote are ours to replace.
-	# `set_fullname` in /etc/profile writes openipc-<chip>-<sensor>, and someone
-	# may simply have chosen a name; overwriting either on every boot would make
-	# the setting look broken. The pattern is four hex digits rather than four of
-	# anything, so a short sensor name cannot be mistaken for our own suffix.
-	case "$current" in
-		"$base" | "$base"-[0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-		*) return 0 ;;
-	esac
+	hostname_owned "$current" "$base" || return 0
 
 	echo "Setting hostname to $want"
 	hostname "$want"
