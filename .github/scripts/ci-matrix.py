@@ -92,7 +92,7 @@ ALL_BOARDS = [
     # via gk7205v200's BR2_OPENIPC_SOC_ALIASES (manifest @alias).
     "gk7202v300_lite", "gk7205v200_lite", "gk7205v300_lite", "gk7605v100_lite",
     # Goke [GK7205V500]
-    "gk7205v500_lite",
+    "gk7201v200_lite", "gk7205v500_lite", "gk7205v510_lite",
     # Allwinner
     "v851s_lite",
     # Fullhan
@@ -115,21 +115,85 @@ ALL_BOARDS = [
     "hi3516cv300_ultimate", "hi3516ev200_ultimate", "hi3516ev300_ultimate",
     "hi3518ev300_ultimate", "hi3516av200_ultimate",
     "gk7202v300_ultimate", "gk7205v200_ultimate", "gk7205v300_ultimate",
+    "gk7205v500_ultimate",
 ]
+
+# Defconfigs that exist and are deliberately NOT built, each with the reason.
+#
+# ALL_BOARDS is hand-maintained, and --self-test used to check it in one
+# direction only: every name here must have a defconfig. Nothing checked the
+# reverse, so a defconfig added to a family that was already in the matrix ---
+# gk7205v500_ultimate and gk7205v510_lite, say, both landed after their family
+# --- was simply never built, and nothing said so. UNBUILT_FAMILIES catches a
+# whole family falling out; it cannot see one board inside a family that builds.
+#
+# So the contract is now total: every defconfig is either built, or in a family
+# named in UNBUILT_FAMILIES, or named here with a reason. Silence is no longer
+# an option, which is the actual fix --- the list below is just today's answer.
+UNBUILT_BOARDS = {
+    # Firmware-identical to a board that IS built, and served from it via
+    # BR2_OPENIPC_SOC_ALIASES (manifest @alias). Building them would ship two
+    # bit-identical images under different names. These two were already
+    # explained in prose beside ALL_BOARDS; now they are checked.
+    "gk7205v210_lite": "alias of gk7205v200_lite",
+    "xm550_lite": "alias of xm530_lite",
+
+    # Variants outside the lite/ultimate/neo set the matrix is built around.
+    # Per the firmware-vs-builder split, the extra variants are OpenIPC/builder's
+    # to publish, and this repo builds the standard ones.
+    "gk7205v200_original": "variant 'original', not a standard matrix variant",
+    "hi3516ev300_dev": "variant 'dev', not a standard matrix variant",
+    "hi3516ev300_glibc": "variant 'glibc', not a standard matrix variant",
+    "t31glibc_lite": "glibc toolchain variant of t31_lite",
+
+    # Not firmware images at all: no BR2_OPENIPC_VARIANT, so nothing the repack
+    # step or the manifest knows how to name.
+    "hi3519dv500_toolchain": "toolchain config, produces no firmware image",
+    "s2l22m_lite": "no variant set; Ambarella S2L has no board directory",
+    "s2l33m_lite": "no variant set; Ambarella S2L has no board directory",
+
+    # These are real boards, and this is a COST decision rather than a technical
+    # one, so it is the entry most worth arguing with. Every one of them sets
+    # BR2_TOOLCHAIN_BUILDROOT_MUSL instead of BR2_TOOLCHAIN_EXTERNAL: it
+    # compiles a GCC and a musl from source before it starts on the firmware,
+    # tens of minutes each, against ~6 for a board that downloads its toolchain.
+    # Adding all seven would cost more runner time than a large part of the rest
+    # of the matrix, on every PR that touches a shared path.
+    #
+    # It is the same trade the SMOKE_BOARDS comment above makes deliberately,
+    # and it is one edit to reverse: move a name from here into ALL_BOARDS and
+    # it builds. Note what this does NOT say --- none of these has ever been
+    # built by CI, so "not built" is a statement about cost, not evidence that
+    # they work.
+    "fh8852v210_lite": "internal toolchain: builds gcc+musl from source",
+    "fh8856v100_lite": "internal toolchain: builds gcc+musl from source",
+    "fh8856v200_lite": "internal toolchain: builds gcc+musl from source",
+    "fh8856v210_lite": "internal toolchain: builds gcc+musl from source",
+    "fh8858v200_lite": "internal toolchain: builds gcc+musl from source",
+    "fh8858v210_lite": "internal toolchain: builds gcc+musl from source",
+    "hi3518ev201_lite": "internal toolchain: builds gcc+musl from source",
+
+    # This fork's own. The Divinus target came first and ssc30kq_raptor
+    # replaced it on the same board; it stays for comparison against Raptor,
+    # and a matrix slot for a second image of the same camera is not worth
+    # the runner time.
+    "ssc30kq_divinus": "superseded on this board by ssc30kq_raptor",
+}
 
 # Workflows that cannot change what a firmware image contains. Matched on the
 # whole filename, never as a prefix: a workflow this list has never heard of is
 # unknown, and unknown widens. Skipping the matrix for something that does feed
 # the build is the one direction this must never fail in.
 NO_BUILD_WORKFLOWS = {
-    "build-one.yml", "cleanup.yml", "gcc-compat.yml", "image.yml", "manifest.yml",
-    "qodo-gate.yml", "shell-tests.yml", "toolchain.yml", "uboot.yml",
+    "build-one.yml", "cleanup.yml", "gcc-compat.yml", "image.yml", "lint.yml",
+    "manifest.yml", "qodo-gate.yml", "shell-tests.yml", "toolchain.yml",
+    "uboot.yml",
 }
 
 # Same for .github/scripts/.
 NO_BUILD_SCRIPTS = {
-    "enrich_manifest.py", "test_load_hisilicon.sh", "test_shell_parse.sh",
-    "test_sysupgrade.sh",
+    "build-summary.py", "enrich_manifest.py", "lint-workflow-shell.py",
+    "test_load_hisilicon.sh", "test_shell_parse.sh", "test_sysupgrade.sh",
 }
 
 # CI plumbing: it decides how the build runs but cannot change a byte of what
@@ -610,6 +674,30 @@ def self_test():
                 f"{vendor_dir}/board/{family}/ backs no board in ALL_BOARDS; add it "
                 f"to UNBUILT_FAMILIES if that is deliberate")
 
+    # 2b. And the same contract one level down, per defconfig. Check 2 works on
+    #     board DIRECTORIES, so it only ever noticed a whole family leaving the
+    #     matrix; a board added to a family that was already built was invisible
+    #     to it. Nineteen defconfigs had accumulated that way.
+    for board in sorted(tree.boards):
+        if board in tree.built or board in UNBUILT_BOARDS:
+            continue
+        info = tree.boards[board]
+        if (info["vendor_dir"], info["family"]) in UNBUILT_FAMILIES:
+            continue
+        problems.append(
+            f"{board} has a defconfig but nothing builds it; add it to ALL_BOARDS, "
+            f"or to UNBUILT_BOARDS with the reason if that is deliberate")
+    # The reverse, so the list cannot rot into a set of names that explain
+    # nothing: an entry that got deleted, renamed, or quietly promoted.
+    for board, reason in sorted(UNBUILT_BOARDS.items()):
+        if board not in tree.boards:
+            problems.append(f"{board} is in UNBUILT_BOARDS but has no defconfig; drop it")
+        elif board in tree.built:
+            problems.append(
+                f"{board} is in UNBUILT_BOARDS but ALL_BOARDS builds it; drop it")
+        elif not reason.strip():
+            problems.append(f"{board} is in UNBUILT_BOARDS with no reason given")
+
     # 3. Same contract for packages. This is the check that catches a defconfig
     #    or a _DEPENDENCIES edit quietly taking a package out of the matrix.
     for path in sorted(glob.glob(f"{REPO_ROOT}/general/package/*/")):
@@ -689,13 +777,13 @@ def self_test():
         # through a Config.in select; either one missing zeroes them out.
         (["general/package/uclibc-compat/src/uclibc-compat-static.c"],
          3, "reached via .mk _DEPENDENCIES"),
-        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 35,
-        # and the extra eleven are two separate things:
+        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 36,
+        # and the extra twelve are two separate things:
         #
         #   - the three raptor boards, which are SigmaStar and belong here;
-        #   - eight HiSilicon and Goke *ultimate* boards, which do not.
+        #   - nine HiSilicon and Goke *ultimate* boards, which do not.
         #
-        # The eight arrive through divinus. general/package/divinus/divinus.mk
+        # The nine arrive through divinus. general/package/divinus/divinus.mk
         # adds `DIVINUS_DEPENDENCIES += sigmastar-osdrv-infinity6e compy` inside
         # a conditional on $(OPENIPC_SOC_MODEL)-$(OPENIPC_VARIANT), and the
         # dependency reader here only records a guard when it is a BR2_ symbol.
@@ -707,9 +795,9 @@ def self_test():
         # recorded rather than the guard taught. Narrowing it means giving those
         # two lines a BR2_ symbol to hang on, in divinus.mk.
         (["general/package/sigmastar-osdrv-sensors/Config.in"],
-         35, "reached via Config.in select"),
+         36, "reached via Config.in select"),
         # Shared packages narrow too, just barely.
-        (["general/package/majestic/majestic.mk"], 87, "majestic is nearly everywhere"),
+        (["general/package/majestic/majestic.mk"], 88, "majestic is nearly everywhere"),
         # Board configs and kernel configs.
         (["br-ext-chip-goke/configs/gk7205v200_lite_defconfig"], 1, "one defconfig"),
         (["br-ext-chip-hisilicon/board/hi3516ev200/hi3516ev300.generic.config"],
@@ -761,6 +849,8 @@ def self_test():
         (["CLAUDE.md"], 0, "agent instructions are markdown"),
         ([".github/workflows/qodo-gate.yml"], 0, "review gate never builds"),
         ([".github/scripts/test_sysupgrade.sh"], 0, "shell-tests fixture"),
+        ([".github/workflows/lint.yml"], 0, "the workflow linter never builds"),
+        ([".github/scripts/lint-workflow-shell.py"], 0, "its script"),
         ([".github/PULL_REQUEST_TEMPLATE.md"], 0, "PR template"),
         (["contrib/openipc-bisect/openipc-bisect"], 0, "developer tooling"),
         ([".pr_agent.toml", "docs/architecture.md"], 0, "review config plus docs"),
@@ -771,7 +861,7 @@ def self_test():
         (["LICENSES/vendor.txt"], full, "LICENSES/ is not the licence file"),
         (["READMEgenerator.c"], full, "README prefix is not a readme"),
         (["general/package/majestic/README.md"],
-         87, "markdown inside a package is that package"),
+         88, "markdown inside a package is that package"),
         (["br-ext-chip-hisilicon/board/hi3516ev200/NOTES.md"],
          8, "markdown inside a board dir is that family"),
         (["general/scripts/pr_compliance_checklist.yaml"],

@@ -1,6 +1,6 @@
 #!/bin/sh
 # OpenIPC.org | 2025
-scr_version=1.0.60
+scr_version=1.0.62
 
 args="$@"
 LOCK_FILE=/tmp/sysupgrade.lock
@@ -312,10 +312,69 @@ do_update_firmware() {
 	echo_c 32 "Firmware updated"
 }
 
+# Stop the kernel writing to the overlay before erasing the medium under it.
+#
+# do_wipe_overlay hands flash_eraseall a partition that is still a mounted, RW
+# jffs2 with its garbage-collect thread running, so two agents end up erasing and
+# writing the same medium at once. Both notice. The GC thread walks a filesystem
+# that is being deleted under it -- "Node header CRC failed ... {ffff,ffff,...}",
+# "Node totlen on flash (0xffffffff) != totlen from node ref", and inodes lost
+# outright to "no data nodes found for ino #20" -- while jffs2's own erase path
+# reads back a block it has just erased and finds someone else's cleanmarker in
+# it: "Newly-erased block contained word 0x20031985" (magic 0x1985, nodetype
+# 0x2003 -- the marker `flash_eraseall -j` writes).
+#
+# The same applies to a ubifs overlay on a NAND camera -- a background thread
+# and a live medium being erased under it -- so both spellings are handled below.
+#
+# The overlay cannot be unmounted. It is the upperdir AND workdir of the
+# overlayfs that is still root for init(1), majestic, dropbear and getty, so that
+# superblock holds a reference to this mount for as long as they exist: umount is
+# EBUSY by construction, and umount -l only detaches it from our namespace while
+# the superblock and the GC thread live on. pivot_root does not help and is not
+# meant to -- it moved THIS script's root off the doomed partition, nobody
+# else's, which is why enter_ramfs leaves the old root mounted at /mnt.
+#
+# Remounting it read-only is enough, and does work: jffs2_remount_fs() stops the
+# garbage-collect thread on the way to ro, which leaves flash_eraseall as the
+# only thing touching the medium. Anything still writing through the overlayfs
+# gets EROFS instead of reaching flash -- the outcome we want a second before a
+# reboot that is going to wipe it anyway.
+#
+# Measured on an hi3516ev300 with an overlay carrying real write history: 3 of 4
+# runs logged jffs2 errors before this, 0 of 5 after. An empty overlay is silent
+# either way, which is why a bench that has just been reset never shows it.
+#
+# The mount point is looked up rather than assumed: after the pivot the overlay
+# is at /mnt/overlay, and on the in-place fallback it is still at /overlay.
+quiesce_overlay() {
+	local blk=$(get_device "rootfs_data" | sed 's|/dev/mtd|/dev/mtdblock|')
+	# Two spellings for the same partition, because init mounts it two ways: a
+	# jffs2 camera gets /dev/mtdblockN, a ubifs one gets ubi0:rootfs_data (see
+	# general/overlay/init). Matching only the first would quietly no-op on every
+	# UBI board, where the race is the same and the cure is the same --
+	# ubifs_remount_ro() stops the background thread and commits, just as
+	# jffs2_remount_fs() stops the GC thread.
+	local mp=$(awk -v d="$blk" '
+		$1 == d || $1 ~ /^ubi[0-9]+:rootfs_data$/ { print $2; exit }' /proc/mounts)
+	# Nothing mounted on it -- an overlay this camera never brought up, or a root
+	# that put its upper layer in tmpfs instead. The erase is unopposed already.
+	[ -n "$mp" ] || return 0
+	sync
+	# A refusal is a warning, not a die: erasing it live is exactly what this
+	# did before, so falling back to that is never worse than the status quo.
+	if mount -o remount,ro "$mp" 2>&3; then
+		echo "Overlay $mp remounted read-only"
+	else
+		echo_c 33 "Could not remount $mp read-only; erasing it live."
+	fi
+}
+
 do_wipe_overlay() {
 	echo_c 33 "\nOverlayFS"
 	echo "Erase overlay partition"
 	[ "$flash_type" = "nand" ] || jffs2="-j"
+	quiesce_overlay
 	mark_live_flash_dirty
 	set_progress flash_eraseall $jffs2 "$(get_device "rootfs_data")"
 }
@@ -701,6 +760,10 @@ enter_ramfs() {
 	# remote_update: verify_rootfs branches on it for an unmountable rootfs.
 	# lock_owned: die() needs it to know the lock is ours to remove.
 	export remote_update lock_owned
+	# ram_root_shipped: the second phase reclaims the old root's mount point and
+	# needs the same answer ramfs_discard does. It cannot recompute it -- by then
+	# $RAM_ROOT names a directory in the NEW root, not the one being judged.
+	export ram_root_shipped
 	export kernel_version system_version rootfs_version mount_wait abort_wait
 
 	cd "$RAM_ROOT" || { ramfs_unwind; return 1; }
@@ -1126,7 +1189,17 @@ if [ "1" = "$_ramfs_phase" ]; then
 	# ever read again. Take it back now, while there is still a filesystem under
 	# /mnt to take it from: the first flashcp write is a few lines away and the
 	# old root does not survive it (OpenIPC/majestic-webui#120).
-	rmdir "/mnt$RAM_ROOT" 2>/dev/null
+	#
+	# ...but ONLY one we created. The rootfs now ships /ram (see the mount point
+	# in general/overlay/), so on any current image this directory lives in the
+	# read-only lower layer, and rmdir cannot delete one of those -- overlayfs
+	# records a WHITEOUT in the upper layer instead, which HIDES the shipped
+	# mount point from every later boot. ramfs_discard was given this guard when
+	# /ram started shipping; this line is the same rmdir on the path that
+	# actually runs (a successful pivot never reaches ramfs_discard), and it was
+	# missed -- so the whiteout replaced the stray directory it was meant to fix,
+	# on upgrade and on factory reset alike (@usa-, majestic-webui#120).
+	[ "1" = "$ram_root_shipped" ] || rmdir "/mnt$RAM_ROOT" 2>/dev/null
 	flash_and_reboot
 fi
 

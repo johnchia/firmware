@@ -219,6 +219,11 @@ ethaddr_provision() {
 #
 # inittab has already applied /etc/hostname by now, so a board where this finds
 # no MAC simply keeps the packaged name.
+#
+# This is also why the overlay carries no init.d script that names the camera:
+# one would run in the S?? loop below, after this, and a name derived from the
+# SoC and sensor is shared by every unit of the same model -- which is the
+# collision this replaces, arriving one step later.
 
 HOSTNAME_FILE=/etc/hostname
 HOSTS_FILE=/etc/hosts
