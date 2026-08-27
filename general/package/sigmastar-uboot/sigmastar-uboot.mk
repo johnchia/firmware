@@ -18,10 +18,11 @@
 #
 # WHAT THE PIN CARRIES
 #
-# Nothing of our own: the pin is johnchia/u-boot-sigmastar master, which is
-# commit-identical to openipc/u-boot-sigmastar master. The package exists for
-# the packaging reason above -- to get a locally built boot container into
-# `make fullimage` -- not to change the bootloader.
+# Nothing of our own: the pin is openipc/u-boot-sigmastar master. The package
+# exists for the packaging reason above -- to get a locally built boot container
+# into `make fullimage` -- not to change the bootloader. It fetched from a fork
+# for a while, and that fork was commit-identical the whole time; pinning
+# upstream directly says so where a reader can see it.
 #
 # It briefly carried two things, and both are gone:
 #
@@ -31,8 +32,9 @@
 #     ethaddr_provision in general/overlay/etc/init.d/rcS. Board-verified on
 #     SSC377QE: both sources read 114a3f3b09914824 and both derive
 #     02:2a:43:ae:48:25, so nothing changed address when the derivation moved.
-#     The work is parked on the branch feat/ethaddr-from-flash-uid rather than
-#     deleted.
+#     The work is parked on johnchia/u-boot-sigmastar's
+#     feat/ethaddr-from-flash-uid branch rather than deleted; nothing builds
+#     from it.
 #
 #   - CONFIG_ENV_OVERWRITE, which flips ethaddr's env flags from "mo" (MAC,
 #     write-once) to "ma". It went with the branch. If a userspace fw_setenv of
@@ -51,7 +53,7 @@
 # branch precisely so the pin stays commit-identical to upstream.
 
 SIGMASTAR_UBOOT_VERSION = bf77aff5d44f34d14b89b3f4014aa8dda9834794
-SIGMASTAR_UBOOT_SITE = $(call github,johnchia,u-boot-sigmastar,$(SIGMASTAR_UBOOT_VERSION))
+SIGMASTAR_UBOOT_SITE = $(call github,openipc,u-boot-sigmastar,$(SIGMASTAR_UBOOT_VERSION))
 SIGMASTAR_UBOOT_LICENSE = GPL-2.0+
 SIGMASTAR_UBOOT_LICENSE_FILES = Licenses/gpl-2.0.txt
 
