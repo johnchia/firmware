@@ -176,8 +176,8 @@ jobs:
           ln -sfn /tmp/ccache "$HOME/.ccache"
           make BOARD=${{ matrix.board }} all
 
-      # The bootloader is built by the defconfig -- BR2_PACKAGE_SIGMASTAR_UBOOT
-      # on SigmaStar, BR2_TARGET_UBOOT on Ingenic -- so this only assembles
+      # The bootloader is built by the defconfig -- BR2_TARGET_UBOOT on both
+      # vendors now -- so this only assembles
       # what is already in images/. It is worth carrying:
       # a .tgz is a sysupgrade of a camera that already runs OpenIPC, while the
       # .bin is a whole-flash image for one that runs the factory firmware, or
@@ -207,7 +207,7 @@ jobs:
         run: |
           set -eu
           cfg=$(ls br-ext-chip-*/configs/${{ matrix.board }}_defconfig)
-          if grep -qE '^BR2_(PACKAGE_SIGMASTAR_UBOOT|TARGET_UBOOT)=y' "$cfg"; then
+          if grep -qE '^BR2_TARGET_UBOOT=y' "$cfg"; then
             make BOARD=${{ matrix.board }} fullimage
           else
             echo "no bootloader package in $cfg -- publishing the sysupgrade tarball only"

@@ -146,11 +146,41 @@ BR2_PACKAGE_MOSQUITTO=y
 # BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_RAPTOR_STREAMING=y
 BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6C=y
-# The bootloader, from a fork that derives ethaddr from the NOR part's unique
-# ID. Without it every SSC377QE built from this image answers to the shared
-# 00:00:23:34:45:66, which makes a second camera on the subnet a MAC collision.
-# It is not in the sysupgrade tarball -- it lands in images/ as
+# The bootloader, built here rather than downloaded. It is upstream's, unmodified
+# but for a packaging patch: the MAC derivation that used to justify a fork now
+# lives in rootfs, where rcS folds /proc/flash_uid into an address. What building
+# it locally buys is that a bootloader change can reach an image at all -- both
+# paths that assemble a full .bin otherwise fetch u-boot from the release server.
+# It is not in the sysupgrade tarball; it lands in images/ as
 # u-boot-ssc377qe-nor.bin for `make fullimage`, because mtd0 has no software
 # recovery and writing it is a deliberate act.
-BR2_PACKAGE_SIGMASTAR_UBOOT=y
+BR2_TARGET_UBOOT=y
+BR2_TARGET_UBOOT_BUILD_SYSTEM_KCONFIG=y
+BR2_TARGET_UBOOT_CUSTOM_TARBALL=y
+# Pinned by commit, like the kernel and the toolchain above. The branch is
+# openipc/u-boot-sigmastar master and this is where it stood; bumping the line is
+# the deliberate act that moves it, and the hash in all-patches/uboot/uboot.hash
+# says which bytes that commit must arrive as.
+BR2_TARGET_UBOOT_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/u-boot-sigmastar/archive/bf77aff5d44f34d14b89b3f4014aa8dda9834794.tar.gz"
+# One defconfig per family; the SoC model reaches the code as -DPRODUCT_SOC,
+# which sigmastar-boot passes. The vendor's own arrangement, from build.sh.
+#
+# Spelled out rather than written as $(OPENIPC_SOC_FAMILY), which does not work
+# here and fails in a way worth knowing about. uboot.mk refuses an empty board
+# defconfig with $(error) at parse time -- boot/common.mk, buildroot/Makefile
+# line 532 -- and this tree's OPENIPC_* variables are not defined until
+# external.mk is included thirteen lines later. The expansion is empty exactly
+# at the moment it is checked, so the build dies claiming nothing was specified.
+# (The kernel's $(EXTERNAL_VENDOR) paths are fine: those are read in recipes,
+# not at parse time.) sigmastar-boot asserts the two agree before building.
+BR2_TARGET_UBOOT_BOARD_DEFCONFIG="infinity6c"
+# The container make_boot_spinor.sh assembles, not u-boot.bin. Naming it here is
+# what makes a build that produced no container fail rather than quietly install
+# nothing; sigmastar-boot then renames it to u-boot-<soc>-nor.bin.
+BR2_TARGET_UBOOT_FORMAT_CUSTOM=y
+BR2_TARGET_UBOOT_FORMAT_CUSTOM_NAME="BOOT.bin"
+# Not the global patch dir. t31_raptor builds a different U-Boot through the
+# same Buildroot package, and all-patches/uboot/ would reach it too.
+BR2_TARGET_UBOOT_PATCH="$(BR2_EXTERNAL)/package/sigmastar-boot/patches"
+BR2_PACKAGE_SIGMASTAR_BOOT=y
 BR2_PACKAGE_VTUND_OPENIPC=y

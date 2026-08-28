@@ -37,11 +37,12 @@ ifneq ($(strip $(DIVINUS_SRCDIR)),)
 BR_MAKE += DIVINUS_OVERRIDE_SRCDIR=$(abspath $(DIVINUS_SRCDIR))
 endif
 
-# Build the bootloader from a checkout instead of the commit pinned in
-# general/package/sigmastar-uboot. The pin is a fork, so testing a change there
-# otherwise means pushing it first.
+# Build the bootloader from a checkout instead of the commit pinned in the board
+# defconfig, so a change can be tried without pushing it first. Buildroot's own
+# override, so it serves whichever U-Boot the board builds -- SigmaStar's vendor
+# tree or the Ingenic one -- rather than one vendor's package.
 ifneq ($(strip $(UBOOT_SRCDIR)),)
-BR_MAKE += SIGMASTAR_UBOOT_OVERRIDE_SRCDIR=$(abspath $(UBOOT_SRCDIR))
+BR_MAKE += UBOOT_OVERRIDE_SRCDIR=$(abspath $(UBOOT_SRCDIR))
 endif
 
 CONFIG = $(error variable BOARD not defined)
@@ -121,12 +122,12 @@ divinus-pinned:
 # (divinus-local above uses br-divinus-rebuild and has the same exposure.)
 uboot-local:
 	@test -n "$(strip $(UBOOT_SRCDIR))" || { \
-		echo "UBOOT_SRCDIR is required (path to a u-boot-sigmastar checkout)"; exit 2; }
+		echo "UBOOT_SRCDIR is required (path to a U-Boot checkout)"; exit 2; }
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
 		UBOOT_SRCDIR="$(abspath $(UBOOT_SRCDIR))" \
-		br-sigmastar-uboot-clean-for-rebuild
+		br-uboot-clean-for-rebuild
 	@$(MAKE) --no-print-directory BOARD=$(BOARD) TARGET=$(TARGET) \
-		UBOOT_SRCDIR="$(abspath $(UBOOT_SRCDIR))" br-sigmastar-uboot
+		UBOOT_SRCDIR="$(abspath $(UBOOT_SRCDIR))" br-uboot
 
 defconfig: prepare
 	@echo --- $(or $(CONFIG),$(error variable BOARD not found))
@@ -166,8 +167,8 @@ help:
 	@printf "Divinus development:\n \
 	- make BOARD=<board> DIVINUS_SRCDIR=/path/to/divinus divinus-local\n \
 	- make BOARD=<board> divinus-pinned\n\n"
-	@printf "Bootloader (sigmastar-uboot; the pin is a fork of openipc/u-boot-sigmastar):\n \
-	- make BOARD=<board> br-sigmastar-uboot - build it alone\n \
+	@printf "Bootloader (BR2_TARGET_UBOOT; the pin is in the board defconfig):\n \
+	- make BOARD=<board> br-uboot - build it alone\n \
 	- make BOARD=<board> UBOOT_SRCDIR=~/u-boot-sigmastar uboot-local\n\n"
 	@printf "Full NOR image from locally built pieces. A modified bootloader\n \
 	reaches an image no other way: repack_firmware.sh and the CI workflow both\n \
@@ -239,7 +240,7 @@ repack-final: build
 # appear in either, which is the right default for reproducing a release and no
 # use at all for testing a change.
 #
-# The bootloader defaults to the one the sigmastar-uboot package built, which
+# The bootloader defaults to the one BR2_TARGET_UBOOT built here, which
 # is in this tree and is the point. What it must never default to is a
 # downloaded one: that would put upstream's bootloader in an image that claims
 # to be assembled from local pieces, silently. UBOOT_BIN overrides for a
@@ -270,8 +271,8 @@ ifeq ($(BR2_OPENIPC_SOC_VENDOR),"ingenic")
 else
 	@test -f "$(FULLIMAGE_UBOOT)" || { \
 		echo "no boot container at $(FULLIMAGE_UBOOT)"; \
-		echo "enable BR2_PACKAGE_SIGMASTAR_UBOOT and build, or run"; \
-		echo "  make BOARD=$(BOARD) br-sigmastar-uboot"; \
+		echo "enable BR2_TARGET_UBOOT and BR2_PACKAGE_SIGMASTAR_BOOT and build,"; \
+		echo "or run  make BOARD=$(BOARD) br-uboot"; \
 		echo "or point UBOOT_BIN at one built elsewhere (the assembled"; \
 		echo "container, not u-boot.bin)"; \
 		exit 2; }

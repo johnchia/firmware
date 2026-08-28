@@ -38,7 +38,7 @@ index 82754b8..9110269 100644
 +#
 +# It used to be read straight from `git rev-parse`, which fails when the tree
 +# did not come from a clone. A build system that unpacks a release tarball --
-+# Buildroot's sigmastar-uboot package does exactly that -- has no .git, git
++# Buildroot's U-Boot package does exactly that -- has no .git, git
 +# prints nothing, and ms_gen_mvxv_h.py then dies on a missing argument, so the
 +# build stops at the version header for want of a version. Setting
 +# UBOOT_CHANGELIST lets such a build pass the identity it already knows.

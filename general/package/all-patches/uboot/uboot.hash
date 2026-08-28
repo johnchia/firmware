@@ -1,0 +1,14 @@
+# The SigmaStar bootloader source, from the commit pinned in the raptor board
+# defconfigs (BR2_TARGET_UBOOT_CUSTOM_TARBALL_LOCATION).
+#
+# Buildroot only skips the hash check for BR2_TARGET_UBOOT_LATEST_VERSION, so a
+# custom tarball is checked whenever a hash exists -- and pkg-generic looks for
+# one under $(BR2_GLOBAL_PATCH_DIR)/<pkg>/<pkg>.hash, which is here. mtd0 has no
+# software recovery, so of everything this tree downloads, the bootloader is the
+# one whose bytes are worth being certain about.
+#
+# t31_raptor's U-Boot is not listed: it comes from a git clone rather than a
+# tarball, and its download filename is not this one. It keeps the warning.
+#
+# Locally computed from the archive OpenIPC's own uboot.yml builds from.
+sha256  50049a9078f4ef7c5e82a8cd6589e8b3a1ca95c53ce3351ce67e274a95df095a  bf77aff5d44f34d14b89b3f4014aa8dda9834794.tar.gz

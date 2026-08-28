@@ -1,0 +1,20 @@
+config BR2_PACKAGE_SIGMASTAR_BOOT
+	bool "sigmastar-boot"
+	depends on BR2_TARGET_UBOOT
+	help
+	  Board hooks for Buildroot's U-Boot package on SigmaStar.
+
+	  U-Boot builds u-boot.bin; a SigmaStar board boots a container --
+	  IPL, GCIS, IPL_CUST, SNI and the compressed payload -- which the
+	  vendor's make_boot_spinor.sh assembles. This runs it, checks that
+	  it produced something (nothing in that chain sets -e, and a
+	  container with no payload writes cleanly and never boots), and
+	  installs the result as images/u-boot-<soc>-nor.bin.
+
+	  It also carries the version string the board reports, the SoC
+	  macro the vendor tree expects as a compiler flag, and the rsync
+	  exclusions that make UBOOT_SRCDIR builds repeatable.
+
+	  Not part of the sysupgrade tarball: mtd0 has no software recovery
+	  path, so writing it is a deliberate act with a programmer to hand.
+	  `make fullimage` picks it up.
