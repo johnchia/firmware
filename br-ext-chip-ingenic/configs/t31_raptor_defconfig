@@ -66,7 +66,17 @@ BR2_UCLIBC_INSTALL_UTILS=y
 # Kernel
 BR2_LINUX_KERNEL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
-BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/$(OPENIPC_KERNEL).tar.gz"
+# PINNED, NOT TRACKED. The URL names a commit; it used to name the branch, and
+# a branch name means one filename forever. Buildroot caches a download by
+# filename and does not re-fetch, so a tree that had built this board kept
+# building whatever it fetched first -- with nothing anywhere able to say which
+# commit that was. A commit in the URL makes the filename change when the source
+# does, and makes the tarball sitting in dl/linux/ answer the question.
+#
+# The branch is still where new work lands. Bumping this line is the deliberate
+# act that brings it here, and this says what it has moved to since:
+#   git ls-remote https://github.com/openipc/linux refs/heads/ingenic-t31
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/55ab8a5c50e6088c4fd1136485357b912f954144.tar.gz"
 BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
 BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/t31.generic.config"
 BR2_LINUX_KERNEL_LZMA=y

@@ -17,21 +17,30 @@ BR2_TOOLCHAIN_EXTERNAL_CXX=y
 # Kernel
 BR2_LINUX_KERNEL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
-# The kernel from a fork of openipc/linux, on the same branch name -- only the
-# owner changes, since OPENIPC_KERNEL is the branch and the fork keeps it.
+# The kernel from a fork of openipc/linux, on a branch of the same name.
 #
 # It carries /proc/flash_uid: the NOR part's factory unique ID, which on
 # this SoC is the only per-unit identity there is, the die ID registers reading
 # zero. rcS derives a MAC address from it, so that every camera built from this
 # image does not answer to 00:00:23:34:45:66.
 #
-# WATCH THE DOWNLOAD CACHE. The tarball is named for the branch, so it is still
-# sigmastar-infinity6c.tar.gz -- the same filename upstream's has. Buildroot
-# caches by filename and does not re-fetch, so a tree that has built this board
-# before will silently keep building upstream's source after this line changes.
-# Delete output/buildroot-*/dl/linux/$(OPENIPC_KERNEL).tar.gz when moving
-# between the two.
-BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/johnchia/linux/archive/$(OPENIPC_KERNEL).tar.gz"
+# PINNED, NOT TRACKED. The URL names a commit; it used to name the branch, and
+# a branch name means one filename forever. Buildroot caches a download by
+# filename and does not re-fetch, so a tree that had built this board kept
+# building whatever it fetched first -- with nothing anywhere able to say which
+# commit that was. A commit in the URL makes the filename change when the source
+# does, and makes the tarball sitting in dl/linux/ answer the question.
+#
+# The branch is still where new work lands. Bumping this line is the deliberate
+# act that brings it here, and this says what it has moved to since:
+#   git ls-remote https://github.com/johnchia/linux refs/heads/sigmastar-infinity6c
+#
+# The pin is the amended commit, and the distinction is not academic. The
+# version an unpinned tree here had cached clamped the RDUID read and returned
+# 114a3f3b09910000 -- six bytes of the ID and two zeros -- which folds into a
+# different MAC than the 114a3f3b09914824 the board was verified on. Both
+# answered to the name "sigmastar-infinity6c".
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/johnchia/linux/archive/83a9f82c5716031ddfa51bf838e9f8fb93605c7a.tar.gz"
 BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
 BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/infinity6c-ssc027d.config"
 BR2_LINUX_KERNEL_UIMAGE=y
