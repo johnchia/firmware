@@ -1,0 +1,20 @@
+# The external toolchains this fork's boards download, from the mirror at
+# github.com/johnchia/firmware/releases/tag/toolchain-2026-08-28.
+#
+# Buildroot has no hash for a custom external toolchain -- BR2_TOOLCHAIN_EXTERNAL_URL
+# is whatever the board says -- and prints "no hash file for ..." on every build
+# instead. It does look here, though: pkg-generic's <pkg>_HASH_FILES searches
+# $(BR2_GLOBAL_PATCH_DIR)/<pkg>/<pkg>.hash as well as the package's own
+# directory, and BR2_GLOBAL_PATCH_DIR is general/package/all-patches. So the
+# check can be supplied from this tree without patching Buildroot's.
+#
+# A line here turns a compiler that silently changed into a failed build. That
+# is the whole point of the dated filenames: upstream publishes its toolchains
+# on one tag and overwrites the assets in place, and a name that never changes
+# cannot be hashed usefully.
+#
+# Locally computed, and identical to the bytes OpenIPC was serving on
+# 2026-08-28 -- these are mirrored copies, not rebuilds.
+sha256  44eacc941b9f319b3824164cfb90272ee939e6916dbe7b2ac7a167f1b83f8e6b  toolchain.sigmastar-infinity6e-20260828.tgz
+sha256  61c4b9796decd55117e77e21c2a0473006d29003607b62ef4228babf861ec0bb  toolchain.sigmastar-infinity6c-20260828.tgz
+sha256  59f1397302c1b6992481bcc4f45b2cbbdaf8590c1e3fab7b541e7e76469054db  toolchain.sigmastar-infinity6b0-20260828.tgz
