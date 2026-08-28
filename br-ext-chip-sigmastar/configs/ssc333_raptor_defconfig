@@ -82,7 +82,6 @@ BR2_PACKAGE_ZLIB=y
 # to decide which interface the camera has. Without these the board has no
 # network path that anyone configures.
 BR2_PACKAGE_UBOOT_TOOLS=y
-BR2_TARGET_ROOTFS_CPIO=y
 BR2_TARGET_ROOTFS_SQUASHFS=y
 BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
 # Fail the build, not the flash, when the rootfs outgrows its partition. The
