@@ -52,7 +52,9 @@ BR2_PACKAGE_ZLIB=y
 BR2_TARGET_ROOTFS_CPIO=y
 BR2_TARGET_ROOTFS_SQUASHFS=y
 BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
-BR2_ROOTFS_POST_IMAGE_SCRIPT="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/ssc30kq-post-image.sh"
+# Fail the build, not the flash, when the rootfs outgrows its partition. The
+# limit is BR2_OPENIPC_ROOTFS_PART_KB below.
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL)/scripts/check-rootfs-size.sh"
 
 # OpenIPC
 BR2_OPENIPC_SOC_VENDOR="sigmastar"

@@ -85,9 +85,10 @@ BR2_PACKAGE_UBOOT_TOOLS=y
 BR2_TARGET_ROOTFS_CPIO=y
 BR2_TARGET_ROOTFS_SQUASHFS=y
 BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
-# Fail the build, not the flash, when the rootfs outgrows its partition. See the
-# ceiling note below for why 5120KB is the real number here.
-BR2_ROOTFS_POST_IMAGE_SCRIPT="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/ssc333-post-image.sh"
+# Fail the build, not the flash, when the rootfs outgrows its partition. The
+# limit is BR2_OPENIPC_ROOTFS_PART_KB below, and the note there says why 5120KB
+# is the real number on this board.
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL)/scripts/check-rootfs-size.sh"
 
 # OpenIPC
 BR2_OPENIPC_SOC_VENDOR="sigmastar"
