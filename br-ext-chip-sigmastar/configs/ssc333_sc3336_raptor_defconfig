@@ -22,7 +22,22 @@ BR2_ARM_INSTRUCTIONS_THUMB2=y
 BR2_TOOLCHAIN_EXTERNAL=y
 BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
 BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
-BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/openipc/firmware/releases/download/$(OPENIPC_TOOLCHAIN).tgz"
+# Mirrored, not tracked. This is a byte-for-byte copy of the toolchain OpenIPC
+# publishes -- nothing rebuilt, so it is the compiler every hardware
+# verification on this board was done with -- taken 2026-08-28 and given a name
+# that carries the date.
+#
+# Upstream keeps all of them on one `toolchain` tag and overwrites the assets in
+# place: published 2025-02-24, last rewritten 2026-05-29. Buildroot caches a
+# download by filename, so toolchain.<family>.tgz named one file forever while
+# the bytes behind it were free to change, on a tag nothing prevents from being
+# rewritten again. A dated name makes a new upload a new filename, which a stale
+# download cache cannot answer for.
+#
+# sha256 of all three is in the release notes. OPENIPC_KERNEL is <vendor>-<family>
+# -- the toolchain is per family, and this is the same string OPENIPC_TOOLCHAIN
+# was built from.
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/johnchia/firmware/releases/download/toolchain-2026-08-28/toolchain.$(OPENIPC_KERNEL)-20260828.tgz"
 BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="arm-openipc-linux-musleabihf"
 BR2_TOOLCHAIN_EXTERNAL_HEADERS_4_9=y
 BR2_TOOLCHAIN_EXTERNAL_CUSTOM_MUSL=y
