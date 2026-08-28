@@ -68,7 +68,7 @@ BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMI
 # 440KB of modules nothing on this board loads. A fragment rather than a
 # forked config so the other 3000 symbols keep following upstream; see the
 # file for the reasoning.
-BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/ssc333-raptor.fragment"
+BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/ssc333-sc3336-raptor.fragment"
 BR2_LINUX_KERNEL_UIMAGE=y
 BR2_LINUX_KERNEL_XZ=y
 
@@ -138,7 +138,7 @@ BR2_OPENIPC_SNS_MODEL="sc3336"
 # branches are not upstream yet), so this target builds with no checkout. To
 # build one instead:
 #
-#   make BOARD=ssc333_raptor RAPTOR_SRCDIR=/path/to/raptor-parent
+#   make BOARD=ssc333_sc3336_raptor RAPTOR_SRCDIR=/path/to/raptor-parent
 #
 # The HAL backend follows the family: infinity6b0 -> PLATFORM=INFINITY6B0, which
 # raptor-hal accepts and compiles from src/star/ against the infinity6e MI

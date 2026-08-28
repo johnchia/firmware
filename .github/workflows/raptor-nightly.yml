@@ -111,7 +111,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        board: [ssc377qe_raptor, ssc30kq_raptor, ssc333_raptor, t31_raptor]
+        board: [ssc377qe_raptor, ssc30kq_raptor, ssc333_sc3336_raptor, t31_raptor]
     env:
       BUILD_ID:  ${{ needs.gate.outputs.build_id }}
       BUILD_SHA: ${{ needs.gate.outputs.head_sha }}
@@ -189,7 +189,7 @@ jobs:
       # `make fullimage` locally instead.
       #
       # A target that does not build one gets the .tgz alone rather than
-      # failing the board. ssc333_raptor is that case: its only interface is
+      # failing the board. ssc333_sc3336_raptor is that case: its only interface
       # the radio, and the credentials it joins a network with live in the
       # U-Boot environment a full image erases, so a whole-flash write there
       # produces a camera that has to be opened rather than reflashed.

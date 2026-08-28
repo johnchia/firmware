@@ -1,4 +1,4 @@
-# Kernel deltas for ssc333_raptor, applied on top of infinity6b0-ssc009a.config.
+# Kernel deltas for ssc333_sc3336_raptor, applied on top of infinity6b0-ssc009a.config.
 #
 # A fragment rather than a forked config, because the delta is eight symbols
 # against three thousand and a copy would drift the moment upstream touched

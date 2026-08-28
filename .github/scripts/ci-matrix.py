@@ -57,7 +57,7 @@ ALL_BOARDS = [
     # reason general/package/raptor-streaming and its five dependencies are
     # built by anything at all -- left out, the package checks below report each
     # of them as reaching no board.
-    "ssc377qe_raptor", "ssc30kq_raptor", "ssc333_raptor",
+    "ssc377qe_raptor", "ssc30kq_raptor", "ssc333_sc3336_raptor",
     # Ingenic. t31_raptor is a Raptor board and belongs with the three above by
     # kind; it sits here because the vendor groupings are what a reader scans
     # for, and it is the only Ingenic board that carries ingenic-uboot --

@@ -20,7 +20,7 @@ master and merges from it. Bug reports about anything else belong there.
 |---|---|---|---|
 | `ssc377qe_raptor` | SSC377QE · infinity6c | 8192 KB | [sysupgrade][t-377] · [whole-flash][f-377] |
 | `ssc30kq_raptor` | SSC30KQ · infinity6e | 8192 KB | [sysupgrade][t-30k] · [whole-flash][f-30k] |
-| `ssc333_raptor` | SSC333 · infinity6b0 | 5120 KB | [sysupgrade][t-333] |
+| `ssc333_sc3336_raptor` | SSC333 · infinity6b0 | 5120 KB | [sysupgrade][t-333] |
 | `t31_raptor` | T31X · ingenic | 8192 KB | [sysupgrade][t-t31] · [whole-flash][f-t31] |
 
 Those links are rolling: each is the `-latest` asset on the
@@ -36,7 +36,7 @@ The `.bin` is a whole-flash image, bootloader included, for a camera running
 factory firmware or whose flash is in an unknown state; it needs a programmer
 or U-Boot rather than `sysupgrade`.
 
-`ssc333_raptor` is an 8MB part where the other two are 16MB. U-Boot's
+`ssc333_sc3336_raptor` is an 8MB part where the other two are 16MB. U-Boot's
 two-layout rule cannot hand out the larger rootfs on a chip that small, so
 5120 KB is the partition rather than a policy, and the image is built against
 that ceiling -- one sensor tuning blob, no WireGuard, exFAT or vtund. Its only
@@ -48,7 +48,7 @@ environment a full write erases.
 radio: the SigmaStar bench boards are wired, so nothing about credentials or
 the setup portal can be developed on them. A Wyze Cam v3 -- T31X, GC2053,
 AltoBeam ATBM6031 over SDIO, 16MB of NOR, no Ethernet at all. It publishes a
-whole-flash image where `ssc333_raptor` does not, and the difference is
+whole-flash image where `ssc333_sc3336_raptor` does not, and the difference is
 recovery rather than layout: a full write erases its environment too, but an
 unprovisioned unit raises its own access point and serves the setup page, and
 its bootloader can be driven from an SD card. It is also the only board here
@@ -190,8 +190,8 @@ packaging and the Buildroot tree are theirs. See the [project][project], the
 [nightly]: https://github.com/johnchia/firmware/releases/tag/raptor-nightly
 [t-377]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc377qe-nor-raptor-latest.tgz
 [t-30k]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc30kq-nor-raptor-latest.tgz
-[t-333]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc333-nor-raptor-latest.tgz
-[t-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.t31-nor-raptor-latest.tgz
+[t-333]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc333_sc3336-nor-raptor-latest.tgz
+[t-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.t31_gc2053-nor-raptor-latest.tgz
 [f-377]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377qe-nor-full.bin
 [f-30k]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc30kq-nor-full.bin
 [f-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-t31-nor-full.bin

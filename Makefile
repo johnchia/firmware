@@ -464,6 +464,26 @@ endef
 # yesterday's image matters during a bring-up -- but a flashing script that has
 # to pick one out of a directory listing will eventually pick wrong. The symlink
 # is the one to flash; the timestamped names are the archive.
+# The sensor is part of the image, so it is part of the image's name.
+#
+# A board that sets BR2_OPENIPC_SNS_MODEL ships that sensor's tuning blob and no
+# other -- on ssc333 that is 1387KB of a 5120KB partition, which is why it is
+# set there at all. Flashed onto the same SoC carrying a different part, such an
+# image streams and gets the colour wrong, which is the kind of failure nobody
+# traces back to the filename. So the filename says it: ssc333_sc3336, t31_gc2053.
+#
+# Boards that ship every blob are named as before. The quotes come from the
+# defconfig being included as a makefile, and the shell strips them out of the
+# tar and ln arguments below -- but $(if ...) would see "" as a value, so the
+# sensor has to be unquoted here rather than left to the shell.
+#
+# Only the archive is renamed. The members inside it keep the plain SoC suffix
+# -- uImage.ssc333, rootfs.squashfs.ssc333 -- because that is the name
+# sysupgrade looks for on the camera, derived from BUILD_PLATFORM's first
+# token. Renaming those would make an image that no board can unpack.
+IMAGE_SNS = $(strip $(subst ",,$(BR2_OPENIPC_SNS_MODEL)))
+IMAGE_SOC = $(BR2_OPENIPC_SOC_MODEL)$(if $(IMAGE_SNS),_$(IMAGE_SNS))
+
 define REPACK_FIRMWARE
 	$(eval OPENIPC_BUILD_ID ?= $(or $(shell cat $(TARGET)/target/etc/openipc-build-id 2>/dev/null),unknown-$(shell date -u +%Y%m%dT%H%M%SZ)))
 	cd $(TARGET)/images && if test -e rootfs.tar; then mv -f rootfs.tar rootfs.$(BR2_OPENIPC_SOC_MODEL).tar; fi
@@ -473,8 +493,8 @@ define REPACK_FIRMWARE
 	$(if $(2),cd $(TARGET)/images && md5sum $(2).$(BR2_OPENIPC_SOC_MODEL) > $(2).$(BR2_OPENIPC_SOC_MODEL).md5sum)
 	$(if $(1),$(eval KERNEL = $(1).$(BR2_OPENIPC_SOC_MODEL) $(1).$(BR2_OPENIPC_SOC_MODEL).md5sum),$(eval KERNEL =))
 	$(if $(2),$(eval ROOTFS = $(2).$(BR2_OPENIPC_SOC_MODEL) $(2).$(BR2_OPENIPC_SOC_MODEL).md5sum),$(eval ROOTFS =))
-	$(eval ARCHIVE = openipc.$(BR2_OPENIPC_SOC_MODEL)-$(3)-$(BR2_OPENIPC_VARIANT)-$(OPENIPC_BUILD_ID).tgz)
-	$(eval LATEST = openipc.$(BR2_OPENIPC_SOC_MODEL)-$(3)-$(BR2_OPENIPC_VARIANT)-latest.tgz)
+	$(eval ARCHIVE = openipc.$(IMAGE_SOC)-$(3)-$(BR2_OPENIPC_VARIANT)-$(OPENIPC_BUILD_ID).tgz)
+	$(eval LATEST = openipc.$(IMAGE_SOC)-$(3)-$(BR2_OPENIPC_VARIANT)-latest.tgz)
 	cd $(TARGET)/images && tar -czf $(ARCHIVE) $(KERNEL) $(ROOTFS)
 	cd $(TARGET)/images && ln -sfn $(ARCHIVE) $(LATEST)
 	echo "- image: $(ARCHIVE)"
