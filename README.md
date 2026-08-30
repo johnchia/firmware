@@ -112,6 +112,12 @@ documents the coupling at length. The build directory is named after the
 **raptor** pin alone, so run `make BOARD=<board> br-raptor-streaming-dirclean`
 whenever any of the other four moves.
 
+Everything else in this tree is upstream's, and so is the guide to it:
+[CLAUDE.md](CLAUDE.md) (also readable as `AGENTS.md`) explains how the Buildroot
+tree is put together and which changes belong in which repository, with the
+review standards in [best_practices.md](best_practices.md). A change to
+anything but Raptor is a change to send there.
+
 ## Installing
 
 `sysupgrade` checks the md5 of each part and the SoC each was stamped for, then

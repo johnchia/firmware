@@ -7,9 +7,38 @@ on:
     # PRs, so without ready_for_review a PR opened as a draft would clear the
     # draft flag with no event to build on and sit there unbuilt.
     types: [opened, synchronize, reopened, ready_for_review]
-  schedule:
-    - cron: '30 22 * * *'
+  # There is deliberately no `schedule:` here any more, and adding one back
+  # would undo a fix rather than restore a feature.
+  #
+  # This repository is the middle stage of a three-stage release train —
+  # widgetii/majestic publishes the majestic tarball, this builds the images,
+  # OpenIPC/builder builds from this tree afterwards. Each stage used to be its
+  # own GitHub cron guessing at the previous stage's finish time (17:25, 22:30,
+  # 03:00 UTC). From 2026-08-26 GitHub's dispatcher began delivering scheduled
+  # events hours late and independently per repo — this repo's slot measured
+  # +4h55m, +7h42m and +5h16m on successive nights — which put the train out of
+  # order: on the 08-28 cycle builder ran first, then majestic, then this. Every
+  # run was green, because no stage checks that its inputs are newer than the
+  # ones it used last time.
+  #
+  # The diagnostic, if this is ever doubted: on every late run
+  # `created_at == run_started_at` to the second, so the delay was entirely
+  # upstream of run creation, inside GitHub's dispatcher rather than in any
+  # runner pool, concurrency group or matrix.
+  #
+  # The ordering now lives on the machine that runs majestic's self-hosted
+  # runners, which dispatches each stage and waits for it before starting the
+  # next. See widgetii/majestic docs/ci-runners.md.
   workflow_dispatch:
+    inputs:
+      # Set by that release trigger, and by nothing else. It is the difference
+      # between "the nightly is running" and "a person asked for a build": the
+      # nightly may find nothing changed and skip, whereas someone dispatching
+      # by hand wants the build they asked for. See the preflight gate below.
+      nightly:
+        description: 'Run as the nightly release (skip when nothing changed)'
+        type: boolean
+        default: false
 
 # Cancel a PR's earlier run when a new commit lands on it. The matrix is ~96
 # jobs and there was no group here, so every push started another full matrix
@@ -56,11 +85,13 @@ jobs:
   preflight:
     name: Preflight
     # Guard rail for clones of this repo. A clone pushed to a new repository
-    # (a private mirror, an internal re-host) inherits this file along with
-    # its cron, and the full platform matrix — ~2000 runner-minutes a pass —
-    # then runs on that owner's Actions bill: nightly via the schedule, and
-    # again on every internal PR they open. Forks are partially covered
-    # (GitHub disables scheduled workflows there), a fresh repository is not.
+    # (a private mirror, an internal re-host) inherits this file, and the full
+    # platform matrix — ~2000 runner-minutes a pass — then runs on that owner's
+    # Actions bill on every internal PR they open.
+    #
+    # This used to also have to cover an inherited `cron:`, which fired
+    # unattended and nightly on whoever's bill; that half is gone with the
+    # schedule trigger. The PR half is not, so the guard stays.
     #
     # The line is drawn where the minutes stop being free:
     #   - canonical repo: everything runs, unchanged
@@ -97,7 +128,7 @@ jobs:
 
           # majestic-webui ships as a rolling `dist` release asset, so a WebUI fix
           # changes what the nightly would contain without ever moving this repo's
-          # HEAD — on a quiet firmware tree the schedule would skip forever and the
+          # HEAD — on a quiet firmware tree the nightly would skip forever and the
           # fix would never reach an image. Compare the asset's content digest as
           # well. It is content-addressed, so a re-upload of identical bytes does
           # not force a pointless rebuild. An empty value (API hiccup, or an asset
@@ -106,12 +137,27 @@ jobs:
                     --jq '.assets[]|select(.name=="majestic-webui-dist.tar.gz")|.digest // empty' \
                     2>/dev/null || true)
 
-          if [ "${{ github.event_name }}" = "schedule" ] && [ "$PREV" = "$HEAD" ] \
+          # Both branches echo the rendered `nightly` value. The gate compares
+          # a boolean dispatch input against the literal string "true", and
+          # nothing else in this repo compares an *input* that way — every
+          # other `= "true"` here tests a job output, which is a string
+          # already. If the rendering were ever not lowercase `true` the gate
+          # would simply never skip: a full ~2000-runner-minute matrix every
+          # night, green, with nothing to show it had stopped working. Logging
+          # what the gate actually saw is what makes that visible in one line.
+          #
+          # Keyed on the `nightly` input rather than on the event name. It
+          # used to read `event_name = schedule`, and when the schedule was
+          # replaced by a dispatch that condition silently became unreachable —
+          # which would have rebuilt the whole ~2000-runner-minute matrix every
+          # night regardless of whether anything had changed, and gone green
+          # doing it. A hand dispatch still leaves this false and still builds.
+          if [ "${{ inputs.nightly }}" = "true" ] && [ "$PREV" = "$HEAD" ] \
              && [ -n "$WEBUI" ] && [ "$PREV_WEBUI" = "$WEBUI" ]; then
-            echo "Skip: HEAD ($HEAD) already published as the latest nightly, majestic-webui dist unchanged ($WEBUI)."
+            echo "Skip: HEAD ($HEAD) already published as the latest nightly, majestic-webui dist unchanged ($WEBUI). (nightly=${{ inputs.nightly }})"
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Build: $BUILD_ID (event=${{ github.event_name }}, prev=$PREV, webui=$WEBUI, prev_webui=$PREV_WEBUI)"
+            echo "Build: $BUILD_ID (event=${{ github.event_name }}, nightly=${{ inputs.nightly }}, prev=$PREV, webui=$WEBUI, prev_webui=$PREV_WEBUI)"
             echo "should_build=true"  >> "$GITHUB_OUTPUT"
           fi
           echo "head_sha=$HEAD"   >> "$GITHUB_OUTPUT"
@@ -119,6 +165,100 @@ jobs:
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
           echo "built_at=$BUILT_AT" >> "$GITHUB_OUTPUT"
           echo "webui_digest=$WEBUI" >> "$GITHUB_OUTPUT"
+
+      # Prove the release credential BEFORE the matrix runs.
+      #
+      # On 2026-08-29, run 33273333359 built all 102 boards over two hours and
+      # then died in `Publish releases` with "403 Resource not accessible by
+      # integration". Nothing earlier had any opinion about whether the run
+      # could publish, so the price of that misconfiguration was the entire
+      # matrix, and a night of cameras finding no new firmware behind the
+      # `latest` tag. The failure was invisible until the last job of the run.
+      #
+      # A draft release is not visible to anyone and creates no tag, so this
+      # costs a couple of API calls and turns a two-hour failure into a
+      # ten-second one. Checking the secret is merely non-empty would not have
+      # caught that incident at all: the old token existed and was simply
+      # refused, so the probe has to attempt the write.
+      #
+      # Three details keep the probe from becoming a problem of its own:
+      #
+      #   - The tag carries run_attempt as well as run_id. run_id is stable
+      #     across re-runs, so without the attempt a leftover draft from a
+      #     failed run would collide with its own re-run and report a valid
+      #     credential as broken -- a guard that fails wrongly is worse than no
+      #     guard, because it blocks good runs.
+      #   - Deletion happens from a trap, so an interrupted or cancelled job
+      #     still cleans up rather than leaving the draft behind.
+      #   - A best-effort sweep removes probe drafts stranded by earlier runs,
+      #     because cleanup.yml does not know this tag pattern. It is capped at
+      #     the 10 most recent releases and every failure is swallowed: listing
+      #     100 releases here returns HTTP 504 (each carries hundreds of
+      #     assets), and a housekeeping step must never be what fails a build.
+      #
+      # Skipped on pull_request, which neither publishes nor has the secret.
+      - name: Prove the release credential can write
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PROBE_TAG: ci-release-credential-probe-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::RELEASE_TOKEN is not set. The matrix would build for"\
+                 "two hours and then fail to publish. See the publish job."
+            exit 1
+          fi
+
+          probe_id=""
+          cleanup() {
+            [ -n "$probe_id" ] || return 0
+            gh api -X DELETE "repos/${GH_REPO}/releases/${probe_id}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          # Strand-clearing, entirely best effort.
+          gh api "repos/${GH_REPO}/releases?per_page=10" \
+            --jq '.[] | select(.draft and (.tag_name | startswith("ci-release-credential-probe-"))) | .id' \
+            2>/dev/null | while read -r stale; do
+              # gh writes its error body to STDOUT, so a failed list feeds this
+              # loop lines of JSON rather than ids. Deleting them is harmless --
+              # the calls just fail -- but logging "removing stranded probe
+              # draft {"status": "401"}" is a confident lie in the log of a step
+              # whose whole job is to be believed. Only act on real ids.
+              case "$stale" in ''|*[!0-9]*) continue ;; esac
+              echo "removing stranded probe draft $stale"
+              gh api -X DELETE "repos/${GH_REPO}/releases/${stale}" >/dev/null 2>&1 || true
+            done || true
+
+          # Retried, because a one-shot POST cannot tell a bad credential from
+          # a bad minute. GitHub answers 403 for secondary rate limiting as
+          # well as for refusal -- the publish step below retries six times for
+          # exactly that reason -- and these repos return 504 on ordinary
+          # release listings often enough to have been seen while writing this.
+          # Reporting a blip as "the token is wrong" would send whoever reads
+          # it to reissue a credential that was never the problem.
+          #
+          # Three attempts rather than the publish step's six: the value here is
+          # failing fast, and 5s + 10s of backoff still absorbs a transient
+          # while keeping a genuine misconfiguration well under a minute.
+          attempt=0
+          until probe_id=$(gh api -X POST "repos/${GH_REPO}/releases" \
+                             -f tag_name="$PROBE_TAG" -f name="$PROBE_TAG" \
+                             -F draft=true --jq .id); do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 3 ]; then
+              echo "::error::RELEASE_TOKEN could not create a release in"\
+                   "${GH_REPO} after 3 attempts. If this is not a transient API"\
+                   "error, the token needs Contents: read and write."
+              exit 1
+            fi
+            echo "attempt ${attempt} failed, retrying in $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          echo "release credential OK"
 
   buildroot:
     name: Firmware
@@ -374,7 +514,7 @@ jobs:
   #
   # Best-effort by design: publish whatever boards produced, even if some
   # failed (matches enrich_manifest.py, which indexes whatever assets exist).
-  # Never runs on PRs (no artifacts) or on a scheduled no-op (buildroot skipped).
+  # Never runs on PRs (no artifacts) or on a nightly no-op (buildroot skipped).
   publish:
     name: Publish releases
     needs: [preflight, buildroot]
@@ -468,7 +608,18 @@ jobs:
       - name: Publish releases (paced, retry-aware)
         if: steps.collect.outputs.count != '0'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Not GITHUB_TOKEN. The default token's release-write depends on
+          # who triggered the run: a `schedule:` run executes as the repository's
+          # scheduling identity and could write releases, but a dispatched run
+          # executes as whoever dispatched it, and for an app/OAuth-backed
+          # identity the API answers "403 Resource not accessible by
+          # integration" even though the job declares `contents: write` and the
+          # run log confirms the token was granted it. Since the nightly is now
+          # dispatched by the release trigger rather than fired by cron, the
+          # default token is no longer sufficient here. An explicit credential
+          # also makes publishing independent of who or what starts the run,
+          # which is the property that was quietly missing before.
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           GH_REPO: ${{ github.repository }}
           BUILD_ID: ${{ needs.preflight.outputs.build_id }}
           HEAD_SHA: ${{ needs.preflight.outputs.head_sha }}
@@ -680,13 +831,13 @@ jobs:
             echo "firmware matrix OK (success)"
           else
             # Nothing in the change reaches a build, the PR is still a draft, or
-            # the schedule found nothing new since the last nightly.
+            # the nightly found nothing new since the last one.
             if [ "${{ needs.buildroot.result }}" != "skipped" ]; then
               echo "::error::firmware matrix ran when it should not have (${{ needs.buildroot.result }})"; exit 1
             fi
             echo "firmware matrix OK (no boards to build)"
           fi
-          # publish is skipped on PRs and on scheduled no-ops; only a real
+          # publish is skipped on PRs and on nightly no-ops; only a real
           # failure of the single release-writer should fail the gate.
           case "${{ needs.publish.result }}" in
             success|skipped) echo "publish OK (${{ needs.publish.result }})" ;;

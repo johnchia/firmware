@@ -265,6 +265,18 @@ UNBUILT_FAMILIES = {
 # silent narrowing. This list is only ever read by --self-test: changes to these
 # packages widen like any other path that reaches no board of its own, because
 # their .mk and Config.in are included in every build regardless.
+#
+# jsonfilter is the odd one: it was on all 120 defconfigs until majestic-webui
+# stopped calling it (OpenIPC/majestic-webui#177), which was the only thing on a
+# standard camera that did. It stays in the tree because ~97 builder devices and
+# the FPV variants still select it -- wifibroadcast-ng parses `@.video0.size`
+# with it -- so this is a package that left the matrix, not one that left the tree.
+#
+# waybeam is unbuildable by construction here rather than merely unselected: it
+# depends on !BR2_PACKAGE_MAJESTIC, and every sigmastar defconfig in ALL_BOARDS
+# sets BR2_PACKAGE_MAJESTIC=y, because both drive the same sensor and encoder.
+# It is selected by the FPV variants in OpenIPC/builder. A mainline defconfig
+# with Majestic off would take it off this list.
 NOT_BUILT = {
     "adaptive-link", "aic8800-openipc", "allwinner-osdrv-v83x", "atbm-wifi",
     "aura-httpd", "baresip-openipc", "comgt", "f2fs-tools-openipc", "faceter-agent",
@@ -276,7 +288,8 @@ NOT_BUILT = {
     "osd-openipc", "rtl8188eus-openipc", "rtl8192eu-openipc", "rtl8811cu-openipc",
     "rtl8812au", "rtl8812au-openipc", "rtl88x2eu-openipc", "rtw-hostapd", "rubyfpv",
     "siproxd-openipc", "ssv615x-openipc", "ssv635x-openipc", "txw8301-openipc",
-    "uqmi-openipc", "vdec-openipc", "venc-openipc", "w1-ds18b20", "webface",
+    "uqmi-openipc", "vdec-openipc", "venc-openipc", "w1-ds18b20", "waybeam",
+    "webface",
     "webrtc-audio-processing-openipc", "wifibroadcast-ng", "wq9001", "yaml-cli-multi",
 }
 
@@ -301,6 +314,11 @@ MARKDOWN = re.compile(r"^(?!general/|br-ext-chip-).*\.md$")
 # Configuration for the code-review service, which reads these on the PR and
 # never on a build host. Anchored to whole paths for the same reason LICENSE is.
 REVIEW_CONFIG = re.compile(r"^(?:\.pr_agent\.toml|pr_compliance_checklist\.yaml)$")
+# Repository metadata read by git and by editors, never by a build host: no
+# recipe consults either, and .gitignore only decides what is offered to be
+# committed in the first place. Anchored to whole paths for the same reason
+# LICENSE is -- general/.gitignore, if one ever appears, is not this one.
+REPO_META = re.compile(r"^(?:\.gitignore|\.editorconfig)$")
 GITHUB_META = re.compile(r"^\.github/(?:CODEOWNERS|PULL_REQUEST_TEMPLATE\.md|ISSUE_TEMPLATE/)")
 WORKFLOW = re.compile(r"^\.github/workflows/([^/]+)$")
 GITHUB_SCRIPT = re.compile(r"^\.github/scripts/([^/]+)$")
@@ -508,7 +526,8 @@ def classify(tree, changed, labels=(), event="pull_request", draft=False):
 
     boards, smoked = set(), False
     for path in changed:
-        if DOCS.match(path) or MARKDOWN.match(path) or REVIEW_CONFIG.match(path):
+        if DOCS.match(path) or MARKDOWN.match(path) or REVIEW_CONFIG.match(path) \
+                or REPO_META.match(path):
             continue
         if GITHUB_META.match(path):
             continue
@@ -852,6 +871,8 @@ def self_test():
         ([".github/workflows/lint.yml"], 0, "the workflow linter never builds"),
         ([".github/scripts/lint-workflow-shell.py"], 0, "its script"),
         ([".github/PULL_REQUEST_TEMPLATE.md"], 0, "PR template"),
+        ([".gitignore"], 0, "git metadata"),
+        ([".editorconfig"], 0, "editor metadata"),
         (["contrib/openipc-bisect/openipc-bisect"], 0, "developer tooling"),
         ([".pr_agent.toml", "docs/architecture.md"], 0, "review config plus docs"),
         (["best_practices.md",
@@ -868,6 +889,8 @@ def self_test():
          full, "same name under general/ is not the checklist"),
         ([".pr_agent.toml.orig"], full, "a merge leftover is not the config"),
         (["tools/.pr_agent.toml"], full, "same name in a subdirectory is not the config"),
+        (["general/.gitignore"], full, "a .gitignore under general/ is not the root one"),
+        ([".gitignore.bak"], full, "a backup is not the ignore file"),
     ]
     for paths, expected, what in cases:
         got = len(classify(tree, paths)["rows"])
