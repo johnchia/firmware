@@ -57,7 +57,7 @@ ALL_BOARDS = [
     # reason general/package/raptor-streaming and its five dependencies are
     # built by anything at all -- left out, the package checks below report each
     # of them as reaching no board.
-    "ssc377qe_raptor", "ssc30kq_raptor", "ssc333_sc3336_raptor",
+    "ssc377qe_raptor", "ssc377d_raptor", "ssc30kq_raptor", "ssc333_sc3336_raptor",
     # Ingenic. t31_raptor is a Raptor board and belongs with the three above by
     # kind; it sits here because the vendor groupings are what a reader scans
     # for, and it is the only Ingenic board that carries ingenic-uboot --
@@ -796,10 +796,10 @@ def self_test():
         # through a Config.in select; either one missing zeroes them out.
         (["general/package/uclibc-compat/src/uclibc-compat-static.c"],
          3, "reached via .mk _DEPENDENCIES"),
-        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 36,
-        # and the extra twelve are two separate things:
+        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 37,
+        # and the extra thirteen are two separate things:
         #
-        #   - the three raptor boards, which are SigmaStar and belong here;
+        #   - the four raptor boards, which are SigmaStar and belong here;
         #   - nine HiSilicon and Goke *ultimate* boards, which do not.
         #
         # The nine arrive through divinus. general/package/divinus/divinus.mk
@@ -814,9 +814,9 @@ def self_test():
         # recorded rather than the guard taught. Narrowing it means giving those
         # two lines a BR2_ symbol to hang on, in divinus.mk.
         (["general/package/sigmastar-osdrv-sensors/Config.in"],
-         36, "reached via Config.in select"),
+         37, "reached via Config.in select"),
         # Shared packages narrow too, just barely.
-        (["general/package/majestic/majestic.mk"], 88, "majestic is nearly everywhere"),
+        (["general/package/majestic/majestic.mk"], 89, "majestic is nearly everywhere"),
         # Board configs and kernel configs.
         (["br-ext-chip-goke/configs/gk7205v200_lite_defconfig"], 1, "one defconfig"),
         (["br-ext-chip-hisilicon/board/hi3516ev200/hi3516ev300.generic.config"],
@@ -882,7 +882,7 @@ def self_test():
         (["LICENSES/vendor.txt"], full, "LICENSES/ is not the licence file"),
         (["READMEgenerator.c"], full, "README prefix is not a readme"),
         (["general/package/majestic/README.md"],
-         88, "markdown inside a package is that package"),
+         89, "markdown inside a package is that package"),
         (["br-ext-chip-hisilicon/board/hi3516ev200/NOTES.md"],
          8, "markdown inside a board dir is that family"),
         (["general/scripts/pr_compliance_checklist.yaml"],
