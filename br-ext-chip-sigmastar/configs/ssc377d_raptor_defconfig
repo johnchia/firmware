@@ -4,10 +4,9 @@
 # ssc377d_lite configs differ by. Flash is 16MB, as on ssc377qe_raptor, not the
 # 8 the ssc377d_lite config carries.
 #
-# NOT HARDWARE VERIFIED. Everything below that reads as evidence -- the pinned
-# kernel, the toolchain, the partition layout -- is evidence from the ssc377qe
-# board, inherited because the part is the same family, not because this one has
-# been booted.
+# Board-verified: an SSC377D has been flashed with this config and runs. What is
+# inherited from ssc377qe rather than measured here is called out where it
+# matters -- see BR2_OPENIPC_ROOTFS_PART_KB below.
 
 # Architecture
 BR2_arm=y
@@ -101,10 +100,9 @@ BR2_OPENIPC_FLASH_SIZE="16"
 #   mtd4 rootfs_data offset 0x00a50000  size 0x005b0000  (5824 KB)
 #
 # summing to exactly 0x1000000. The layout is u-boot's and follows the chip
-# size, not the SoC model, so it should hold here -- but it is the one number
-# in this file to check against `cat /proc/mtd` the first time this board boots.
-# Too small only wastes flash; too large and check-rootfs-size.sh passes an
-# image that overruns the partition.
+# size, not the SoC model, which is why it carries over -- and the board having
+# booted is itself the evidence: this image's rootfs is 5296KB, which does not
+# fit a 5120k mtd3 at all, so the larger layout is the one u-boot selected.
 BR2_OPENIPC_ROOTFS_PART_KB="8192"
 
 # Packages

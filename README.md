@@ -19,15 +19,10 @@ master and merges from it. Bug reports about anything else belong there.
 | Board | SoC · family | Rootfs | Download |
 |---|---|---|---|
 | `ssc377qe_raptor` | SSC377QE · infinity6c | 8192 KB | [sysupgrade][t-377] · [whole-flash][f-377] |
-| `ssc377d_raptor` † | SSC377D · infinity6c | 8192 KB | [sysupgrade][t-377d] · [whole-flash][f-377d] |
+| `ssc377d_raptor` | SSC377D · infinity6c | 8192 KB | [sysupgrade][t-377d] · [whole-flash][f-377d] |
 | `ssc30kq_raptor` | SSC30KQ · infinity6e | 8192 KB | [sysupgrade][t-30k] · [whole-flash][f-30k] |
 | `ssc333_sc3336_raptor` | SSC333 · infinity6b0 | 5120 KB | [sysupgrade][t-333] |
 | `t31_raptor` | T31X · ingenic | 8192 KB | [sysupgrade][t-t31] · [whole-flash][f-t31] |
-
-† `ssc377d_raptor` builds and is published like the rest, but has never been
-booted on hardware. It is `ssc377qe_raptor` with the SoC model and the kernel
-config changed, so its rootfs partition size is inherited rather than read off a
-board: check `cat /proc/mtd` against the 8192 KB above before trusting a write.
 
 Those links are rolling: each is the `-latest` asset on the
 [`raptor-nightly`][nightly] release, rewritten by every nightly that publishes,
