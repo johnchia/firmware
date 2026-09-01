@@ -111,7 +111,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        board: [ssc377qe_raptor, ssc30kq_raptor, ssc333_sc3336_raptor, t31_raptor]
+        board: [ssc377qe_raptor, ssc377d_raptor, ssc30kq_raptor, ssc333_sc3336_raptor,
+                t31_raptor]
     env:
       BUILD_ID:  ${{ needs.gate.outputs.build_id }}
       BUILD_SHA: ${{ needs.gate.outputs.head_sha }}
