@@ -95,6 +95,38 @@ uid_from_env() {
 	fw_printenv -n uidraw 2>/dev/null | tr -d ' \r\n' | tr 'ABCDEF' 'abcdef'
 }
 
+# The SoC die id, read through ipctool. A different identity from the one above
+# -- burned into the chip rather than into the part beside it -- and the only one
+# left on a board whose flash driver publishes nothing, which is every HiSilicon
+# gen4 board here: hi_sfc has no /proc/flash_uid.
+#
+# `ipcinfo -i` IS BEST-EFFORT, AND IT FAILS SILENTLY.
+#
+# It reads die registers through /dev/mem for the two vendors that implement one
+# (HiSilicon gen4 and SigmaStar), and on every other chip the reader returns
+# false to a caller that ignores the result: ipcinfo prints an uninitialised
+# buffer and still exits 0. So neither the exit status nor a non-empty line means
+# anything here. uid_usable below is what decides, and it is the whole reason
+# calling this on a board that does not support it is safe rather than a way to
+# hand that board an address derived from stack garbage.
+#
+# The HiSilicon reader also strips trailing zeroes off its 48-digit result, so
+# the length is a property of the unit and can come back odd. One zero goes back
+# on to make the digits pair up again -- restoring what was trimmed, not padding
+# to a width that looks plausible -- because mac_from_uid folds a byte at a time.
+# It is the same value on every boot of that unit, which is all the derivation
+# asks of its input.
+uid_from_soc() {
+	local uid=
+
+	command -v ipcinfo >/dev/null 2>&1 || return 1
+
+	uid=$(ipcinfo -i 2>/dev/null | tr -d ' \r\n' | tr 'ABCDEF' 'abcdef')
+	[ $(( ${#uid} % 2 )) -eq 1 ] && uid="${uid}0"
+
+	echo "$uid"
+}
+
 # All-zero and all-ones are what a part answers with when it implements no
 # unique number, or when the bus read back idle. Both are identical on every
 # unit, so deriving from one would hand the whole fleet the same address --
@@ -163,7 +195,7 @@ mac_from_uid() {
 }
 
 ethaddr_provision() {
-	local current= uid= mac=
+	local current= uid= mac= src=
 
 	current=$(fw_printenv -n ethaddr 2>/dev/null)
 	case "$current" in
@@ -171,11 +203,15 @@ ethaddr_provision() {
 		*) return 0 ;;
 	esac
 
-	uid=$(uid_from_flash)
-	if ! uid_usable "$uid"; then
-		uid=$(uid_from_env)
-		uid_usable "$uid" || uid=
-	fi
+	# In order of preference, and the order matters. The flash id comes first
+	# because an Infinity6C board's U-Boot derived its address from that one:
+	# taking a different source first would give a board reflashed today an
+	# address it did not have yesterday, for no gain.
+	for src in uid_from_flash uid_from_env uid_from_soc; do
+		uid=$($src)
+		uid_usable "$uid" && break
+		uid=
+	done
 
 	if [ -z "$uid" ]; then
 		echo "ethaddr: no per-unit id on this board, keeping ${current:-unset}"
@@ -184,7 +220,7 @@ ethaddr_provision() {
 
 	mac=$(mac_from_uid "$uid") || return 0
 
-	echo "ethaddr: $mac, derived from $uid"
+	echo "ethaddr: $mac, derived from $uid ($src)"
 	fw_setenv ethaddr "$mac" 2>/dev/null
 
 	# For this boot as well as the next. interfaces.d/eth0 already reads
