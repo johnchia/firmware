@@ -18,3 +18,19 @@
 sha256  44eacc941b9f319b3824164cfb90272ee939e6916dbe7b2ac7a167f1b83f8e6b  toolchain.sigmastar-infinity6e-20260828.tgz
 sha256  61c4b9796decd55117e77e21c2a0473006d29003607b62ef4228babf861ec0bb  toolchain.sigmastar-infinity6c-20260828.tgz
 sha256  59f1397302c1b6992481bcc4f45b2cbbdaf8590c1e3fab7b541e7e76469054db  toolchain.sigmastar-infinity6b0-20260828.tgz
+
+# hi3516ev300_raptor, and the odd one out: not mirrored, so this names upstream's
+# asset on its moving `toolchain` tag rather than a dated copy of it. Adding the
+# file above made a hash mandatory for every toolchain, not just the mirrored
+# ones -- Buildroot fails a download with "No hash found for <file>" once a hash
+# file for the package exists -- so this line is what lets a hisilicon board
+# build at all.
+#
+# It is also the right failure. Upstream overwrites that tag in place, and
+# without a line here a rewritten compiler would arrive unnoticed under a port
+# with no known-good binary to compare against. With one, the build stops and
+# says the bytes moved. Mirror this toolchain the way the SigmaStar three are
+# mirrored and the entry becomes a dated filename like theirs.
+#
+# Downloaded 2026-09-01.
+sha256  75fa360224e3e0f7b1934d94e17dafa32c8d5a7745e8b6cf6e2e5ac1b9784641  toolchain.hisilicon-hi3516ev200.tgz
