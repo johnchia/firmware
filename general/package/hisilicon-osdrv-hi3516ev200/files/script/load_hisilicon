@@ -193,7 +193,17 @@ insert_ko() {
 	modprobe open_chnl
 	modprobe open_vedu
 	modprobe open_rc
-	modprobe open_venc VencMaxChnNum=3
+	# Four, not three. Three is main + sub + jpeg, which is exactly what
+	# majestic asks for and nothing more; a streamer that wants a third
+	# encoded stream alongside the snapshot channel is refused at
+	# HI_MPI_VENC_CreateChn, and the failure surfaces as a stream that never
+	# starts rather than as anything naming the limit.
+	#
+	# The ceiling is per-channel bookkeeping inside the module, not frame
+	# buffers -- those are allocated from MMZ when a channel is created, so a
+	# board that only ever opens three pays nothing for the fourth being
+	# available.
+	modprobe open_venc VencMaxChnNum=4
 	modprobe open_h264e
 	modprobe open_h265e
 	modprobe open_jpege
