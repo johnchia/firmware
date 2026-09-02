@@ -95,7 +95,15 @@ BR2_OPENIPC_FLASH_SIZE="16"
 # rootfs was 5120k. A limit larger than the partition is not a limit -- it moves
 # the failure from the build, where it is a number, to the flash, where it is a
 # camera nobody can reach.
-BR2_OPENIPC_ROOTFS_PART_KB="5120"
+#
+# 10240 IS NOT THE DEFAULT LAYOUT. A camera only has this partition table after
+# something has set the env -- `setnor16m` at the u-boot prompt, or a full image
+# that carries the env with it. Flashed onto a board still running the
+# compiled-in nor8m table, an image built to this limit is the 5120k failure
+# again, and it also lands at the wrong offset: nor16m puts the rootfs at
+# 0x350000, not 0x250000, because its kernel partition is 3072k rather than
+# 2048k. Check /proc/mtd, or flash the full image that sets both.
+BR2_OPENIPC_ROOTFS_PART_KB="10240"
 
 # Packages
 #
@@ -106,16 +114,14 @@ BR2_OPENIPC_ROOTFS_PART_KB="5120"
 # headers package -- the backend declares the HiMPP ABI itself in
 # raptor-hal/src/hisi_v4/v4_*.h.
 #
-# No majestic, and that is the 5120k partition above deciding it rather than a
-# preference. Carrying it as a reference encoder cost 5356KB of rootfs against a
-# 5120k mtd3; without it the image is 4848KB with 272KB to spare. It was already
-# renamed to K95majestic so it never started, so nothing running on the camera
-# is lost -- what is lost is the second opinion when MPP refuses something and
-# it is not obvious whether the fault is Raptor's or the SoC's.
+# Majestic is carried as a reference encoder rather than a streamer -- the
+# second opinion when MPP refuses something and it is not clear whether the
+# fault is Raptor's or the SoC's, which during a bring-up is most of the time. A
+# post-build hook renames its init script to K95majestic so it does not take the
+# MPP devices before S95raptor; run it by hand after stopping raptor.
 #
-# It also takes the browser door with it: /setup.html is served by majestic, and
-# majestic-webui is not selected here either. Until root has a password this
-# camera is unclaimed, so SSH into openipc-claim is the only way in.
+# It fits because the partition above is the 10240k one. At 5120k it does not,
+# and the choice between the two is the choice between having this and not.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
 BR2_PACKAGE_HISILICON_OPENSDK=y
 BR2_PACKAGE_HISILICON_OSDRV_HI3516EV200=y
@@ -128,7 +134,7 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
 BR2_PACKAGE_LIBEVENT_OPENIPC=y
 BR2_PACKAGE_LIBOGG_OPENIPC=y
-# BR2_PACKAGE_MAJESTIC is not set
+BR2_PACKAGE_MAJESTIC=y
 BR2_PACKAGE_MAJESTIC_FONTS=y
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
 BR2_PACKAGE_MOSQUITTO=y

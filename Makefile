@@ -281,7 +281,24 @@ FULLIMAGE_UBOOT = $(strip $(if $(strip $(UBOOT_BIN)),$(abspath $(UBOOT_BIN)),\
 	$(TARGET)/images/u-boot-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor.bin))
 
 fullimage: defconfig
-ifeq ($(BR2_OPENIPC_SOC_VENDOR),"ingenic")
+ifeq ($(BR2_OPENIPC_SOC_VENDOR),"hisilicon")
+	@test -n "$(strip $(UBOOT_BIN))" || { \
+		echo "point UBOOT_BIN at a HiSilicon boot container."; \
+		echo "Nothing here builds one: uboot.yml covers allwinner,"; \
+		echo "ingenic and sigmastar only, so there is no release asset"; \
+		echo "to fetch and no br-uboot to run. Build it from"; \
+		echo "OpenIPC/u-boot-hi3516ev200 with its own build.sh, which"; \
+		echo "pairs config-<soc> with reg_info_<soc>.bin, and pass"; \
+		echo "u-boot-<soc>.bin -- the packed container, not u-boot.bin."; \
+		exit 2; }
+	@MKENVIMAGE=$(TARGET)/host/bin/mkenvimage \
+	$(SHELL) $(PWD)/general/scripts/make_full_image_hisilicon.sh \
+		"$(abspath $(UBOOT_BIN))" \
+		"$(TARGET)/images" \
+		"$(subst ",,$(BR2_OPENIPC_SOC_MODEL))" \
+		"$(TARGET)/images/openipc-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor-full.bin" \
+		$(if $(strip $(UBOOT_ENV_EXTRA)),"$(abspath $(UBOOT_ENV_EXTRA))")
+else ifeq ($(BR2_OPENIPC_SOC_VENDOR),"ingenic")
 	@test -n "$(strip $(UBOOT_BIN))" -o -f "$(TARGET)/images/u-boot-with-tpl-lzma.bin" || { \
 		echo "no bootloader at $(TARGET)/images/u-boot-with-tpl-lzma.bin"; \
 		echo "enable BR2_TARGET_UBOOT in the board defconfig and build, or run"; \
