@@ -68,7 +68,13 @@ RAPTOR_STREAMING_IPC_VERSION = 706fc805ec59bccfd86f007f3af4fcdbb93c4c68
 # ingenic-headers/$(PLATFORM)/<sdk-version>/<lang>. Fetching both would work and
 # is not free -- ingenic-headers carries every part from A1 to T41 -- so the
 # vendor picks, and each pin is read from the gitlink the same way.
-ifeq ($(OPENIPC_SOC_VENDOR),ingenic)
+# HiSilicon needs no headers at all, and that is a property of the backend
+# rather than an omission: src/hisi_v4 declares the HiMPP ABI itself in
+# v4_*.h and reaches the libraries through dlopen, so mk/hisilicon.mk leaves
+# SDK_INCLUDE empty. An empty NAME here is what the three guards below key on.
+ifeq ($(OPENIPC_SOC_VENDOR),hisilicon)
+RAPTOR_STREAMING_HEADERS_NAME =
+else ifeq ($(OPENIPC_SOC_VENDOR),ingenic)
 RAPTOR_STREAMING_HEADERS_OWNER = gtxaspec
 RAPTOR_STREAMING_HEADERS_NAME = ingenic-headers
 RAPTOR_STREAMING_HEADERS_VERSION = f573958ebe2a851a6ba0493288b47bc0122daf36
@@ -96,7 +102,7 @@ RAPTOR_STREAMING_EXTRA_DOWNLOADS = \
 	$(call github,johnchia,raptor-hal,$(RAPTOR_STREAMING_HAL_VERSION))/raptor-hal-$(RAPTOR_STREAMING_HAL_VERSION).tar.gz \
 	$(call github,johnchia,raptor-common,$(RAPTOR_STREAMING_COMMON_VERSION))/raptor-common-$(RAPTOR_STREAMING_COMMON_VERSION).tar.gz \
 	$(call github,johnchia,raptor-ipc,$(RAPTOR_STREAMING_IPC_VERSION))/raptor-ipc-$(RAPTOR_STREAMING_IPC_VERSION).tar.gz \
-	$(call github,$(RAPTOR_STREAMING_HEADERS_OWNER),$(RAPTOR_STREAMING_HEADERS_NAME),$(RAPTOR_STREAMING_HEADERS_VERSION))/$(RAPTOR_STREAMING_HEADERS_NAME)-$(RAPTOR_STREAMING_HEADERS_VERSION).tar.gz
+	$(if $(RAPTOR_STREAMING_HEADERS_NAME),$(call github,$(RAPTOR_STREAMING_HEADERS_OWNER),$(RAPTOR_STREAMING_HEADERS_NAME),$(RAPTOR_STREAMING_HEADERS_VERSION))/$(RAPTOR_STREAMING_HEADERS_NAME)-$(RAPTOR_STREAMING_HEADERS_VERSION).tar.gz)
 
 # The source tree is the parent directory, so the main tarball must NOT be
 # flattened into it the way Buildroot flattens every other package: raptor has to
@@ -123,7 +129,7 @@ define RAPTOR_STREAMING_LAYOUT_SIBLINGS
 	$(call RAPTOR_STREAMING_UNPACK,raptor-hal,$(RAPTOR_STREAMING_HAL_VERSION),$(@D)/raptor-hal)
 	$(call RAPTOR_STREAMING_UNPACK,raptor-common,$(RAPTOR_STREAMING_COMMON_VERSION),$(@D)/raptor-common)
 	$(call RAPTOR_STREAMING_UNPACK,raptor-ipc,$(RAPTOR_STREAMING_IPC_VERSION),$(@D)/raptor-ipc)
-	$(call RAPTOR_STREAMING_UNPACK,$(RAPTOR_STREAMING_HEADERS_NAME),$(RAPTOR_STREAMING_HEADERS_VERSION),$(@D)/raptor-hal/$(RAPTOR_STREAMING_HEADERS_NAME))
+	$(if $(RAPTOR_STREAMING_HEADERS_NAME),$(call RAPTOR_STREAMING_UNPACK,$(RAPTOR_STREAMING_HEADERS_NAME),$(RAPTOR_STREAMING_HEADERS_VERSION),$(@D)/raptor-hal/$(RAPTOR_STREAMING_HEADERS_NAME)))
 endef
 
 RAPTOR_STREAMING_POST_EXTRACT_HOOKS += RAPTOR_STREAMING_LAYOUT_SIBLINGS
@@ -220,11 +226,16 @@ RAPTOR_STREAMING_BUILD_HASH = $(shell echo $(RAPTOR_STREAMING_VERSION) | cut -c1
 # $(@D)/raptor is where the extract hook must have put the source. Checking it
 # costs nothing and turns "no such file or directory" deep in a sub-make into a
 # sentence.
-define RAPTOR_STREAMING_CHECK_SOURCE
-	test -d $(@D)/raptor || { \
-		echo "*** No Raptor source in $(@D) -- the extract hook did not run,"; \
-		echo "*** or the archive layout changed. Try a dirclean."; \
-		exit 1; }
+# Its own define rather than an $(if) inside the one below. $(if) splits its
+# arguments on commas, and commas that are not inside a nested $(...) are
+# argument separators however much they look like prose -- so an inlined version
+# of this is cut at the first comma in a message, and what reaches the shell is
+# the tail of a sentence being run as a command.
+#
+# Undefined for HiSilicon, where there is no headers submodule to check, and an
+# empty expansion is just a blank line in the recipe.
+ifneq ($(RAPTOR_STREAMING_HEADERS_NAME),)
+define RAPTOR_STREAMING_CHECK_HEADERS
 	test -n "$$(ls -A $(@D)/raptor-hal/$(RAPTOR_STREAMING_HEADERS_NAME) 2>/dev/null)" || { \
 		echo "*** raptor-hal/$(RAPTOR_STREAMING_HEADERS_NAME) is missing or empty."; \
 		echo "*** The vendor SDK declarations are a submodule of raptor-hal, and"; \
@@ -232,6 +243,15 @@ define RAPTOR_STREAMING_CHECK_SOURCE
 		echo "*** submodule update' carries them. Without it the build fails one"; \
 		echo "*** file at a time on missing headers."; \
 		exit 1; }
+endef
+endif
+
+define RAPTOR_STREAMING_CHECK_SOURCE
+	test -d $(@D)/raptor || { \
+		echo "*** No Raptor source in $(@D) -- the extract hook did not run,"; \
+		echo "*** or the archive layout changed. Try a dirclean."; \
+		exit 1; }
+	$(RAPTOR_STREAMING_CHECK_HEADERS)
 endef
 
 # The three COMPY_* overrides point rsd at the compy package in staging instead
