@@ -102,16 +102,49 @@ env_txt=$(mktemp)
 env_bin=$(mktemp)
 trap 'rm -f "$tmp" "$env_txt" "$env_bin"' EXIT
 
-# Only what the boot path actually reads. bootargs is compiled in and expands
-# ${mtdparts} and ${osmem} from here; bootcmd is spelled out rather than left to
-# the compiled-in default so that a board arriving from the nand or ubi settings
-# comes back to NOR.
+# THE WHOLE DEFAULT ENVIRONMENT, NOT JUST THE PARTS BEING CHANGED.
+#
+# U-Boot uses its compiled-in defaults only while the flash environment fails
+# its CRC. Write a valid one and that is the environment -- the defaults are not
+# a fallback layer underneath it, and every variable left out is simply gone.
+#
+# An env carrying mtdparts and bootcmd alone therefore boots to
+# "VFS: cannot open root device (null)": bootcmd runs `setenv bootargs
+# ${bootargs}`, bootargs is not defined here, it expands to nothing, and the
+# kernel is handed a command line with no root= in it. The rootfs was fine and
+# in the right place; nothing had told the kernel where to look.
+#
+# So this mirrors CONFIG_BOOTARGS and CONFIG_EXTRA_ENV_SETTINGS from
+# include/configs/hi-common.h, with mtdparts pointed at the 16m table. Keeping
+# the recovery recipes matters as much as the boot path: urnor16m and setnor8m
+# are how someone with a serial console gets out of trouble, and dropping them
+# would leave a board whose only recovery is the clip that wrote this image.
+#
+# It tracks a file in another repository, which is a real cost. The alternative
+# -- write four variables and lose the rest -- is what produced the (null).
 {
-	echo "mtdparts=$MTDPARTS"
+	echo "bootargs=mem=\${osmem} console=ttyAMA0,115200 panic=20 root=/dev/mtdblock3 rootfstype=squashfs init=/init mtdparts=\${mtdparts} \${extras}"
 	echo "bootcmd=setenv setargs setenv bootargs \${bootargs}; run setargs; sf probe 0; sf read \${baseaddr} 0x50000 0x300000; bootm \${baseaddr}"
+	echo "mtdparts=$MTDPARTS"
 	echo "baseaddr=0x42000000"
 	echo "osmem=32M"
 	echo "soc=$SOC"
+
+	# Recovery, straight from hi-common.h. TFTP a kernel or a rootfs into the
+	# 16m offsets, or move the partition table between layouts.
+	echo "uknor8m=mw.b \${baseaddr} ff 1000000; tftpboot \${baseaddr} uImage.\${soc} && sf probe 0; sf erase 0x50000 0x200000; sf write \${baseaddr} 0x50000 \${filesize}"
+	echo "uknor16m=mw.b \${baseaddr} ff 1000000; tftpboot \${baseaddr} uImage.\${soc} && sf probe 0; sf erase 0x50000 0x300000; sf write \${baseaddr} 0x50000 \${filesize}"
+	echo "urnor8m=mw.b \${baseaddr} ff 1000000; tftpboot \${baseaddr} rootfs.squashfs.\${soc} && sf probe 0; sf erase 0x250000 0x500000; sf write \${baseaddr} 0x250000 \${filesize}"
+	echo "urnor16m=mw.b \${baseaddr} ff 1000000; tftpboot \${baseaddr} rootfs.squashfs.\${soc} && sf probe 0; sf erase 0x350000 0xa00000; sf write \${baseaddr} 0x350000 \${filesize}"
+	echo "mtdpartsnor8m=setenv mtdparts hi_sfc:256k(boot),64k(env),2048k(kernel),5120k(rootfs),-(rootfs_data)"
+	echo "mtdpartsnor16m=setenv mtdparts $MTDPARTS"
+	echo "bootcmdnor=setenv setargs setenv bootargs \${bootargs}; run setargs; sf probe 0; sf read \${baseaddr} 0x50000 0x300000; bootm \${baseaddr}"
+	echo "setnor8m=run mtdpartsnor8m; setenv bootcmd \${bootcmdnor}; saveenv; reset"
+	echo "setnor16m=run mtdpartsnor16m; setenv bootcmd \${bootcmdnor}; saveenv; reset"
+	echo "nfsroot=/srv/nfs/\${soc}"
+	echo "bootargsnfs=mem=\${osmem} console=ttyAMA0,115200 panic=20 root=/dev/nfs rootfstype=nfs ip=\${ipaddr}:::255.255.255.0::eth0 nfsroot=\${serverip}:\${nfsroot},v3,nolock rw \${extras}"
+	echo "bootnfs=setenv setargs setenv bootargs \${bootargsnfs}; run setargs; tftpboot \${baseaddr} uImage.\${soc}; bootm \${baseaddr}"
+
 	if [ -n "$ENV_EXTRA" ]; then
 		if [ ! -f "$ENV_EXTRA" ]; then
 			echo "missing env-extra: $ENV_EXTRA" >&2
@@ -120,6 +153,13 @@ trap 'rm -f "$tmp" "$env_txt" "$env_bin"' EXIT
 		cat "$ENV_EXTRA"
 	fi
 } > "$env_txt"
+
+# The one variable whose absence is silent and fatal. Everything else here
+# degrades into a missing convenience; without this the kernel has no root.
+grep -q '^bootargs=.*root=' "$env_txt" || {
+	echo "refusing to write an environment with no root= in bootargs" >&2
+	exit 1
+}
 
 # -r is the redundant-env flag and is NOT wanted: hi-common.h defines a single
 # CONFIG_ENV_OFFSET with no CONFIG_ENV_OFFSET_REDUND, so a redundant image would
