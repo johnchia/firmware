@@ -84,26 +84,19 @@ BR2_OPENIPC_ROOTFS_PART_KB="8192"
 
 # Packages
 #
-# Raptor is meant to own the camera here as it does on the SigmaStar boards: the
-# HAL dlopens the HiMPP libraries the osdrv package installs rather than linking
+# Raptor owns the camera here as it does on the SigmaStar boards: the HAL
+# dlopens the HiMPP libraries the osdrv package installs rather than linking
 # them, so there is no SDK to have present at build time and the binary binds to
-# whichever MPP the device carries. Majestic streams in the meantime, and stays
-# in the image afterwards as a reference encoder -- the second opinion when MPP
-# refuses something and it is not clear whether the fault is Raptor's or the
-# SoC's, which during a bring-up is most of the time.
+# whichever MPP the device carries. That is also why this board pulls in no
+# headers package -- the backend declares the HiMPP ABI itself in
+# raptor-hal/src/hisi_v4/v4_*.h.
 #
-# The six packages raptor-streaming's Config.in selects are therefore named
-# here by hand -- compy, faac, helix-aac, libschrift, majestic-fonts, opus --
-# because staging them is the point of this target. They are what an
-# out-of-tree HAL build links against, and letting them follow the symbol above
-# would have taken the sysroot out with it. They cost the image a few hundred
-# KB of libraries nothing on the device calls yet, which is the right side of
-# the trade against a 16MB part, and the day the symbol goes back on they are
-# what it needs anyway.
-BR2_PACKAGE_COMPY=y
+# Majestic is carried as a reference encoder rather than a streamer -- the
+# second opinion when MPP refuses something and it is not clear whether the
+# fault is Raptor's or the SoC's, which during a bring-up is most of the time. A
+# post-build hook renames its init script to K95majestic so it does not take the
+# MPP devices before S95raptor; run it by hand after stopping raptor.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
-BR2_PACKAGE_FAAC=y
-BR2_PACKAGE_HELIX_AAC=y
 BR2_PACKAGE_HISILICON_OPENSDK=y
 BR2_PACKAGE_HISILICON_OSDRV_HI3516EV200=y
 BR2_PACKAGE_IPCTOOL=y
@@ -115,21 +108,14 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
 BR2_PACKAGE_LIBEVENT_OPENIPC=y
 BR2_PACKAGE_LIBOGG_OPENIPC=y
-BR2_PACKAGE_LIBSCHRIFT=y
 BR2_PACKAGE_MAJESTIC=y
 BR2_PACKAGE_MAJESTIC_FONTS=y
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
 BR2_PACKAGE_MOSQUITTO=y
 # BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_MOTORS=y
-BR2_PACKAGE_OPUS=y
 BR2_PACKAGE_OPUS_OPENIPC=y
 BR2_PACKAGE_OPUS_OPENIPC_FIXED_POINT=y
-# Off until the daemon side lands. raptor's own Makefile rejects
-# PLATFORM=HI3516EV200 at the commit this package pins -- the HiSilicon platform
-# arms exist only in a working tree -- so enabling this symbol today fails the
-# build outright rather than shipping something untested. Turning it back on is
-# this one line, once the pins in raptor-streaming.mk name commits that have it.
-# BR2_PACKAGE_RAPTOR_STREAMING is not set
+BR2_PACKAGE_RAPTOR_STREAMING=y
 BR2_PACKAGE_VTUND_OPENIPC=y
 BR2_PACKAGE_YAML_CLI=y
