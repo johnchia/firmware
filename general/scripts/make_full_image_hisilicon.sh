@@ -2,7 +2,8 @@
 #
 # Assemble a full-chip NOR image for a HiSilicon gen4 part.
 #
-# Usage: make_full_image_hisilicon.sh <boot-container> <images-dir> <soc> <out> [env-extra]
+# Usage: FLASH_KB=16384 make_full_image_hisilicon.sh \
+#            <boot-container> <images-dir> <soc> <out> [env-extra]
 #
 # THIS SCRIPT WRITES THE ENVIRONMENT, AND THAT IS THE WHOLE POINT.
 #
@@ -127,8 +128,25 @@ trap 'rm -f "$tmp" "$env_txt" "$env_bin"' EXIT
 
 IMAGE_KB=$((ROOTFS_OFF_KB + ROOTFS_MAX_KB))
 
-# 0xFF is erased flash, so rootfs_data past the end of this image stays erased,
-# which is what an unclaimed camera wants: a fresh overlay.
+# Pad out to the whole chip when the caller says how big it is, because the
+# consumer of this file is a programmer on a clip and that writes chips, not
+# partitions. A file that stops after rootfs leaves rootfs_data as whatever the
+# donor chip happened to hold -- a previous owner's overlay, or on a verify pass
+# a mismatch against a buffer the tool padded differently. Neither is what
+# "erase, write, verify" should mean.
+#
+# The tail is rootfs_data and it is meant to be erased: that is a camera with a
+# fresh overlay, which is the state firstboot puts it in anyway.
+if [ -n "$FLASH_KB" ]; then
+	if [ "$FLASH_KB" -lt "$IMAGE_KB" ]; then
+		echo "image is ${IMAGE_KB} KB but the flash is ${FLASH_KB} KB" >&2
+		echo "  the 10240k rootfs layout does not fit this part" >&2
+		exit 1
+	fi
+	IMAGE_KB=$FLASH_KB
+fi
+
+# 0xFF is erased flash, so everything not written above stays erased.
 dd if=/dev/zero bs=1K count="$IMAGE_KB" status=none | tr '\000' '\377' > "$tmp"
 
 dd if="$BOOT"    of="$tmp" bs=1K seek="$BOOT_OFF_KB"   conv=notrunc status=none
@@ -143,3 +161,9 @@ rm -f "$env_txt" "$env_bin"
 echo "- full:   $OUT ($IMAGE_KB KB)"
 echo "-         boot@${BOOT_OFF_KB}K env@${ENV_OFF_KB}K kernel@${KERNEL_OFF_KB}K rootfs@${ROOTFS_OFF_KB}K"
 echo "-         mtdparts written: $MTDPARTS"
+if [ -n "$FLASH_KB" ]; then
+	echo "-         padded to the full ${FLASH_KB} KB chip; rootfs_data erased"
+else
+	echo "-         NOT padded to a chip size (no FLASH_KB); ends after rootfs."
+	echo "-         Pass FLASH_KB to get an image a programmer can verify."
+fi

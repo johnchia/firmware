@@ -292,6 +292,7 @@ ifeq ($(BR2_OPENIPC_SOC_VENDOR),"hisilicon")
 		echo "u-boot-<soc>.bin -- the packed container, not u-boot.bin."; \
 		exit 2; }
 	@MKENVIMAGE=$(TARGET)/host/bin/mkenvimage \
+	FLASH_KB=$(shell expr $(subst ",,$(BR2_OPENIPC_FLASH_SIZE)) \* 1024) \
 	$(SHELL) $(PWD)/general/scripts/make_full_image_hisilicon.sh \
 		"$(abspath $(UBOOT_BIN))" \
 		"$(TARGET)/images" \
