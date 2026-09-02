@@ -1,0 +1,135 @@
+# Hi3516EV300, the target the Raptor port is brought up on. Derived from
+# hi3516ev300_lite, and
+# the family it builds against is hi3516ev200 -- one MPP tree covers both parts.
+#
+# THE PORT IS IN PROGRESS, AND RAPTOR IS NOT BUILT YET -- see the Packages
+# section. What this target delivers today is the sysroot the HAL's HiSilicon
+# backend (raptor-hal src/hisi_v4) is built against, and an image that boots on
+# Majestic while that backend is brought up. Nothing here has been verified on a
+# board beyond building.
+
+# Architecture
+#
+# NOTE THE TUPLE: musleabi, not musleabihf. Gen4 HiSilicon userland is
+# soft-float -- Tag_ABI_VFP_args is absent from every vendor library on a stock
+# board while Tag_FP_arch reads VFPv4, so the FPU is used and the calling
+# convention is not. A hard-float build links, loads, runs, and hands garbage to
+# every float argument crossing into MPI. raptor-hal carries a #error on
+# __ARM_PCS_VFP so the mistake cannot survive a compile; this is the config side
+# of the same constraint, and it is why the toolchain below is not the one the
+# SigmaStar raptor boards use.
+BR2_arm=y
+BR2_cortex_a7=y
+BR2_ARM_EABI=y
+BR2_ARM_FPU_NEON_VFPV4=y
+BR2_ARM_INSTRUCTIONS_THUMB2=y
+
+# Toolchain
+#
+# Upstream's, at the moving URL, and deliberately not the dated mirror the
+# SigmaStar raptor boards fetch from: that mirror carries the three SigmaStar
+# families only. Mirroring this one is the same job done again for hisilicon and
+# is worth doing before anything here is verified on hardware -- until then a
+# rebuilt toolchain changes the compiler under a port that has no known-good
+# reference to compare against.
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/openipc/firmware/releases/download/$(OPENIPC_TOOLCHAIN).tgz"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="arm-openipc-linux-musleabi"
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_4_9=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_MUSL=y
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+
+# Kernel
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+# PINNED, NOT TRACKED, for the reason the SigmaStar raptor boards are: a branch
+# name in this URL means one filename forever, and Buildroot caches a download
+# by filename and does not re-fetch. A commit makes the filename change when the
+# source does, and makes the tarball in dl/linux/ answer which one it is.
+#
+# The branch is still where new work lands:
+#   git ls-remote https://github.com/openipc/linux refs/heads/hisilicon-hi3516ev200
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/e66720e0778e0b3f7488e635b512f0e6290626cd.tar.gz"
+BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/hi3516ev300.generic.config"
+BR2_LINUX_KERNEL_UIMAGE=y
+BR2_LINUX_KERNEL_XZ=y
+
+# Filesystem
+BR2_PACKAGE_BUSYBOX_CONFIG="$(BR2_EXTERNAL)/package/busybox/busybox.config"
+BR2_PACKAGE_UBOOT_TOOLS=y
+BR2_PACKAGE_ZLIB=y
+# BR2_PACKAGE_IFUPDOWN_SCRIPTS is not set
+BR2_PACKAGE_WIREGUARD_LINUX_COMPAT=y
+BR2_PACKAGE_WIREGUARD_TOOLS=y
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+# Fail the build, not the flash, when the rootfs outgrows its partition. The
+# limit is BR2_OPENIPC_ROOTFS_PART_KB below.
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL)/scripts/check-rootfs-size.sh"
+
+# OpenIPC
+BR2_OPENIPC_SOC_VENDOR="hisilicon"
+BR2_OPENIPC_SOC_MODEL="hi3516ev300"
+BR2_OPENIPC_SOC_FAMILY="hi3516ev200"
+BR2_OPENIPC_VARIANT="raptor"
+BR2_OPENIPC_FLASH_SIZE="16"
+# ASSUMED, NOT READ OFF A BOARD. 8192 is what the Makefile's fallback would pick
+# for a 16MB part anyway, so this states the assumption rather than introducing
+# one -- but the partition table is the bootloader's and does not follow from
+# the chip size. Check `cat /proc/mtd` before trusting a write: too small only
+# wastes flash, too large and this guard passes an image that overruns mtd.
+BR2_OPENIPC_ROOTFS_PART_KB="8192"
+
+# Packages
+#
+# Raptor is meant to own the camera here as it does on the SigmaStar boards: the
+# HAL dlopens the HiMPP libraries the osdrv package installs rather than linking
+# them, so there is no SDK to have present at build time and the binary binds to
+# whichever MPP the device carries. Majestic streams in the meantime, and stays
+# in the image afterwards as a reference encoder -- the second opinion when MPP
+# refuses something and it is not clear whether the fault is Raptor's or the
+# SoC's, which during a bring-up is most of the time.
+#
+# The six packages raptor-streaming's Config.in selects are therefore named
+# here by hand -- compy, faac, helix-aac, libschrift, majestic-fonts, opus --
+# because staging them is the point of this target. They are what an
+# out-of-tree HAL build links against, and letting them follow the symbol above
+# would have taken the sysroot out with it. They cost the image a few hundred
+# KB of libraries nothing on the device calls yet, which is the right side of
+# the trade against a 16MB part, and the day the symbol goes back on they are
+# what it needs anyway.
+BR2_PACKAGE_COMPY=y
+BR2_PACKAGE_DROPBEAR_OPENIPC=y
+BR2_PACKAGE_FAAC=y
+BR2_PACKAGE_HELIX_AAC=y
+BR2_PACKAGE_HISILICON_OPENSDK=y
+BR2_PACKAGE_HISILICON_OSDRV_HI3516EV200=y
+BR2_PACKAGE_IPCTOOL=y
+BR2_PACKAGE_JSONFILTER=y
+BR2_PACKAGE_LIBCURL_OPENIPC=y
+BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
+# BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
+BR2_PACKAGE_LIBEVENT_OPENIPC=y
+BR2_PACKAGE_LIBOGG_OPENIPC=y
+BR2_PACKAGE_LIBSCHRIFT=y
+BR2_PACKAGE_MAJESTIC=y
+BR2_PACKAGE_MAJESTIC_FONTS=y
+BR2_PACKAGE_MBEDTLS_OPENIPC=y
+BR2_PACKAGE_MOSQUITTO=y
+# BR2_PACKAGE_MOSQUITTO_BROKER is not set
+BR2_PACKAGE_MOTORS=y
+BR2_PACKAGE_OPUS=y
+BR2_PACKAGE_OPUS_OPENIPC=y
+BR2_PACKAGE_OPUS_OPENIPC_FIXED_POINT=y
+# Off until the daemon side lands. raptor's own Makefile rejects
+# PLATFORM=HI3516EV200 at the commit this package pins -- the HiSilicon platform
+# arms exist only in a working tree -- so enabling this symbol today fails the
+# build outright rather than shipping something untested. Turning it back on is
+# this one line, once the pins in raptor-streaming.mk name commits that have it.
+# BR2_PACKAGE_RAPTOR_STREAMING is not set
+BR2_PACKAGE_VTUND_OPENIPC=y
+BR2_PACKAGE_YAML_CLI=y
