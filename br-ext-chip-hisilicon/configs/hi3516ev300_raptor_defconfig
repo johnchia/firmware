@@ -1,12 +1,12 @@
-# Hi3516EV300, the target the Raptor port is brought up on. Derived from
-# hi3516ev300_lite, and
-# the family it builds against is hi3516ev200 -- one MPP tree covers both parts.
+# Hi3516EV300, Raptor in place of Majestic. Derived from hi3516ev300_lite, and
+# the family it builds against is hi3516ev200 -- one MPP tree covers both parts,
+# which is measured rather than assumed: an EV300 reports
+# "Hi3516EV200_MPP_V1.0.1.2 B030" on every /proc/umap node. That is why PLATFORM
+# reaches raptor as HI3516EV200 while SOC_MODEL below stays hi3516ev300 -- the
+# family picks the backend, the part picks the caps.
 #
-# THE PORT IS IN PROGRESS, AND RAPTOR IS NOT BUILT YET -- see the Packages
-# section. What this target delivers today is the sysroot the HAL's HiSilicon
-# backend (raptor-hal src/hisi_v4) is built against, and an image that boots on
-# Majestic while that backend is brought up. Nothing here has been verified on a
-# board beyond building.
+# NOT BOARD-VERIFIED. The gen4 backend builds and links; nothing here has
+# streamed on an EV300.
 
 # Architecture
 #
@@ -75,12 +75,27 @@ BR2_OPENIPC_SOC_MODEL="hi3516ev300"
 BR2_OPENIPC_SOC_FAMILY="hi3516ev200"
 BR2_OPENIPC_VARIANT="raptor"
 BR2_OPENIPC_FLASH_SIZE="16"
-# ASSUMED, NOT READ OFF A BOARD. 8192 is what the Makefile's fallback would pick
-# for a 16MB part anyway, so this states the assumption rather than introducing
-# one -- but the partition table is the bootloader's and does not follow from
-# the chip size. Check `cat /proc/mtd` before trusting a write: too small only
-# wastes flash, too large and this guard passes an image that overruns mtd.
-BR2_OPENIPC_ROOTFS_PART_KB="8192"
+# 5120, from the bootloader rather than from the chip size. u-boot-hi3516ev200
+# carries mtdparts as a plain environment variable with a compiled-in default
+# (include/configs/hi-common.h):
+#
+#   mtdparts=hi_sfc:256k(boot),64k(env),2048k(kernel),5120k(rootfs),-(rootfs_data)
+#
+# Nothing reads the squashfs superblock, so there is no sizing-by-image the way
+# SigmaStar's cmd_sf.c does it -- the table is whatever the env says, and the
+# default is the one above. The larger layout exists but is a deliberate act at
+# the u-boot prompt (`setnor16m`), and it is 10240k with a 3072k kernel at a
+# different rootfs offset, not a bigger mtd3:
+#
+#   mtdparts=hi_sfc:256k(boot),64k(env),3072k(kernel),10240k(rootfs),-(rootfs_data)
+#
+# So 5120 and 10240 are the only two real values here. This said 8192 first,
+# which is a SigmaStar number and belongs to no HiSilicon layout at all; a
+# 5356KB rootfs passed that guard and could not be mounted by a kernel told its
+# rootfs was 5120k. A limit larger than the partition is not a limit -- it moves
+# the failure from the build, where it is a number, to the flash, where it is a
+# camera nobody can reach.
+BR2_OPENIPC_ROOTFS_PART_KB="5120"
 
 # Packages
 #
@@ -91,11 +106,16 @@ BR2_OPENIPC_ROOTFS_PART_KB="8192"
 # headers package -- the backend declares the HiMPP ABI itself in
 # raptor-hal/src/hisi_v4/v4_*.h.
 #
-# Majestic is carried as a reference encoder rather than a streamer -- the
-# second opinion when MPP refuses something and it is not clear whether the
-# fault is Raptor's or the SoC's, which during a bring-up is most of the time. A
-# post-build hook renames its init script to K95majestic so it does not take the
-# MPP devices before S95raptor; run it by hand after stopping raptor.
+# No majestic, and that is the 5120k partition above deciding it rather than a
+# preference. Carrying it as a reference encoder cost 5356KB of rootfs against a
+# 5120k mtd3; without it the image is 4848KB with 272KB to spare. It was already
+# renamed to K95majestic so it never started, so nothing running on the camera
+# is lost -- what is lost is the second opinion when MPP refuses something and
+# it is not obvious whether the fault is Raptor's or the SoC's.
+#
+# It also takes the browser door with it: /setup.html is served by majestic, and
+# majestic-webui is not selected here either. Until root has a password this
+# camera is unclaimed, so SSH into openipc-claim is the only way in.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
 BR2_PACKAGE_HISILICON_OPENSDK=y
 BR2_PACKAGE_HISILICON_OSDRV_HI3516EV200=y
@@ -108,7 +128,7 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
 BR2_PACKAGE_LIBEVENT_OPENIPC=y
 BR2_PACKAGE_LIBOGG_OPENIPC=y
-BR2_PACKAGE_MAJESTIC=y
+# BR2_PACKAGE_MAJESTIC is not set
 BR2_PACKAGE_MAJESTIC_FONTS=y
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
 BR2_PACKAGE_MOSQUITTO=y
