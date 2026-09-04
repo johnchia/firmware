@@ -81,10 +81,10 @@ ALL_BOARDS = [
     # Hisilicon [HI3516EV200]
     # hi3516ev300_raptor is a Raptor board and belongs with the four above by
     # kind; like t31_raptor it sits with its vendor, because that is what a
-    # reader scans for. It is the one Raptor board that does not yet build
-    # raptor-streaming -- the HiSilicon backend is at bring-up and the package's
-    # pins have no HiSilicon platform arm -- so it is here for the rest of the
-    # image, and for the day that symbol goes back on.
+    # reader scans for. It builds raptor-streaming like the rest of them now --
+    # the package grew a HiSilicon arm and the board's defconfig selects the
+    # symbol -- so it is also in raptor-nightly.yml's matrix, and a pin bump
+    # reaches it the same way it reaches the other five.
     "hi3516dv200_lite", "hi3516ev200_lite", "hi3516ev300_lite", "hi3518ev300_lite",
     "hi3516ev300_neo", "hi3516ev300_raptor",
     # Hisilicon [HI3519V101]

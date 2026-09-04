@@ -1,4 +1,4 @@
-# Nightly images for this fork's four Raptor boards.
+# Nightly images for this fork's Raptor boards.
 #
 # WHY THIS IS NOT build.yml
 #
@@ -112,7 +112,7 @@ jobs:
       fail-fast: false
       matrix:
         board: [ssc377qe_raptor, ssc377d_raptor, ssc30kq_raptor, ssc333_sc3336_raptor,
-                t31_raptor]
+                t31_raptor, hi3516ev300_raptor]
     env:
       BUILD_ID:  ${{ needs.gate.outputs.build_id }}
       BUILD_SHA: ${{ needs.gate.outputs.head_sha }}
@@ -135,7 +135,7 @@ jobs:
           path: /tmp/ccache
           key: raptor-${{ matrix.board }}-${{ env.CACHE_DATE }}
 
-      # Keyed per board rather than once for the matrix. The four jobs run in
+      # Keyed per board rather than once for the matrix. The jobs run in
       # parallel and would otherwise race to save one key: actions/cache takes
       # the first writer and the rest get a non-fatal conflict, so whichever
       # board finished first would decide what the next run finds. Per board it
