@@ -97,6 +97,27 @@ COMPY_CONF_OPTS = \
 	-DFETCHCONTENT_SOURCE_DIR_INTERFACE99=$(COMPY_DEPS_DIR)/interface99-$(COMPY_INTERFACE99_VERSION) \
 	-DFETCHCONTENT_SOURCE_DIR_METALANG99=$(COMPY_DEPS_DIR)/metalang99-$(COMPY_METALANG99_VERSION)
 
+# TLS/SRTP, against the 3.6 series rather than the 2.x that Majestic pins.
+# compy is new code with no blob to satisfy, and rsd is the only consumer.
+#
+# CMakeLists reaches mbedtls through pkg_check_modules, so the private prefix
+# has to arrive as a .pc search path. PKG_CONFIG_PATH rather than
+# PKG_CONFIG_LIBDIR: Buildroot's pkg-config wrapper already sets LIBDIR to the
+# sysroot's own pkgconfig dirs and replacing that would hide every other
+# package. pkgconf searches PATH in addition to LIBDIR, and the wrapper's
+# PKG_CONFIG_SYSROOT_DIR is what turns the .pc file's -I/usr/mbedtls3/include
+# into a sysroot-relative path.
+#
+# 2.25 ships no pkg-config files at all -- upstream added them in 3.x -- so
+# there is no ambiguity about which series answers here, and the -I this
+# produces precedes the sysroot's own /usr/include, where 2.25's headers live.
+ifeq ($(BR2_PACKAGE_MBEDTLS3_OPENIPC),y)
+COMPY_DEPENDENCIES += mbedtls3-openipc
+COMPY_CONF_OPTS += -DCOMPY_TLS_MBEDTLS=ON
+COMPY_CONF_ENV += \
+	PKG_CONFIG_PATH=$(STAGING_DIR)$(MBEDTLS3_OPENIPC_PREFIX)/lib/pkgconfig
+endif
+
 # compy has no install() rules -- upstream's cross builds copy the artefacts by
 # hand -- so the staging step is spelled out here. The dependencies are
 # header-only and rsd includes them directly through compy's headers, so they
