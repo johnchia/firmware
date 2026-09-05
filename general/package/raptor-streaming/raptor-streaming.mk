@@ -288,6 +288,50 @@ define RAPTOR_STREAMING_CLEAN_PRODUCTS
 	rm -f $(foreach d,$(RAPTOR_STREAMING_DAEMONS) $(RAPTOR_STREAMING_TOOLS),$(@D)/raptor/$(d)/$(d))
 endef
 
+RAPTOR_STREAMING_COMPY_CFLAGS = -I$(STAGING_DIR)/usr/include
+
+# TLS FOR RHD, AGAINST THE 3.6 SERIES
+#
+# raptor is new code with no blob to satisfy, so it builds against
+# mbedtls3-openipc rather than the end-of-life 2.x that mbedtls-openipc pins
+# for Majestic. The paths are that package's private prefix -- see
+# mbedtls3-openipc.mk for why its headers are not in the shared staging path.
+#
+# LDFLAGS_TLS is overridden rather than LDFLAGS. raptor's Makefile builds
+# LDFLAGS with := out of LDFLAGS_SYSROOT and the pthread/rt/atomic set, and a
+# command-line LDFLAGS would replace all of that; LDFLAGS_TLS is the slot it
+# reserves for these three libraries, and both daemons that need them -- rhd
+# and rsd -- already compose it into their link line. EXTRA_CFLAGS is the
+# matching hook on the compile side.
+#
+# It carries whole file paths rather than -lmbedtls, because the slot is
+# appended after LDFLAGS_SYSROOT's -L$(SYSROOT)/usr/lib and 2.25 puts a
+# libmbedtls.so there too. Resolved by search order this links 3.6's headers
+# against 2.x's libraries and says nothing -- rhd came out with
+# libmbedtls.so.13 in DT_NEEDED the first time this was built.
+#
+# COMPY_HAS_TLS has to be spelled out here even though raptor's Makefile adds
+# it under TLS=1 by itself. The COMPY_CFLAGS below is a command-line variable
+# and so beats the Makefile's +=, which means anything the Makefile would have
+# appended is lost -- this define included. It is only correct to set it
+# because compy is built with COMPY_TLS_MBEDTLS=ON in the same condition; the
+# two are one decision and must not drift apart. Were compy built without TLS,
+# defining this would expose entry points that are not in libcompy.a and turn a
+# working build into an undefined reference at rsd's link.
+#
+# compy's own TLS headers pull no mbedtls of their own -- compy/tls.h and
+# compy/priv/crypto.h are mbedtls-free, the dependency living entirely in
+# compy's .c files -- so rsd needs this define and nothing else on the include
+# side.
+ifeq ($(BR2_PACKAGE_MBEDTLS3_OPENIPC),y)
+RAPTOR_STREAMING_DEPENDENCIES += mbedtls3-openipc
+RAPTOR_STREAMING_COMPY_CFLAGS += -DCOMPY_HAS_TLS
+RAPTOR_STREAMING_TLS_OPTS = \
+		TLS=1 \
+		EXTRA_CFLAGS="$(MBEDTLS3_OPENIPC_CFLAGS)" \
+		LDFLAGS_TLS="$(MBEDTLS3_OPENIPC_LIBS)"
+endif
+
 define RAPTOR_STREAMING_BUILD_CMDS
 	$(call RAPTOR_STREAMING_CHECK_SOURCE)
 	$(call RAPTOR_STREAMING_CLEAN_PRODUCTS)
@@ -298,7 +342,8 @@ define RAPTOR_STREAMING_BUILD_CMDS
 		CROSS_COMPILE="$(TARGET_CROSS)" \
 		SYSROOT="$(STAGING_DIR)" \
 		RSS_BUILD_HASH="$(RAPTOR_STREAMING_BUILD_HASH)" \
-		COMPY_CFLAGS="-I$(STAGING_DIR)/usr/include" \
+		COMPY_CFLAGS="$(RAPTOR_STREAMING_COMPY_CFLAGS)" \
+		$(RAPTOR_STREAMING_TLS_OPTS) \
 		LIB_COMPY_FILE="$(STAGING_DIR)/usr/lib/libcompy.a" \
 		LIB_COMPY="$(STAGING_DIR)/usr/lib/libcompy.a" \
 		libs $(RAPTOR_STREAMING_DAEMONS) $(RAPTOR_STREAMING_TOOLS)
