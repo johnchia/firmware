@@ -124,6 +124,10 @@ BR2_PACKAGE_IPCTOOL=y
 BR2_PACKAGE_JSONFILTER=y
 BR2_PACKAGE_LIBCURL_OPENIPC=y
 BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
+# Against the 3.6 series, not the 2.x default. The choice is not ordered to
+# prefer it -- every other board falls through to mbedtls-openipc, which is
+# what they already carry -- so the board that wants 3.x says so.
+BR2_PACKAGE_LIBCURL_OPENIPC_MBEDTLS3=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set

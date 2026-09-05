@@ -56,13 +56,24 @@ config BR2_PACKAGE_LIBCURL_OPENIPC_GNUTLS
 	bool "GnuTLS"
 	depends on BR2_PACKAGE_GNUTLS
 
-config BR2_PACKAGE_LIBCURL_OPENIPC_LIBNSS
-	bool "NSS"
-	depends on BR2_PACKAGE_LIBNSS
-
 config BR2_PACKAGE_LIBCURL_OPENIPC_MBEDTLS
 	bool "mbed TLS"
 	depends on BR2_PACKAGE_MBEDTLS_OPENIPC
+	help
+	  The 2.x series, which Majestic's prebuilt binary pins. Correct
+	  for any board that also ships Majestic and has no room for a
+	  second TLS stack.
+
+config BR2_PACKAGE_LIBCURL_OPENIPC_MBEDTLS3
+	bool "mbed TLS 3.x"
+	depends on BR2_PACKAGE_MBEDTLS3_OPENIPC
+	help
+	  The 3.6 LTS series. Prefer this where the board can carry it:
+	  2.x went end-of-life at the end of 2024, and curl drops support
+	  for it entirely after 8.15.0.
+
+	  On a board that also ships Majestic this means both series are
+	  in the image, since Majestic cannot be rebuilt against 3.x.
 
 config BR2_PACKAGE_LIBCURL_OPENIPC_WOLFSSL
 	bool "WolfSSL"

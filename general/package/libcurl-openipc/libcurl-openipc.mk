@@ -4,9 +4,9 @@
 #
 ################################################################################
 
-LIBCURL_OPENIPC_VERSION = 7.76.0
+LIBCURL_OPENIPC_VERSION = 8.15.0
 LIBCURL_OPENIPC_SOURCE = curl-$(LIBCURL_OPENIPC_VERSION).tar.xz
-LIBCURL_OPENIPC_SITE = https://curl.haxx.se/download
+LIBCURL_OPENIPC_SITE = https://curl.se/download
 LIBCURL_OPENIPC_DL_SUBDIR = libcurl
 LIBCURL_OPENIPC_DEPENDENCIES = host-pkgconf \
 	$(if $(BR2_PACKAGE_ZLIB),zlib) \
@@ -21,9 +21,23 @@ LIBCURL_OPENIPC_INSTALL_STAGING = YES
 # http://curl.haxx.se/docs/manpage.html#--ntlm.
 # Likewise, there is no compiler on the target, so libcurl-option (to
 # generate C code) isn't very useful
-LIBCURL_OPENIPC_CONF_OPTS = --disable-manual --disable-ntlm-wb \
-	--enable-hidden-symbols --with-random=/dev/urandom --disable-curldebug \
-	--disable-libcurl-option
+# --disable-ntlm-wb and --with-random are gone: curl removed the NTLM winbind
+# helper in 8.8.0 and stopped taking a random source on the command line, it
+# now picking one itself. --enable-hidden-symbols became --enable-symbol-hiding.
+# An unrecognised option is only a configure warning, so these would have gone
+# on "working" while doing nothing at all.
+#
+# --without-libpsl is not optional bookkeeping: curl 8.x treats a missing libpsl
+# as a configure error rather than a missing feature, so the build stops unless
+# the answer is given. There is no libpsl package in this tree, and a public
+# suffix list is a cookie-scoping concern that a camera fetching from fixed
+# hosts does not have.
+LIBCURL_OPENIPC_CONF_OPTS = --disable-manual \
+	--enable-symbol-hiding --disable-curldebug \
+	--disable-libcurl-option \
+	--without-libpsl \
+	--without-zstd \
+	--without-libuv
 
 ifeq ($(BR2_TOOLCHAIN_HAS_THREADS),y)
 LIBCURL_OPENIPC_CONF_OPTS += --enable-threaded-resolver
@@ -46,10 +60,14 @@ LIBCURL_OPENIPC_DEPENDENCIES += openssl
 # Fix it by setting LD_LIBRARY_PATH to something sensible so those libs
 # are found first.
 LIBCURL_OPENIPC_CONF_ENV += LD_LIBRARY_PATH=$(if $(LD_LIBRARY_PATH),$(LD_LIBRARY_PATH):)/lib:/usr/lib
-LIBCURL_OPENIPC_CONF_OPTS += --with-ssl=$(STAGING_DIR)/usr \
+LIBCURL_OPENIPC_CONF_OPTS += --with-openssl=$(STAGING_DIR)/usr \
 	--with-ca-path=/etc/ssl/certs
 else
-LIBCURL_OPENIPC_CONF_OPTS += --without-ssl
+# --without-openssl, not --without-ssl. They were the same thing in 7.76; in
+# 8.x --without-ssl means "no TLS backend at all" and configure hard-errors if
+# it is passed alongside --with-mbedtls, which is exactly what every mbedTLS
+# board does.
+LIBCURL_OPENIPC_CONF_OPTS += --without-openssl
 endif
 
 ifeq ($(BR2_PACKAGE_LIBCURL_OPENIPC_GNUTLS),y)
@@ -60,18 +78,31 @@ else
 LIBCURL_OPENIPC_CONF_OPTS += --without-gnutls
 endif
 
-ifeq ($(BR2_PACKAGE_LIBCURL_OPENIPC_LIBNSS),y)
-LIBCURL_OPENIPC_CONF_OPTS += --with-nss=$(STAGING_DIR)/usr
-LIBCURL_OPENIPC_CONF_ENV += CPPFLAGS="$(TARGET_CPPFLAGS) `$(PKG_CONFIG_HOST_BINARY) nspr nss --cflags`"
-LIBCURL_OPENIPC_DEPENDENCIES += libnss
-else
-LIBCURL_OPENIPC_CONF_OPTS += --without-nss
-endif
-
+# The two mbedTLS series are one choice in Config.in, so at most one of these
+# arms runs. 2.25 stays the default because it is what a hundred boards already
+# carry and moving them all is a flash-size decision, not a build one.
+#
+# 8.15.0 is the last curl that can take either. 8.16.0 opens vtls/mbedtls.c with
+# #error "mbedTLS 3.2.0 or later required", so the next bump past this one stops
+# being a version bump and becomes a fleet-wide migration off 2.25.
 ifeq ($(BR2_PACKAGE_LIBCURL_OPENIPC_MBEDTLS),y)
 LIBCURL_OPENIPC_CONF_OPTS += --with-mbedtls=$(STAGING_DIR)/usr \
 	--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt
 LIBCURL_OPENIPC_DEPENDENCIES += mbedtls-openipc
+else ifeq ($(BR2_PACKAGE_LIBCURL_OPENIPC_MBEDTLS3),y)
+LIBCURL_OPENIPC_CONF_OPTS += \
+	--with-mbedtls=$(STAGING_DIR)$(MBEDTLS3_OPENIPC_PREFIX) \
+	--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt
+LIBCURL_OPENIPC_DEPENDENCIES += mbedtls3-openipc
+# --with-mbedtls=<prefix> only appends -L<prefix>/lib. The sysroot's own
+# -L$(STAGING_DIR)/usr/lib already precedes it, and that is where 2.25 lives, so
+# -lmbedtls resolves to 2.25 while -isystem has already pointed the compiler at
+# 3.6's headers. The build succeeds and the result is a header/ABI mismatch that
+# only shows up on the camera. Naming the 3.x directory here puts it first.
+# Checked by readelf, not by reading the link line: libcurl.so must NEED
+# libmbedtls.so.21, not .so.13.
+LIBCURL_OPENIPC_CONF_ENV += \
+	LDFLAGS="-L$(STAGING_DIR)$(MBEDTLS3_OPENIPC_PREFIX)/lib"
 else
 LIBCURL_OPENIPC_CONF_OPTS += --without-mbedtls
 endif
@@ -168,29 +199,33 @@ endif
 #	--disable-smtp \
 
 
-define LIBCURL_OPENIPC_FIX_DOT_PC
-	printf 'Requires: openssl\n' >>$(@D)/libcurl.pc.in
-endef
-LIBCURL_OPENIPC_POST_PATCH_HOOKS += $(if $(BR2_PACKAGE_LIBCURL_OPENIPC_OPENSSL),LIBCURL_FIX_DOT_PC)
-
+# The hook that appended "Requires: openssl" to libcurl.pc.in is gone rather
+# than repaired. It was registered as LIBCURL_FIX_DOT_PC while the define was
+# named LIBCURL_OPENIPC_FIX_DOT_PC, so it never ran -- and 8.15 is why it must
+# not start. 7.76's libcurl.pc.in carried no Requires: field at all, only a
+# comment saying one would be welcome; 8.15 templates Requires: and
+# Requires.private: and fills them from the configured backends. Correcting the
+# name would append a second Requires: key to a file that already has one.
+#
+# This one is repaired, because it still has a job: without it, a board that
+# asks for the library and not the binary gets /usr/bin/curl anyway. No board in
+# the tree is in that position today -- every defconfig that enables
+# libcurl-openipc also sets _CURL -- so this is a trap for the next one rather
+# than a bug in a shipped image.
 ifeq ($(BR2_PACKAGE_LIBCURL_OPENIPC_CURL),)
 define LIBCURL_OPENIPC_TARGET_CLEANUP
 	rm -rf $(TARGET_DIR)/usr/bin/curl
 endef
-LIBCURL_OPENIPC_POST_INSTALL_TARGET_HOOKS += LIBCURL_TARGET_CLEANUP
+LIBCURL_OPENIPC_POST_INSTALL_TARGET_HOOKS += LIBCURL_OPENIPC_TARGET_CLEANUP
 endif
 
 HOST_LIBCURL_OPENIPC_DEPENDENCIES = host-openssl
 HOST_LIBCURL_OPENIPC_CONF_OPTS = \
 	--disable-manual \
-	--disable-ntlm-wb \
 	--disable-curldebug \
-	--with-ssl \
+	--with-openssl \
 	--without-gnutls \
-	--without-mbedtls \
-	--without-nss
-
-HOST_LIBCURL_OPENIPC_POST_PATCH_HOOKS += LIBCURL_FIX_DOT_PC
+	--without-mbedtls
 
 $(eval $(autotools-package))
 $(eval $(host-autotools-package))
