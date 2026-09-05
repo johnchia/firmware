@@ -149,7 +149,21 @@ MBEDTLS3_OPENIPC_PREFIX = /usr/mbedtls3
 # What a consumer adds to reach this package rather than the 2.x one. Named
 # here so a consumer's .mk does not spell the paths out and drift from them.
 MBEDTLS3_OPENIPC_CFLAGS = -I$(STAGING_DIR)$(MBEDTLS3_OPENIPC_PREFIX)/include
-MBEDTLS3_OPENIPC_LDFLAGS = -L$(STAGING_DIR)$(MBEDTLS3_OPENIPC_PREFIX)/lib
+
+# The libraries by absolute path, and deliberately not as -L plus -lmbedtls.
+#
+# A -L cannot win here. Both series install a libmbedtls.so under the same
+# name, and ld takes the first -L that has one; a consumer whose link line
+# already carries -L$(STAGING_DIR)/usr/lib -- which is every consumer built
+# against a Buildroot sysroot -- would resolve to 2.25 no matter where this
+# package's -L was appended. That failure links silently and ships: the binary
+# gets libmbedtls.so.13 in its DT_NEEDED and runs 2.x while its author believes
+# it is on 3.6. Naming the files leaves no search order to get wrong, and the
+# SONAME recorded is the one read out of the file that was actually linked.
+MBEDTLS3_OPENIPC_LIBS = \
+	$(STAGING_DIR)$(MBEDTLS3_OPENIPC_PREFIX)/lib/libmbedtls.so \
+	$(STAGING_DIR)$(MBEDTLS3_OPENIPC_PREFIX)/lib/libmbedx509.so \
+	$(STAGING_DIR)$(MBEDTLS3_OPENIPC_PREFIX)/lib/libmbedcrypto.so
 
 # The private prefix is a build-time arrangement; at runtime the loader has to
 # find these on the default search path, because a consumer's DT_NEEDED carries
