@@ -1,0 +1,27 @@
+config BR2_PACKAGE_MBEDTLS3_OPENIPC
+	bool "mbedtls3-openipc"
+	help
+	  Mbed TLS 3.6 LTS, the successor to the 2.x branch that
+	  mbedtls-openipc pins. Both can be installed at once: the two
+	  release series carry different SONAMEs, so nothing on the
+	  target collides.
+
+	  Select this for new code. mbedtls-openipc stays for the
+	  Majestic blob, which is linked against the 2.x SONAMEs and
+	  cannot be rebuilt.
+
+	  A process must load one series or the other, never both --
+	  the two libraries export the same symbol names.
+
+	  https://github.com/Mbed-TLS/mbedtls
+
+if BR2_PACKAGE_MBEDTLS3_OPENIPC
+
+config BR2_PACKAGE_MBEDTLS3_OPENIPC_PROGRAMS
+	bool "mbedtls3-openipc programs"
+	depends on BR2_USE_MMU # fork()
+	help
+	  This option enables the installation and the build of
+	  Mbed TLS companion programs.
+
+endif
