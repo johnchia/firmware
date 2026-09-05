@@ -1,0 +1,126 @@
+# Hi3516EV200, Raptor in place of Majestic, on 8 MB NOR.
+#
+# Same MPP family as hi3516ev300_raptor -- one tree covers both parts, and the
+# EV200 is the part the family is named after -- so PLATFORM and SOC_MODEL agree
+# here where on the EV300 they deliberately do not.
+#
+# WHAT MAKES THIS BOARD DIFFERENT IS THE FLASH, NOT THE CHIP. 8 MB NOR gives a
+# 5120k rootfs, and that is the whole design constraint below: this target
+# carries Raptor alone. hi3516ev300_raptor carries Majestic beside it as a
+# reference encoder, and it can only do that because it is a 16 MB board whose
+# rootfs partition is 10240k. Do not copy that package list here -- see the
+# Packages section.
+#
+# NOT BOARD-VERIFIED. Nothing here has streamed on an EV200.
+
+# Architecture
+#
+# NOTE THE TUPLE: musleabi, not musleabihf. Gen4 HiSilicon userland is
+# soft-float -- Tag_ABI_VFP_args is absent from every vendor library on a stock
+# board while Tag_FP_arch reads VFPv4, so the FPU is used and the calling
+# convention is not. A hard-float build links, loads, runs, and hands garbage to
+# every float argument crossing into MPI. raptor-hal carries a #error on
+# __ARM_PCS_VFP so the mistake cannot survive a compile; this is the config side
+# of the same constraint.
+BR2_arm=y
+BR2_cortex_a7=y
+BR2_ARM_EABI=y
+BR2_ARM_FPU_NEON_VFPV4=y
+BR2_ARM_INSTRUCTIONS_THUMB2=y
+
+# Toolchain
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/openipc/firmware/releases/download/$(OPENIPC_TOOLCHAIN).tgz"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="arm-openipc-linux-musleabi"
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_4_9=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_MUSL=y
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+
+# Kernel
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+# PINNED, NOT TRACKED, and pinned to the same commit hi3516ev300_raptor uses:
+# they are one family off one branch, and a Raptor bring-up that cannot say
+# which kernel it ran is not evidence. A branch name in this URL would mean one
+# filename forever, and Buildroot caches a download by filename and does not
+# re-fetch; a commit makes the filename change when the source does.
+#
+# The branch is still where new work lands:
+#   git ls-remote https://github.com/openipc/linux refs/heads/hisilicon-hi3516ev200
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/e66720e0778e0b3f7488e635b512f0e6290626cd.tar.gz"
+BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/hi3516ev200.generic.config"
+BR2_LINUX_KERNEL_UIMAGE=y
+BR2_LINUX_KERNEL_XZ=y
+
+# Filesystem
+BR2_PACKAGE_BUSYBOX_CONFIG="$(BR2_EXTERNAL)/package/busybox/busybox.config"
+BR2_PACKAGE_UBOOT_TOOLS=y
+BR2_PACKAGE_ZLIB=y
+# BR2_PACKAGE_IFUPDOWN_SCRIPTS is not set
+BR2_PACKAGE_WIREGUARD_LINUX_COMPAT=y
+BR2_PACKAGE_WIREGUARD_TOOLS=y
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+# Fail the build, not the flash, when the rootfs outgrows its partition. The
+# limit is BR2_OPENIPC_ROOTFS_PART_KB below.
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL)/scripts/check-rootfs-size.sh"
+
+# OpenIPC
+BR2_OPENIPC_SOC_VENDOR="hisilicon"
+BR2_OPENIPC_SOC_MODEL="hi3516ev200"
+BR2_OPENIPC_SOC_FAMILY="hi3516ev200"
+BR2_OPENIPC_VARIANT="raptor"
+BR2_OPENIPC_FLASH_SIZE="8"
+# 5120, from the bootloader rather than from the chip size. u-boot-hi3516ev200
+# carries mtdparts as a plain environment variable with a compiled-in default
+# (include/configs/hi-common.h):
+#
+#   mtdparts=hi_sfc:256k(boot),64k(env),2048k(kernel),5120k(rootfs),-(rootfs_data)
+#
+# That is the nor8m table, which is this board, so unlike the EV300 target there
+# is no second layout to choose and nothing to set at the u-boot prompt. Nothing
+# reads the squashfs superblock, so a rootfs larger than 5120k is not a smaller
+# margin -- it is a partition the kernel cannot mount.
+BR2_OPENIPC_ROOTFS_PART_KB="5120"
+
+# Packages
+#
+# RAPTOR ALONE, AND THAT IS THE POINT OF THIS TARGET. Raptor owns the camera:
+# the HAL dlopens the HiMPP libraries the osdrv package installs rather than
+# linking them, so there is no SDK to have present at build time and the binary
+# binds to whichever MPP the device carries. That is also why no headers package
+# appears here -- the backend declares the HiMPP ABI itself in
+# raptor-hal/src/hisi_v4/v4_*.h.
+#
+# Majestic is deliberately absent. hi3516ev300_raptor keeps it as a second
+# opinion for when MPP refuses something and it is unclear whether the fault is
+# Raptor's or the SoC's; that is worth real space and this board does not have
+# it. Majestic plus its webui and fonts is most of a megabyte against a 5120k
+# partition, and on a bring-up target the thing that must fit is the streamer
+# being brought up. A board that needs the reference encoder is a 16 MB board.
+#
+# mbedTLS stays on the 2.x series here for the same reason: the 3.6 stack is a
+# second TLS library in the image, which is a 16 MB decision. Raptor builds
+# without TLS on this board.
+BR2_PACKAGE_DROPBEAR_OPENIPC=y
+BR2_PACKAGE_HISILICON_OPENSDK=y
+BR2_PACKAGE_HISILICON_OSDRV_HI3516EV200=y
+BR2_PACKAGE_IPCTOOL=y
+BR2_PACKAGE_JSONFILTER=y
+BR2_PACKAGE_LIBCURL_OPENIPC=y
+BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
+BR2_PACKAGE_LIBCURL_OPENIPC_MBEDTLS=y
+# BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
+BR2_PACKAGE_MBEDTLS_OPENIPC=y
+BR2_PACKAGE_MOSQUITTO=y
+# BR2_PACKAGE_MOSQUITTO_BROKER is not set
+BR2_PACKAGE_MOTORS=y
+BR2_PACKAGE_OPUS_OPENIPC=y
+BR2_PACKAGE_OPUS_OPENIPC_FIXED_POINT=y
+BR2_PACKAGE_RAPTOR_STREAMING=y
+BR2_PACKAGE_VTUND_OPENIPC=y
+BR2_PACKAGE_YAML_CLI=y

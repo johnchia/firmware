@@ -85,8 +85,12 @@ ALL_BOARDS = [
     # the package grew a HiSilicon arm and the board's defconfig selects the
     # symbol -- so it is also in raptor-nightly.yml's matrix, and a pin bump
     # reaches it the same way it reaches the other five.
+    #
+    # hi3516ev200_raptor is the same port on 8 MB NOR. It is a separate board
+    # rather than a variant of the EV300 one because the 5120k rootfs changes
+    # the package list, not just a number: no Majestic, no second TLS stack.
     "hi3516dv200_lite", "hi3516ev200_lite", "hi3516ev300_lite", "hi3518ev300_lite",
-    "hi3516ev300_neo", "hi3516ev300_raptor",
+    "hi3516ev300_neo", "hi3516ev300_raptor", "hi3516ev200_raptor",
     # Hisilicon [HI3519V101]
     "hi3516av200_lite", "hi3516av200_neo", "hi3519v101_lite",
     # Hisilicon [misc]
@@ -791,9 +795,9 @@ def self_test():
     cases = [
         # Vendor packages narrow to the families that enable them.
         (["general/package/hisilicon-osdrv-hi3516ev200/files/script/load_hisilicon"],
-         9, "osdrv narrows to its family"),
+        10, "osdrv narrows to its family"),
         (["general/package/hisilicon-opensdk/hisilicon-opensdk.mk"],
-         44, "opensdk spans HiSilicon and Goke"),
+        45, "opensdk spans HiSilicon and Goke"),
         (["general/package/goke-osdrv-gk7205v200/Config.in"], 7, "goke osdrv"),
         (["general/package/hisilicon-osdrv-hi3520dv200/files/script/load_hisilicon"],
          1, "single-board osdrv"),
@@ -826,7 +830,7 @@ def self_test():
         # Board configs and kernel configs.
         (["br-ext-chip-goke/configs/gk7205v200_lite_defconfig"], 1, "one defconfig"),
         (["br-ext-chip-hisilicon/board/hi3516ev200/hi3516ev300.generic.config"],
-         9, "kernel config narrows to its family"),
+        10, "kernel config narrows to its family"),
         (["general/package/hisilicon-osdrv-hi3516cv200/files/script/load_hisilicon",
           "br-ext-chip-hisilicon/configs/hi3516cv200_lite_defconfig"],
          3, "union of two narrowing paths"),
@@ -890,7 +894,7 @@ def self_test():
         (["general/package/majestic/README.md"],
          90, "markdown inside a package is that package"),
         (["br-ext-chip-hisilicon/board/hi3516ev200/NOTES.md"],
-         9, "markdown inside a board dir is that family"),
+        10, "markdown inside a board dir is that family"),
         (["general/scripts/pr_compliance_checklist.yaml"],
          full, "same name under general/ is not the checklist"),
         ([".pr_agent.toml.orig"], full, "a merge leftover is not the config"),

@@ -112,7 +112,7 @@ jobs:
       fail-fast: false
       matrix:
         board: [ssc377qe_raptor, ssc377d_raptor, ssc30kq_raptor, ssc333_sc3336_raptor,
-                t31_raptor, hi3516ev300_raptor]
+                t31_raptor, hi3516ev300_raptor, hi3516ev200_raptor]
     env:
       BUILD_ID:  ${{ needs.gate.outputs.build_id }}
       BUILD_SHA: ${{ needs.gate.outputs.head_sha }}
@@ -190,10 +190,20 @@ jobs:
       # `make fullimage` locally instead.
       #
       # A target that does not build one gets the .tgz alone rather than
-      # failing the board. ssc333_sc3336_raptor is that case: its only interface
-      # the radio, and the credentials it joins a network with live in the
-      # U-Boot environment a full image erases, so a whole-flash write there
-      # produces a camera that has to be opened rather than reflashed.
+      # failing the board, and most of the matrix is in that position for two
+      # different reasons.
+      #
+      # ssc333_sc3336_raptor is the one where a full image would be actively
+      # harmful: its only interface is the radio, and the credentials it joins a
+      # network with live in the U-Boot environment a full image erases, so a
+      # whole-flash write there produces a camera that has to be opened rather
+      # than reflashed.
+      #
+      # The two HiSilicon targets -- hi3516ev300_raptor and hi3516ev200_raptor
+      # -- simply have no bootloader package yet. That is a gap rather than a
+      # decision, and the .tgz is the honest thing to publish until one exists:
+      # a bring-up target that has never streamed has no proven bootloader to
+      # ship with it either.
       #
       # t31_raptor has the same shape and not the same consequence, which is
       # why it builds one. Its environment is erased by a full write too and it
