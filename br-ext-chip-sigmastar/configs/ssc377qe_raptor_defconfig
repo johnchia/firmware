@@ -138,6 +138,12 @@ BR2_PACKAGE_MAJESTIC=y
 # question without spending any of it.
 BR2_PACKAGE_MDNSD_OPENIPC=y
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
+# Both series, because Majestic is a blob linked against the 2.x SONAMEs and
+# cannot be rebuilt, while new code should not be starting on a branch that
+# went end-of-life. They coexist: the SONAMEs differ, and mbedtls3-openipc
+# keeps its headers out of the shared staging path. No process may reach
+# both -- see the rule in mbedtls3-openipc.mk.
+BR2_PACKAGE_MBEDTLS3_OPENIPC=y
 # The client library only. The broker is a forking server with no role on a
 # camera that publishes to one elsewhere, and Buildroot ties mosquitto's TLS to
 # OpenSSL, which this image does not carry -- mbedTLS is its TLS -- so
