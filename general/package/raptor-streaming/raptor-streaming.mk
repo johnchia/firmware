@@ -194,7 +194,19 @@ RAPTOR_STREAMING_TOOLS = raptorctl
 # The HAL backend to compile, one per SoC family. Derived from the family so a
 # new SigmaStar board needs only its defconfig, not an edit here: infinity6e ->
 # INFINITY6E, infinity6c -> INFINITY6C.
+#
+# One family does not upper-case into a platform raptor knows. hi3516cv6xx is
+# two dies -- CV610 and CV608 -- served by one MPP, and that MPP names itself
+# for the first of them: a stock OpenIPC cv6xx library answers
+# "HI3516CV610_MPP_V1.0.2.0 B051 Release" on either die. raptor took the
+# library's name for the platform, so the family maps to it explicitly and the
+# die goes on travelling as SOC_MODEL below, which is where the caps table
+# wants it anyway.
+ifeq ($(OPENIPC_SOC_FAMILY),hi3516cv6xx)
+RAPTOR_STREAMING_PLATFORM = HI3516CV610
+else
 RAPTOR_STREAMING_PLATFORM = $(shell echo $(OPENIPC_SOC_FAMILY) | tr '[:lower:]' '[:upper:]')
+endif
 
 # The part, passed alongside the family because some encoder facts do not
 # survive being generalised to one: ssc333, ssc335 and ssc337 are all
