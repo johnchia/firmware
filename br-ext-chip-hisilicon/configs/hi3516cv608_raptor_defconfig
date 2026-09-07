@@ -32,10 +32,11 @@
 # 00480000 with a 00010000 erase size, which is where the 64K erase granularity
 # in the sizing above comes from.
 #
-# Two things are still not verified. The table has not been run as a SAVED
-# environment -- it was passed at the U-Boot prompt, so nothing persistent has
-# been written to the board -- and nothing has streamed, there being no MPP in
-# this image to stream with.
+# The table has since been saved to the board's env region, and the board boots
+# unattended from it with no serial console attached. rootfs_data mounts jffs2
+# on that boot, so a root password set through openipc-claim survives a reboot.
+# Still unverified: nothing has streamed, there being no MPP in this image to
+# stream with.
 #
 # Declaring env in that table is what lets fw_printenv work, and the mechanism
 # is worth knowing because it leaves a file behind that the image did not ship.
