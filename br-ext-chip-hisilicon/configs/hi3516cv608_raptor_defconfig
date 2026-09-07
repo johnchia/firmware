@@ -105,6 +105,11 @@ BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL)/scripts/check-rootfs-size.sh $(EXT
 # Filesystem
 BR2_PACKAGE_BUSYBOX_CONFIG="$(BR2_EXTERNAL)/package/busybox/busybox.config"
 BR2_PACKAGE_UBOOT_TOOLS=y
+# libcurl links libz and nothing else here enables it, so without this the
+# image ships a libcurl.so.4 and a curl that cannot load at all -- and the
+# first thing to notice is sysupgrade --url failing on "Error loading shared
+# library libz.so.1", by which point the camera is mid-upgrade.
+BR2_PACKAGE_ZLIB=y
 # BR2_PACKAGE_IFUPDOWN_SCRIPTS is not set
 BR2_PACKAGE_WIREGUARD_LINUX_COMPAT=y
 BR2_PACKAGE_WIREGUARD_TOOLS=y
