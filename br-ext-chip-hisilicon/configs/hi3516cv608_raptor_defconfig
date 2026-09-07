@@ -137,16 +137,22 @@ BR2_OPENIPC_FLASH_SIZE="8"
 #
 # WHAT THE NUMBER BELOW ASSUMES. The OEM stacking is not the shape
 # post-image.sh builds -- FIT first, squashfs after -- and its trailer is not
-# something this tree writes, so this target expects the region re-cut into a
-# plain kernel/rootfs pair inside the same bounds, leaving data and devinfo
-# (which holds the device identity) untouched:
+# something this tree writes, so this target re-cuts the region into a plain
+# kernel/rootfs pair, plus the overlay this tree needs, leaving devinfo (which
+# holds the device identity) alone:
 #
-#   sfc:192K(uboot),64K(env),2752K(kernel),4608K(rootfs),512K(data),64K(devinfo)
+#   sfc:192K(uboot),64K(env),2752K(kernel),4352K(rootfs),768K(rootfs_data),64K(devinfo)
 #   root=/dev/mtdblock3
 #
-# 0x40000 + 2752K = 0x2F0000, + 4608K = 0x770000, exactly where data already
-# begins. Both are environment changes on a bootloader that has sf, bootm,
-# setenv and saveenv; nothing needs reflashing to reach it.
+# 0x40000 + 2752K = 0x2F0000, + 4352K = 0x730000, + 768K = 0x7F0000, which is
+# where devinfo begins. The OEM's 512K data partition is absorbed: it is a
+# JFFS2 volume for OEM software that is not in this image.
+#
+# rootfs_data IS THE OVERLAY AND THE NAME IS LOAD-BEARING. general/overlay/init
+# greps /proc/mtd for exactly that string, mounts it jffs2, formats it with
+# flash_eraseall on first boot, and overlays it on /. With no such partition it
+# falls through to a tmpfs and every change to /etc is lost on reboot -- which
+# looks like a working overlay right up until the camera is power-cycled.
 #
 # THE KERNEL SLOT IS CUT TO ONE SPARE ERASE BLOCK ON PURPOSE, so that the room
 # in this region sits with the rootfs, which is the half that grows when a
@@ -157,7 +163,21 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # block therefore overruns its partition with no build-time complaint at all --
 # check the FIT by hand after any kernel bump, or widen this slot and take the
 # 64k back off the rootfs.
-BR2_OPENIPC_ROOTFS_PART_KB="4608"
+#
+# 4352 leaves 368k over the current squashfs. That is not headroom being saved
+# for the vendor modules: hisilicon-osdrv-hi3516cv6xx carries 4.0 MB of ot_*.ko
+# in files/kmod, and no split of an 8 MB part holds those beside a 2752k
+# kernel. Whatever subset this board ends up loading has to be chosen, so the
+# rest of the region is better spent on the overlay.
+BR2_OPENIPC_ROOTFS_PART_KB="4352"
+
+# The environment is data in mtd1, not compiled into the OEM bootloader, so the
+# layout and the boot verbs live in a text file that is readable back off the
+# chip. Same idiom as t31_raptor. mkenvimage turns it into images/uboot-env.bin.
+# (openipc.fragment already sets BR2_PACKAGE_HOST_UBOOT_TOOLS.)
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE=y
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SOURCE="$(BR2_EXTERNAL)/../br-ext-chip-hisilicon/board/$(OPENIPC_SOC_FAMILY)/hi3516cv608.env.txt"
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 
 # Packages
 #

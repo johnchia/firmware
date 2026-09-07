@@ -281,7 +281,24 @@ FULLIMAGE_UBOOT = $(strip $(if $(strip $(UBOOT_BIN)),$(abspath $(UBOOT_BIN)),\
 	$(TARGET)/images/u-boot-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor.bin))
 
 fullimage: defconfig
-ifeq ($(BR2_OPENIPC_SOC_VENDOR),"hisilicon")
+ifeq ($(BR2_OPENIPC_SOC_FAMILY),"hi3516cv6xx")
+# cv6xx keeps its environment in a text file the board defconfig names, so the
+# partition table is settled before this runs and the script reads it back out
+# rather than restating it. No bootloader is built here either -- the OEM one
+# stays on the part -- so UBOOT_BIN is the container to embed, 192K of it.
+	@test -n "$(strip $(UBOOT_BIN))" || { \
+		echo "point UBOOT_BIN at the cv6xx boot container (the uboot"; \
+		echo "partition, 192K). Nothing here builds one: this family"; \
+		echo "runs its OEM bootloader, so take it off the part --"; \
+		echo "  dd if=<dump>.bin of=uboot.bin bs=1 count=\$$((0x30000))"; \
+		echo "-- or use OpenIPC/u-boot-hi3516cv6xx if you mean to"; \
+		echo "replace it, noting its table is not this one."; \
+		exit 2; }
+	@$(SHELL) $(PWD)/general/scripts/make_full_image_cv6xx.sh \
+		"$(abspath $(UBOOT_BIN))" \
+		"$(TARGET)/images" \
+		"$(TARGET)/images/openipc-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor-full.bin"
+else ifeq ($(BR2_OPENIPC_SOC_VENDOR),"hisilicon")
 	@test -n "$(strip $(UBOOT_BIN))" || { \
 		echo "point UBOOT_BIN at a HiSilicon boot container."; \
 		echo "Nothing here builds one: uboot.yml covers allwinner,"; \
