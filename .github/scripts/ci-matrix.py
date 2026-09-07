@@ -75,7 +75,12 @@ ALL_BOARDS = [
     # Hisilicon [HI3516CV500]
     "hi3516av300_lite", "hi3516av300_neo", "hi3516cv500_lite", "hi3516dv300_lite",
     # Hisilicon [HI3516CV6XX]
-    "hi3516cv6xx_ultimate",
+    #
+    # hi3516cv608_raptor is this fork's target on the same family, pinned to
+    # one die and to 8 MB NOR. It carries no raptor-streaming -- the HAL has no
+    # V5 backend -- so it is not in raptor-nightly.yml's matrix and a pin bump
+    # does not reach it.
+    "hi3516cv6xx_ultimate", "hi3516cv608_raptor",
     # Hisilicon [HI3519DV500]
     "hi3519dv500_ultimate",
     # Hisilicon [HI3516EV200]

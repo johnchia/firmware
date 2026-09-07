@@ -1,0 +1,206 @@
+# Hi3516CV608 on 8 MB NOR, in this fork's tree but WITHOUT Raptor.
+#
+# WHY A "raptor" TARGET WITH NO RAPTOR. raptor-hal's only HiSilicon backend is
+# src/hisi_v4, which declares the gen-4 HiMPP ABI itself in v4_*.h and dlopens
+# libmpi.so against it. The CV608 is V5: a different MPP with ot_*-prefixed
+# entry points, encode-only (no VO, no TDE, no NNIE -- see the CHIPARCH arms in
+# hisilicon-opensdk.mk). Pointing hisi_v4 at it would not fail to build, it
+# would fail at the first MPI call. Nothing else encodes here either -- see the
+# Packages section -- so this is a bring-up target, and the name is kept
+# because this is where a V5 backend lands.
+#
+# ONE FAMILY, TWO DIES. SOC_FAMILY is hi3516cv6xx because that is what selects
+# the kernel branch, the toolchain, the board directory, the Majestic tarball
+# and the repack path; SOC_MODEL is the die, so the image is named for the part
+# it was built for and a CV608 matches it directly on upgrade. That is also why
+# BR2_OPENIPC_SOC_ALIASES is absent here and present on hi3516cv6xx_ultimate:
+# the shared image needs a route from either die's reported id, a per-die image
+# does not.
+#
+# ITS FLASH IS THE CONSTRAINT, THE SAME WAY THE EV200'S IS, AND IT IS TIGHT.
+# 7360K holds the kernel and the rootfs together on this board -- see
+# BR2_OPENIPC_FLASH_SIZE -- against a FIT that is already ~2688k of it. That is
+# what put hisilicon-opensdk out of the package list below, not merely
+# Majestic: with opensdk the rootfs is 5388k, and 2688 + 5388 overruns 7360
+# however the region is cut. Weigh anything added below against 7360k total,
+# not against the 8192k repack prints.
+#
+# BOARD-VERIFIED. This image boots to a root shell on an H4-52POX-S CV608 with
+# the OEM U-Boot and the OEM environment both left in place, the kernel read
+# from 0x40000 and the rootfs mounted from 0x2F0000, under the table below
+# passed on the kernel command line. /proc/mtd reports the rootfs partition at
+# 00480000 with a 00010000 erase size, which is where the 64K erase granularity
+# in the sizing above comes from.
+#
+# Two things are still not verified. The table has not been run as a SAVED
+# environment -- it was passed at the U-Boot prompt, so nothing persistent has
+# been written to the board -- and nothing has streamed, there being no MPP in
+# this image to stream with.
+#
+# Declaring env in that table is what lets fw_printenv work, and the mechanism
+# is worth knowing because it leaves a file behind that the image did not ship.
+# all-patches/uboot-tools/0011-env-partition-autosearch.patch CRC-scans the
+# partitions in /proc/mtd when /etc/fw_env.config is missing, and on a hit
+# WRITES that file with what it found -- so /etc/fw_env.config appearing on a
+# running camera is the patch's cache, not something from this tree.
+#
+# A cut-down table that omits env leaves the environment in no mtd device for
+# the scan to find, and every fw_printenv reader in the overlay -- rcS for
+# sensor and ethaddr, S40network for the wlan keys -- then falls back silently.
+# On this board that is visible from the outside: with env declared the
+# hostname suffix follows the OEM ethaddr, and without it a MAC is generated
+# and the suffix changes.
+#
+# If autosearch ever picks the wrong partition, the fix is a board overlay
+# carrying /etc/fw_env.config, the way br-ext-chip-ingenic/board/t31 does it.
+
+# Architecture
+BR2_arm=y
+BR2_cortex_a7=y
+BR2_ARM_EABI=y
+BR2_ARM_FPU_NEON_VFPV4=y
+BR2_ARM_INSTRUCTIONS_THUMB2=y
+
+# Toolchain
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/openipc/firmware/releases/download/$(OPENIPC_TOOLCHAIN).tgz"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="arm-openipc-linux-musleabi"
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_10=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_MUSL=y
+BR2_GCC_VERSION_13_X=y
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+
+# Kernel
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+# PINNED, NOT TRACKED, for the reason the other two raptor boards are: a
+# bring-up that cannot say which kernel it ran is not evidence, and a branch
+# name would mean one filename forever against a download cache that keys on
+# the filename. hi3516cv6xx_ultimate tracks the branch; this does not, so the
+# two can and will diverge.
+#
+#   git ls-remote https://github.com/openipc/linux refs/heads/hisilicon-hi3516cv6xx
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/533467722c14ef76507d15352ee0a9a9a331c11f.tar.gz"
+BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
+# The family config, spelled out rather than derived from SOC_MODEL: there is
+# one kernel config for both dies and no hi3516cv608.generic.config to find.
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/hi3516cv6xx.generic.config"
+BR2_LINUX_KERNEL_ZIMAGE=y
+BR2_LINUX_KERNEL_XZ=y
+BR2_LINUX_KERNEL_UIMAGE_LOADADDR="0x40018000"
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+# BR2_LINUX_KERNEL_DTB_IS_SELF_BUILT is not set
+BR2_LINUX_KERNEL_INTREE_DTS_NAME="hi3516cv608-demb"
+# Two scripts, size check first so it fails before the FIT is assembled.
+# post-image.sh builds the FIT (zImage + dtb) and concatenates rootfs.squashfs
+# onto it at the next 64K boundary; that firmware.bin is what repack ships.
+#
+# The combined blob is a transport, NOT the layout on the chip. sysupgrade's
+# do_update_firmware splits it back at the FIT boundary and writes each half to
+# its own partition whenever the flash has both, which this one does -- so the
+# caps that matter are the partitions', below, not the blob's.
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL)/scripts/check-rootfs-size.sh $(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/post-image.sh"
+
+# Filesystem
+BR2_PACKAGE_BUSYBOX_CONFIG="$(BR2_EXTERNAL)/package/busybox/busybox.config"
+BR2_PACKAGE_UBOOT_TOOLS=y
+# BR2_PACKAGE_IFUPDOWN_SCRIPTS is not set
+BR2_PACKAGE_WIREGUARD_LINUX_COMPAT=y
+BR2_PACKAGE_WIREGUARD_TOOLS=y
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+
+# OpenIPC
+BR2_OPENIPC_SOC_VENDOR="hisilicon"
+BR2_OPENIPC_SOC_MODEL="hi3516cv608"
+BR2_OPENIPC_SOC_FAMILY="hi3516cv6xx"
+BR2_OPENIPC_VARIANT="raptor"
+BR2_OPENIPC_FLASH_SIZE="8"
+# 4288, and the number comes from the BOARD, not from OpenIPC/u-boot-hi3516cv6xx.
+# The H4-52POX-S ships an OEM U-Boot 2022.07 whose saved environment partitions
+# the 8 MB part as
+#
+#   sfc:192K(uboot),64K(env),7360K(rootfs),512K(data),64K(devinfo)
+#
+# with root=/dev/mtdblock2. That single 7360K "rootfs" region stacks BOTH
+# halves: squashfs at its head, where the kernel mounts it, and the kernel FIT
+# appended after it at a 4K boundary, which the OEM load_kernel command finds
+# through a trailer recording the two sizes. Verified against a dump of the
+# part -- hsqs at 0x40000, d00dfeed at 0x55B000, JFFS2 at 0x770000.
+#
+# So do NOT reach for the OpenIPC cv6xx table here. That one is
+# 2048k(kernel),5120k(rootfs) (u-boot-hi3516cv6xx, include/configs/hi-common.h)
+# and this family does not fit its kernel slot: the FIT built from
+# hi3516cv6xx.generic.config is ~2688k and OpenIPC's own published cv6xx image
+# carries a 2709k one. A board running that bootloader can take neither.
+#
+# WHAT THE NUMBER BELOW ASSUMES. The OEM stacking is not the shape
+# post-image.sh builds -- FIT first, squashfs after -- and its trailer is not
+# something this tree writes, so this target expects the region re-cut into a
+# plain kernel/rootfs pair inside the same bounds, leaving data and devinfo
+# (which holds the device identity) untouched:
+#
+#   sfc:192K(uboot),64K(env),2752K(kernel),4608K(rootfs),512K(data),64K(devinfo)
+#   root=/dev/mtdblock3
+#
+# 0x40000 + 2752K = 0x2F0000, + 4608K = 0x770000, exactly where data already
+# begins. Both are environment changes on a bootloader that has sf, bootm,
+# setenv and saveenv; nothing needs reflashing to reach it.
+#
+# THE KERNEL SLOT IS CUT TO ONE SPARE ERASE BLOCK ON PURPOSE, so that the room
+# in this region sits with the rootfs, which is the half that grows when a
+# package is added. The FIT is 2686k and takes 2688k in 64K blocks, so 2752k
+# leaves exactly one 64K block free. Nothing enforces that: check-rootfs-size.sh
+# covers the rootfs only, and repack's CHECK_SIZE measures the combined blob
+# against the whole chip on this family. A kernel that grows by a single erase
+# block therefore overruns its partition with no build-time complaint at all --
+# check the FIT by hand after any kernel bump, or widen this slot and take the
+# 64k back off the rootfs.
+BR2_OPENIPC_ROOTFS_PART_KB="4608"
+
+# Packages
+#
+# NOTHING HERE ENCODES, AND NOTHING HERE LOADS A DRIVER. Majestic is out for
+# space, Raptor has no V5 backend, and hisilicon-opensdk is out too -- so what
+# is left is a camera that boots to a shell with the vendor MPP userspace
+# present and no kernel side under it.
+#
+# BE CLEAR ABOUT WHAT DROPPING opensdk COSTS. It is the package that builds
+# every open_*.ko, and load_hisilicon modprobes those by name -- open_osal,
+# open_mmz, open_isp, open_sys_config and the rest -- so the load script now
+# fails on its first modprobe and the video pipeline cannot come up at all. It
+# also carried the six source-built sensor drivers (gc4023, os04d10, sc4336p,
+# sc450ai, sc500ai, sc431hai); what remains is the two blobs osdrv installs,
+# imx307 and os02m10.
+#
+# osdrv does still carry a vendor ot_*.ko set in files/kmod/ that its
+# INSTALL_TARGET_CMDS does not install. That, not opensdk, is where a driver
+# stack for this board would come from if one is wanted back without the
+# 1.7 MB.
+#
+# Majestic's exclusive dependencies leave with it: libevent, libogg, opus (and
+# the ot_opus_* shim, which exists for the V5 naming Majestic wanted), and
+# protobuf-c, which only the cv6xx Majestic build dlopens. libyaml stays
+# because yaml-cli selects it, json-c because jsonfilter uses it, and
+# mbedtls because libcurl is built against it.
+#
+# No wireless stack: the openipc/linux hi3516cv6xx kernel has CONFIG_WIRELESS
+# off, so cfg80211/mac80211 USB drivers and wpa_supplicant have nothing to bind
+# to. Adding a driver symbol here builds a module against nothing.
+BR2_PACKAGE_DROPBEAR_OPENIPC=y
+BR2_PACKAGE_HISILICON_OSDRV_HI3516CV6XX=y
+BR2_PACKAGE_IPCTOOL=y
+BR2_PACKAGE_JSONFILTER=y
+BR2_PACKAGE_LIBCURL_OPENIPC=y
+BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
+BR2_PACKAGE_LIBCURL_OPENIPC_MBEDTLS=y
+# BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
+BR2_PACKAGE_MBEDTLS_OPENIPC=y
+BR2_PACKAGE_MOSQUITTO=y
+# BR2_PACKAGE_MOSQUITTO_BROKER is not set
+BR2_PACKAGE_MOTORS=y
+BR2_PACKAGE_VTUND_OPENIPC=y
+BR2_PACKAGE_YAML_CLI=y
