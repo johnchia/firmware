@@ -17,26 +17,29 @@
 # the shared image needs a route from either die's reported id, a per-die image
 # does not.
 #
-# ITS FLASH IS THE CONSTRAINT, THE SAME WAY THE EV200'S IS, AND IT IS TIGHT.
-# 7360K holds the kernel and the rootfs together on this board -- see
-# BR2_OPENIPC_FLASH_SIZE -- against a FIT that is already ~2688k of it. That is
-# what put hisilicon-opensdk out of the package list below, not merely
-# Majestic: with opensdk the rootfs is 5388k, and 2688 + 5388 overruns 7360
-# however the region is cut. Weigh anything added below against 7360k total,
-# not against the 8192k repack prints.
+# ITS FLASH IS THE CONSTRAINT, THE SAME WAY THE EV200'S IS. 7360K holds the
+# kernel and the rootfs together on this board -- see BR2_OPENIPC_FLASH_SIZE --
+# so weigh anything added below against 7360k total, not against the 8192k
+# repack prints. It used to be tight: the FIT was 2688k of it, which is what
+# put hisilicon-opensdk out of the package list below rather than merely
+# Majestic. Forking the kernel config (hi3516cv608.raptor.config) took the FIT
+# to 1984k and the squashfs to 3392k, 1331k off the pair, and the table below
+# was re-cut to bank it -- the kernel slot back to 2048k and every freed block
+# to the rootfs.
 #
-# BOARD-VERIFIED. This image boots to a root shell on an H4-52POX-S CV608 with
-# the OEM U-Boot and the OEM environment both left in place, the kernel read
-# from 0x40000 and the rootfs mounted from 0x2F0000, under the table below
-# passed on the kernel command line. /proc/mtd reports the rootfs partition at
-# 00480000 with a 00010000 erase size, which is where the 64K erase granularity
-# in the sizing above comes from.
+# BOARD-VERIFIED, BUT ON THE PREVIOUS CUT. An H4-52POX-S CV608 boots this image
+# to a root shell with the OEM U-Boot left in place, from an environment saved
+# to mtd1 and with no serial console attached; rootfs_data mounts jffs2 there,
+# so a root password set through openipc-claim survives a reboot. /proc/mtd
+# reported a 00010000 erase size, which is where the 64K granularity in the
+# sizing above comes from.
 #
-# The table has since been saved to the board's env region, and the board boots
-# unattended from it with no serial console attached. rootfs_data mounts jffs2
-# on that boot, so a root password set through openipc-claim survives a reboot.
-# Still unverified: nothing has streamed, there being no MPP in this image to
-# stream with.
+# What ran on that board was the earlier table -- 2752K kernel, 4352K rootfs.
+# The table below is the re-cut that banks the kernel-config fork (2048K and
+# 5056K) and it HAS NOT BEEN FLASHED. Partition starts move with it, so this
+# needs the env written and both partitions rewritten, not a rootfs upgrade:
+# rootfs begins at 0x240000 now rather than 0x2F0000. Nothing here has streamed
+# either, there being no MPP in this image to stream with.
 #
 # Declaring env in that table is what lets fw_printenv work, and the mechanism
 # is worth knowing because it leaves a file behind that the image did not ship.
@@ -162,20 +165,21 @@ BR2_OPENIPC_FLASH_SIZE="8"
 #
 # THE KERNEL SLOT IS CUT TO ONE SPARE ERASE BLOCK ON PURPOSE, so that the room
 # in this region sits with the rootfs, which is the half that grows when a
-# package is added. The FIT is 2686k and takes 2688k in 64K blocks, so 2752k
+# package is added. The FIT is 1975k and takes 1984k in 64K blocks, so 2048k
 # leaves exactly one 64K block free. Nothing enforces that: check-rootfs-size.sh
-# covers the rootfs only, and repack's CHECK_SIZE measures the combined blob
-# against the whole chip on this family. A kernel that grows by a single erase
-# block therefore overruns its partition with no build-time complaint at all --
-# check the FIT by hand after any kernel bump, or widen this slot and take the
-# 64k back off the rootfs.
+# covers the rootfs only and says so in its own header, and repack's CHECK_SIZE
+# measures the combined blob against the whole chip on this family. A kernel
+# that grows by a single erase block therefore overruns its partition with no
+# build-time complaint at all -- check the FIT by hand after any kernel bump, or
+# widen this slot and take the 64k back off the rootfs.
 #
-# 4352 leaves 368k over the current squashfs. That is not headroom being saved
-# for the vendor modules: hisilicon-osdrv-hi3516cv6xx carries 4.0 MB of ot_*.ko
-# in files/kmod, and no split of an 8 MB part holds those beside a 2752k
-# kernel. Whatever subset this board ends up loading has to be chosen, so the
-# rest of the region is better spent on the overlay.
-BR2_OPENIPC_ROOTFS_PART_KB="4352"
+# 5056 leaves 1664k over the current squashfs, and that headroom is the point
+# of the kernel-config fork rather than a leftover. It is still not enough for
+# the vendor modules wholesale: hisilicon-osdrv-hi3516cv6xx carries 4.0 MB of
+# ot_*.ko in files/kmod and no split of an 8 MB part holds all of those. A
+# subset still has to be chosen -- but 1664k is the difference between choosing
+# one and not having the room to load any.
+BR2_OPENIPC_ROOTFS_PART_KB="5056"
 
 # The environment is data in mtd1, not compiled into the OEM bootloader, so the
 # layout and the boot verbs live in a text file that is readable back off the
