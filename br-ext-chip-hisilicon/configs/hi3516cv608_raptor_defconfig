@@ -250,3 +250,21 @@ BR2_PACKAGE_MOSQUITTO=y
 BR2_PACKAGE_MOTORS=y
 BR2_PACKAGE_VTUND_OPENIPC=y
 BR2_PACKAGE_YAML_CLI=y
+
+# TEMPORARY, FOR V5 PIPELINE BRING-UP. This defconfig does not select
+# BR2_PACKAGE_RAPTOR_STREAMING (see the header), so nothing pulls in what
+# raptor links against and an out-of-tree build has neither the staging
+# archives nor the runtime libraries. These are RAPTOR_STREAMING_DEPENDENCIES
+# minus what is already above -- compy, mosquitto, the osdrv -- and minus
+# mbedtls3-openipc, which the rootfs slot will not hold. Delete the block when
+# a V5 backend lands and this target selects raptor-streaming for real.
+#
+# libschrift and helix-aac are INSTALL_TARGET = NO: they populate staging so
+# the link finds libschrift.a and libhelix-aac.a, and cost the image nothing.
+# faac, opus and the fonts are the ones that land in the rootfs.
+BR2_PACKAGE_FAAC=y
+BR2_PACKAGE_HELIX_AAC=y
+BR2_PACKAGE_LIBSCHRIFT=y
+BR2_PACKAGE_MAJESTIC_FONTS=y
+BR2_PACKAGE_OPUS_OPENIPC=y
+BR2_PACKAGE_OPUS_OPENIPC_FIXED_POINT=y
