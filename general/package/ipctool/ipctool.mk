@@ -10,7 +10,7 @@
 # through to the shared placeholder MAC. Revert to openipc/ipctool once the
 # change lands there; the branch is v5-die-id.
 IPCTOOL_SITE = $(call github,johnchia,ipctool,$(IPCTOOL_VERSION))
-IPCTOOL_VERSION = 6cf619e0822338c3d36f865fe438fd89af3845c9
+IPCTOOL_VERSION = 5f878aa8d52c5aa000d7db8c9f6afa6c1ff0e6ff
 
 IPCTOOL_LICENSE = MIT
 IPCTOOL_LICENSE_FILES = LICENSE
