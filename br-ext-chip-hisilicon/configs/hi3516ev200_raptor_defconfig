@@ -119,8 +119,10 @@ BR2_PACKAGE_MBEDTLS_OPENIPC=y
 BR2_PACKAGE_MOSQUITTO=y
 # BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_MOTORS=y
-BR2_PACKAGE_OPUS_OPENIPC=y
-BR2_PACKAGE_OPUS_OPENIPC_FIXED_POINT=y
+# Buildroot's own opus, which BR2_PACKAGE_RAPTOR_STREAMING selects. Fixed
+# point because this is a soft-float userland with no FPU calling convention;
+# it is the same arithmetic opus-openipc was built with here before.
+BR2_PACKAGE_OPUS_FIXED_POINT=y
 BR2_PACKAGE_RAPTOR_STREAMING=y
 BR2_PACKAGE_VTUND_OPENIPC=y
 BR2_PACKAGE_YAML_CLI=y

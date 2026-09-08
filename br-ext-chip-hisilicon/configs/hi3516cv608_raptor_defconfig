@@ -254,21 +254,12 @@ BR2_PACKAGE_MBEDTLS_OPENIPC=y
 BR2_PACKAGE_MOSQUITTO=y
 # BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_MOTORS=y
-BR2_PACKAGE_OPUS_OPENIPC=y
-BR2_PACKAGE_OPUS_OPENIPC_FIXED_POINT=y
-# compy, faac, helix-aac, libschrift and majestic-fonts arrive through this
-# symbol's selects.
-#
-# opus above is spelled out the way every other raptor defconfig spells it, and
-# on every one of them it is currently redundant: raptor-streaming's Config.in
-# selects Buildroot's own BR2_PACKAGE_OPUS, both packages install a libopus.so.0
-# SONAME, and the one the daemons actually bind here is Buildroot's 0.9.0 --
-# opus-openipc's 0.8.0 ships beside it, dead. It is kept for now because
-# removing it is a shared-package decision, not a board one: the -openipc fork
-# is what carries the ot_opus_* shim libss_mpi_audio_adp.so needs, so on a
-# target that ships majestic the same SONAME collision decides whether those
-# symbols exist at all. Raptor uses only the standard opus_* API and does not
-# care which copy wins.
+# Buildroot's own opus, which BR2_PACKAGE_RAPTOR_STREAMING selects. Fixed
+# point because this is a soft-float userland with no FPU calling convention;
+# it is the same arithmetic opus-openipc was built with here before.
+BR2_PACKAGE_OPUS_FIXED_POINT=y
+# compy, faac, helix-aac, libschrift, majestic-fonts and opus arrive through
+# this symbol's selects.
 BR2_PACKAGE_RAPTOR_STREAMING=y
 BR2_PACKAGE_VTUND_OPENIPC=y
 BR2_PACKAGE_YAML_CLI=y
