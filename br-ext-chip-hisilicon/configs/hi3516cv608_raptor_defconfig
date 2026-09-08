@@ -1,13 +1,16 @@
-# Hi3516CV608 on 8 MB NOR, in this fork's tree but WITHOUT Raptor.
+# Hi3516CV608 on 8 MB NOR, running Raptor on the V5 backend.
 #
-# WHY A "raptor" TARGET WITH NO RAPTOR. raptor-hal's only HiSilicon backend is
+# WHY THE NAME IS NOW LITERAL. raptor-hal used to carry one HiSilicon backend,
 # src/hisi_v4, which declares the gen-4 HiMPP ABI itself in v4_*.h and dlopens
 # libmpi.so against it. The CV608 is V5: a different MPP with ot_*-prefixed
 # entry points, encode-only (no VO, no TDE, no NNIE -- see the CHIPARCH arms in
-# hisilicon-opensdk.mk). Pointing hisi_v4 at it would not fail to build, it
-# would fail at the first MPI call. Nothing else encodes here either -- see the
-# Packages section -- so this is a bring-up target, and the name is kept
-# because this is where a V5 backend lands.
+# hisilicon-opensdk.mk), one libss_mpi.so where gen4 had libmpi, and MMZ moved
+# back out of OSAL. That is a second backend rather than #ifdefs in the first,
+# and src/hisi_v5 is it. This target is where it landed.
+#
+# Nothing here selects that backend. raptor-hal keys it off PLATFORM, and
+# raptor-streaming.mk already maps the hi3516cv6xx family to HI3516CV610 -- the
+# name the MPP gives itself on either die -- so the family picks it.
 #
 # ONE FAMILY, TWO DIES. SOC_FAMILY is hi3516cv6xx because that is what selects
 # the kernel branch, the toolchain, the board directory, the Majestic tarball
@@ -207,9 +210,9 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 
 # Packages
 #
-# NOTHING HERE ENCODES, BUT THE DRIVER SIDE IS NOW PRESENT. Majestic is still
-# out for space and Raptor still has no V5 backend, so no process in this image
-# opens a stream. hisilicon-opensdk is in: it builds every open_*.ko that
+# WHAT ENCODES HERE IS RAPTOR, and only raptor. Majestic stays out: it is the
+# other streamer rather than a companion, and this partition has no room for
+# both. hisilicon-opensdk is in: it builds every open_*.ko that
 # load_hisilicon modprobes by name -- open_osal, open_mmz, open_isp,
 # open_sys_config and the rest, 42 modules -- so the load script can now get
 # past its first modprobe, which is the step this target exists to reach.
@@ -226,9 +229,10 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 # INSTALL_TARGET_CMDS does not install. That set is not needed now that opensdk
 # builds the open_*.ko equivalents.
 #
-# Majestic's exclusive dependencies leave with it: libevent, libogg, opus (and
-# the ot_opus_* shim, which exists for the V5 naming Majestic wanted), and
-# protobuf-c, which only the cv6xx Majestic build dlopens. libyaml stays
+# Majestic's exclusive dependencies leave with it: libevent, libogg, the
+# ot_opus_* shim that exists for the V5 naming Majestic wanted, and protobuf-c,
+# which only the cv6xx Majestic build dlopens. opus itself is back, because
+# raptor's rad wants it. libyaml stays
 # because yaml-cli selects it, json-c because jsonfilter uses it, and
 # mbedtls because libcurl is built against it.
 #
@@ -236,13 +240,6 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 # off, so cfg80211/mac80211 USB drivers and wpa_supplicant have nothing to bind
 # to. Adding a driver symbol here builds a module against nothing.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
-# compy costs the rootfs nothing -- COMPY_INSTALL_TARGET = NO, so it lands in
-# staging only -- and without it raptor's build.sh finds no libcompy.a in this
-# tree's sysroot and falls back to a hand-built ../compy/build-arm made by some
-# other toolchain, which LTO then refuses to link. Every other raptor defconfig
-# gets it transitively through BR2_PACKAGE_RAPTOR_STREAMING; this one does not
-# select raptor-streaming (see the header), so it asks for compy directly.
-BR2_PACKAGE_COMPY=y
 BR2_PACKAGE_HISILICON_OPENSDK=y
 BR2_PACKAGE_HISILICON_OSDRV_HI3516CV6XX=y
 BR2_PACKAGE_IPCTOOL=y
@@ -257,23 +254,21 @@ BR2_PACKAGE_MBEDTLS_OPENIPC=y
 BR2_PACKAGE_MOSQUITTO=y
 # BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_MOTORS=y
-BR2_PACKAGE_VTUND_OPENIPC=y
-BR2_PACKAGE_YAML_CLI=y
-
-# TEMPORARY, FOR V5 PIPELINE BRING-UP. This defconfig does not select
-# BR2_PACKAGE_RAPTOR_STREAMING (see the header), so nothing pulls in what
-# raptor links against and an out-of-tree build has neither the staging
-# archives nor the runtime libraries. These are RAPTOR_STREAMING_DEPENDENCIES
-# minus what is already above -- compy, mosquitto, the osdrv -- and minus
-# mbedtls3-openipc, which the rootfs slot will not hold. Delete the block when
-# a V5 backend lands and this target selects raptor-streaming for real.
-#
-# libschrift and helix-aac are INSTALL_TARGET = NO: they populate staging so
-# the link finds libschrift.a and libhelix-aac.a, and cost the image nothing.
-# faac, opus and the fonts are the ones that land in the rootfs.
-BR2_PACKAGE_FAAC=y
-BR2_PACKAGE_HELIX_AAC=y
-BR2_PACKAGE_LIBSCHRIFT=y
-BR2_PACKAGE_MAJESTIC_FONTS=y
 BR2_PACKAGE_OPUS_OPENIPC=y
 BR2_PACKAGE_OPUS_OPENIPC_FIXED_POINT=y
+# compy, faac, helix-aac, libschrift and majestic-fonts arrive through this
+# symbol's selects.
+#
+# opus above is spelled out the way every other raptor defconfig spells it, and
+# on every one of them it is currently redundant: raptor-streaming's Config.in
+# selects Buildroot's own BR2_PACKAGE_OPUS, both packages install a libopus.so.0
+# SONAME, and the one the daemons actually bind here is Buildroot's 0.9.0 --
+# opus-openipc's 0.8.0 ships beside it, dead. It is kept for now because
+# removing it is a shared-package decision, not a board one: the -openipc fork
+# is what carries the ot_opus_* shim libss_mpi_audio_adp.so needs, so on a
+# target that ships majestic the same SONAME collision decides whether those
+# symbols exist at all. Raptor uses only the standard opus_* API and does not
+# care which copy wins.
+BR2_PACKAGE_RAPTOR_STREAMING=y
+BR2_PACKAGE_VTUND_OPENIPC=y
+BR2_PACKAGE_YAML_CLI=y
