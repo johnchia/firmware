@@ -36,12 +36,17 @@
 # reported a 00010000 erase size, which is where the 64K granularity in the
 # sizing above comes from.
 #
-# What ran on that board was the earlier table -- 2752K kernel, 4352K rootfs.
-# The table below is the re-cut that banks the kernel-config fork (2048K and
-# 5056K) and it HAS NOT BEEN FLASHED. Partition starts move with it, so this
-# needs the env written and both partitions rewritten, not a rootfs upgrade:
-# rootfs begins at 0x240000 now rather than 0x2F0000. Nothing here has streamed
-# either, there being no MPP in this image to stream with.
+# The re-cut table below -- 2048K kernel, 5056K rootfs, banking the
+# kernel-config fork -- has since been flashed to that board with opensdk in
+# the image, and it boots. Note it could not be delivered as a rootfs upgrade:
+# partition starts move, so the env and both partitions had to be written
+# together, rootfs beginning at 0x240000 rather than 0x2F0000. rootfs_data and
+# devinfo start at the same offsets under either table, which is what let the
+# overlay survive the change.
+#
+# Still unverified: nothing has streamed. Majestic is out for space and Raptor
+# has no V5 backend, so no process in this image opens a stream -- what opensdk
+# buys is the kernel side underneath one.
 #
 # Declaring env in that table is what lets fw_printenv work, and the mechanism
 # is worth knowing because it leaves a file behind that the image did not ship.
