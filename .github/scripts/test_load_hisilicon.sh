@@ -154,9 +154,35 @@ T no  "$(overlaps 0x42900000 428cbfff)" "parser-fixed CV608: 0x42900000 clears i
 T no  "$(overlaps 0x42000000 41ffffff)" "mem=32M split: zone starts exactly one byte past RAM"
 T no  "$(overlaps 0x42000000 '')"       "unreadable /proc/iomem does not fabricate an error"
 
-# ----- Part 5: the fix is present where it is claimed to be -----
+# ----- Part 5: SENSOR reaches the modules -----
+#
+# SENSOR (environment or probe) and SNS_TYPE0 (what open_sys_config binds VI and
+# the MIPI lanes for) name the same part. The -sensor0 arm seeds SENSOR from
+# SNS_TYPE0; the reverse direction was missing, so a board whose environment
+# said os04d10 still configured the family default sc4336p.
 echo
-echo "=== Part 5: cv6xx carries both halves ==="
+echo "=== Part 5: SENSOR seeds SNS_TYPE0 ==="
+
+SNS_SUPPORTED="sc4336p gc4023 sc450ai sc500ai sc431hai os04d10 imx307 os02m10 bt1120 bt656 bt601"
+seed_sns() {  # SENSOR, starting SNS_TYPE0 -> the SNS_TYPE0 handed to modprobe
+    SENSOR="$1"; SNS_TYPE0="$2"
+    if [ -n "$SENSOR" ] && [ "$SENSOR" != "$SNS_TYPE0" ]; then
+        case " $SNS_SUPPORTED " in
+            *" $SENSOR "*) SNS_TYPE0=$SENSOR ;;
+        esac
+    fi
+    echo "$SNS_TYPE0"
+}
+T os04d10 "$(seed_sns os04d10 sc4336p)" "the CV608 bug: sensor=os04d10 now reaches sns0"
+T sc4336p "$(seed_sns sc4336p sc4336p)" "a board that really is the default is unchanged"
+T gc4023  "$(seed_sns gc4023  sc4336p)" "any other supported sensor follows too"
+T sc4336p "$(seed_sns ''      sc4336p)" "no SENSOR at all keeps the family default"
+T sc4336p "$(seed_sns imx335  sc4336p)" "a name this driver set lacks does NOT reach modprobe"
+T os04d10 "$(seed_sns os04d10 os04d10)" "-sensor0 already agreed; nothing to do"
+
+# ----- Part 6: the fix is present where it is claimed to be -----
+echo
+echo "=== Part 6: cv6xx carries the fixes ==="
 cv6xx=general/package/hisilicon-osdrv-hi3516cv6xx/files/script/load_hisilicon
 if [ ! -f "$cv6xx" ]; then
     bad "hi3516cv6xx load_hisilicon missing -- repo layout changed?"
@@ -167,6 +193,13 @@ else
     grep -q 'overlaps System RAM' "$cv6xx" \
         && ok "hi3516cv6xx: MMZ overlap guard present" \
         || bad "hi3516cv6xx: MMZ overlap guard MISSING"
+    grep -q 'SNS_TYPE0=$SENSOR' "$cv6xx" \
+        && ok "hi3516cv6xx: SENSOR seeds SNS_TYPE0" \
+        || bad "hi3516cv6xx: SENSOR->SNS_TYPE0 seed MISSING -- every board configures the default sensor"
+    # The list is validated against, and printed by usage(). Two copies drift.
+    grep -q 'Available sensors:$SNS_SUPPORTED' "$cv6xx" \
+        && ok "hi3516cv6xx: usage prints the list it validates against" \
+        || bad "hi3516cv6xx: usage has its own sensor list -- it will drift from SNS_SUPPORTED"
 fi
 
 echo
