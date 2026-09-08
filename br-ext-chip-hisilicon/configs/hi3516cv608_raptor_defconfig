@@ -20,12 +20,14 @@
 # ITS FLASH IS THE CONSTRAINT, THE SAME WAY THE EV200'S IS. 7360K holds the
 # kernel and the rootfs together on this board -- see BR2_OPENIPC_FLASH_SIZE --
 # so weigh anything added below against 7360k total, not against the 8192k
-# repack prints. It used to be tight: the FIT was 2688k of it, which is what
-# put hisilicon-opensdk out of the package list below rather than merely
-# Majestic. Forking the kernel config (hi3516cv608.raptor.config) took the FIT
-# to 1984k and the squashfs to 3392k, 1331k off the pair, and the table below
-# was re-cut to bank it -- the kernel slot back to 2048k and every freed block
-# to the rootfs.
+# repack prints. It used to be tight enough to exclude hisilicon-opensdk: the
+# FIT was 2688k and the rootfs 5388k with opensdk in, which overran the region
+# however it was cut. Forking the kernel config (hi3516cv608.raptor.config)
+# took the FIT to 1984k and 620k of dead modules out of the squashfs, 1331k off
+# the pair, and the table was re-cut to bank it -- kernel slot back to 2048k,
+# every freed block to the rootfs. opensdk fits in the result at 4792k of a
+# 5056k slot. It would not fit the old 4352k one, so the two changes are what
+# bought the driver stack and neither would have done it alone.
 #
 # BOARD-VERIFIED, BUT ON THE PREVIOUS CUT. An H4-52POX-S CV608 boots this image
 # to a root shell with the OEM U-Boot left in place, from an environment saved
@@ -191,23 +193,24 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 
 # Packages
 #
-# NOTHING HERE ENCODES, AND NOTHING HERE LOADS A DRIVER. Majestic is out for
-# space, Raptor has no V5 backend, and hisilicon-opensdk is out too -- so what
-# is left is a camera that boots to a shell with the vendor MPP userspace
-# present and no kernel side under it.
+# NOTHING HERE ENCODES, BUT THE DRIVER SIDE IS NOW PRESENT. Majestic is still
+# out for space and Raptor still has no V5 backend, so no process in this image
+# opens a stream. hisilicon-opensdk is in: it builds every open_*.ko that
+# load_hisilicon modprobes by name -- open_osal, open_mmz, open_isp,
+# open_sys_config and the rest, 42 modules -- so the load script can now get
+# past its first modprobe, which is the step this target exists to reach.
 #
-# BE CLEAR ABOUT WHAT DROPPING opensdk COSTS. It is the package that builds
-# every open_*.ko, and load_hisilicon modprobes those by name -- open_osal,
-# open_mmz, open_isp, open_sys_config and the rest -- so the load script now
-# fails on its first modprobe and the video pipeline cannot come up at all. It
-# also carried the six source-built sensor drivers (gc4023, os04d10, sc4336p,
-# sc450ai, sc500ai, sc431hai); what remains is the two blobs osdrv installs,
-# imx307 and os02m10.
+# It also brings the six source-built sensor drivers (gc4023, os04d10, sc4336p,
+# sc450ai, sc500ai, sc431hai) alongside the two blobs osdrv installs, imx307
+# and os02m10.
 #
-# osdrv does still carry a vendor ot_*.ko set in files/kmod/ that its
-# INSTALL_TARGET_CMDS does not install. That, not opensdk, is where a driver
-# stack for this board would come from if one is wanted back without the
-# 1.7 MB.
+# This is what makes the MMZ arithmetic in hi3516cv608.env.txt live rather than
+# latent. Until now load_hisilicon died before open_mmz was ever modprobed, so
+# a wrong mmz= was harmless; from here it is handed to the driver.
+#
+# osdrv separately carries a vendor ot_*.ko set in files/kmod/ that its
+# INSTALL_TARGET_CMDS does not install. That set is not needed now that opensdk
+# builds the open_*.ko equivalents.
 #
 # Majestic's exclusive dependencies leave with it: libevent, libogg, opus (and
 # the ot_opus_* shim, which exists for the V5 naming Majestic wanted), and
@@ -219,6 +222,7 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 # off, so cfg80211/mac80211 USB drivers and wpa_supplicant have nothing to bind
 # to. Adding a driver symbol here builds a module against nothing.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
+BR2_PACKAGE_HISILICON_OPENSDK=y
 BR2_PACKAGE_HISILICON_OSDRV_HI3516CV6XX=y
 BR2_PACKAGE_IPCTOOL=y
 BR2_PACKAGE_JSONFILTER=y

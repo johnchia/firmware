@@ -802,7 +802,7 @@ def self_test():
         (["general/package/hisilicon-osdrv-hi3516ev200/files/script/load_hisilicon"],
         10, "osdrv narrows to its family"),
         (["general/package/hisilicon-opensdk/hisilicon-opensdk.mk"],
-        45, "opensdk spans HiSilicon and Goke"),
+        46, "opensdk spans HiSilicon and Goke"),
         (["general/package/goke-osdrv-gk7205v200/Config.in"], 7, "goke osdrv"),
         (["general/package/hisilicon-osdrv-hi3520dv200/files/script/load_hisilicon"],
          1, "single-board osdrv"),
