@@ -1,0 +1,43 @@
+/*
+ * Hi3516CV608 raptor bench board (H4-52POX-S, OS04D10, 8 MB NOR, 64 MB DDR).
+ *
+ * The in-tree hi3516cv608-demb.dts describes the vendor demo board, which
+ * carries an eMMC on mmc0 and a WiFi module on sdio1. This board has neither:
+ * it has a microSD slot on sdio0 and nothing else on the SD host. The OEM's
+ * own device tree (from the firmware dump) disables mmc0 and sdio1 and enables
+ * sdio0 at 25 MHz with an inverted power enable, and that is what this file
+ * does on top of the demo tree.
+ *
+ * Disabling sdio1 is not cosmetic. The nebula SD host driver muxes its pads at
+ * probe, and sdio1's six pads (CORE_IOCFG 0x38..0x4c) are GPIO7_7, GPIO1_0,
+ * GPIO1_2, GPIO1_3, GPIO1_1 and GPIO7_6 -- the OEM's CDS input, white light,
+ * IR LED, alarm output, IR-cut N leg and reset button. With sdio1 enabled a
+ * sysfs write to any of them reaches the GPIO controller and stops at the pad
+ * (0x11130048 reads 0x1131 = SDIO1_CDATA0 instead of 0x1100 = GPIO1_1), which
+ * is why the IR-cut did not move until the pad was put back by hand.
+ */
+#include "hi3516cv608-demb.dts"
+
+/ {
+	model = "OpenIPC Hi3516CV608 raptor";
+};
+
+/* No eMMC. mmc0 shares the controller at 0x10030000 with sdio0. */
+&mmc0 {
+	status = "disabled";
+};
+
+/* microSD slot. Values from the OEM device tree: 25 MHz, runtime PM, and the
+ * card power enable (SDIO0_CARD_POWER_EN_N on GPIO3_4's pad) is active-high
+ * on this board. */
+&sdio0 {
+	status = "okay";
+	max-frequency = <25000000>;
+	pm_runtime_enable;
+	pwr_en_inverted;
+};
+
+/* No WiFi. Leave the GPIO1_x / GPIO7_x pads to GPIO (see above). */
+&sdio1 {
+	status = "disabled";
+};

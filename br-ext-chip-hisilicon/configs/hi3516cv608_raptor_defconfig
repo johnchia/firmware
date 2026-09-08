@@ -102,7 +102,16 @@ BR2_LINUX_KERNEL_XZ=y
 BR2_LINUX_KERNEL_UIMAGE_LOADADDR="0x40018000"
 BR2_LINUX_KERNEL_DTS_SUPPORT=y
 # BR2_LINUX_KERNEL_DTB_IS_SELF_BUILT is not set
-BR2_LINUX_KERNEL_INTREE_DTS_NAME="hi3516cv608-demb"
+# Not the in-tree demo-board tree: that one enables eMMC on mmc0 and WiFi on
+# sdio1, and sdio1's pads are GPIO1_0..1_3 and GPIO7_6/7_7 -- the OEM's IR-cut,
+# LED, CDS and reset lines -- which the SD driver takes away from GPIO at
+# probe. The board tree includes the demo tree and flips the three SD nodes to
+# what the hardware has (microSD on sdio0, nothing else). Buildroot copies it
+# into the kernel's dts directory, so the #include resolves in-tree, and builds
+# it under its own basename; INTREE_DTS_NAME stays empty so that
+# post-image.sh's hi35*.dtb glob finds exactly one file.
+BR2_LINUX_KERNEL_INTREE_DTS_NAME=""
+BR2_LINUX_KERNEL_CUSTOM_DTS_PATH="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/hi3516cv608-raptor.dts"
 # Two scripts, size check first so it fails before the FIT is assembled.
 # post-image.sh builds the FIT (zImage + dtb) and concatenates rootfs.squashfs
 # onto it at the next 64K boundary; that firmware.bin is what repack ships.
