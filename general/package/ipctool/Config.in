@@ -3,4 +3,5 @@ config BR2_PACKAGE_IPCTOOL
 	help
 	  ipctool - IP cameras chip information tool
 
-	  https://github.com/openipc/ipctool/
+	  https://github.com/johnchia/ipctool/ (fork of
+	  https://github.com/openipc/ipctool/, pinned for the V5 die-ID reader)

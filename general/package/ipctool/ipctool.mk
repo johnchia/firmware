@@ -4,8 +4,13 @@
 #
 ################################################################################
 
-IPCTOOL_SITE = $(call github,openipc,ipctool,$(IPCTOOL_VERSION))
-IPCTOOL_VERSION = HEAD
+# Pinned to a fork carrying the V5 (HISI_OT) die-ID reader: upstream's
+# `ipcinfo -i` covers V4 and SigmaStar only, so every 3516CV608/CV610/CV613
+# and 35x9DV500 answers with nothing and rcS's ethaddr_provision() falls
+# through to the shared placeholder MAC. Revert to openipc/ipctool once the
+# change lands there; the branch is v5-die-id.
+IPCTOOL_SITE = $(call github,johnchia,ipctool,$(IPCTOOL_VERSION))
+IPCTOOL_VERSION = 6cf619e0822338c3d36f865fe438fd89af3845c9
 
 IPCTOOL_LICENSE = MIT
 IPCTOOL_LICENSE_FILES = LICENSE
