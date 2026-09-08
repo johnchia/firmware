@@ -92,6 +92,83 @@ else
     done
 fi
 
+# ----- Part 3: the K/M/G parser (hi3516cv6xx only, so far) -----
+#
+# A board that keeps its vendor U-Boot has an environment this tree does not
+# write. The CV608's OEM passes mem=41776K, which the M-only pattern in Part 1
+# does not match; os_mem_size then falls through to a literal 32 and the MMZ is
+# placed 8.8 MiB inside the kernel's own RAM, with nothing logged.
+#
+# The replacement must be a STRICT SUPERSET: every cmdline the old pattern
+# matched has to yield the same number, or this becomes a flag day for boards
+# that are working today. Part 3a asserts exactly that, case by case.
+echo
+echo "=== Part 3: K/M/G parser is a superset of the M-only one ==="
+
+parse_legacy() {
+    printf '%s' "$1" | awk 'BEGIN{RS=" "} /^mem=[0-9]+M/{gsub(/^mem=|M.*$/,""); print; exit}'
+}
+parse_kmg() {
+    printf '%s' "$1" | awk 'BEGIN{RS=" "} /^mem=[0-9]+[KMG]/{
+        n=$0; sub(/^mem=/,"",n); u=n; sub(/^[0-9]+/,"",u); u=substr(u,1,1); n=n+0
+        if (u=="K") n=int((n+1023)/1024); else if (u=="G") n*=1024
+        print n; exit}'
+}
+
+# 3a: agreement on every form the old pattern accepted, plus the no-mem case.
+for c in \
+    'mem=32M mmz_allocator=ot console=ttyAMA0,115200' \
+    'mem=128M mmz_allocator=cma mmz=anonymous,0,0x42000000,96M' \
+    'mem=96M mmz_allocator=hisi mmz=anonymous,0,0x46000000,32M' \
+    'mem=256M' \
+    'mem=127M' \
+    'mem=64M@0x40000000 console=ttyS0' \
+    'mem=32MB console=ttyS0' \
+    'console=ttyAMA0,115200 root=/dev/mtdblock3'
+do
+    T "$(parse_legacy "$c")" "$(parse_kmg "$c")" "superset: $c"
+done
+
+# 3b: the forms the old pattern silently dropped.
+T 41   "$(parse_kmg 'mem=41776K console=ttyAMA0,115200')" \
+   "mem=41776K -> 41 (rounded UP; 40 would overlap by the fraction)"
+T 40   "$(parse_kmg 'mem=40960K')" \
+   "mem=40960K -> 40 (exact MiB, no rounding)"
+T 1024 "$(parse_kmg 'mem=1G console=ttyS0')" \
+   "mem=1G -> 1024"
+
+# ----- Part 4: the overlap guard -----
+#
+# mmz_start is arithmetic over values that may be defaults, and the modprobe's
+# `|| report_error` catches a failed insert, not a successful insert of a zone
+# that overlaps the kernel. The guard compares against /proc/iomem instead.
+echo
+echo "=== Part 4: MMZ overlap guard ==="
+
+overlaps() {  # mmz_start, System RAM end (inclusive, as /proc/iomem prints it)
+    ram_end="$2"
+    if [ -n "$ram_end" ] && [ $(($1)) -le $((0x$ram_end)) ]; then echo yes; else echo no; fi
+}
+T yes "$(overlaps 0x42000000 428cbfff)" "the CV608 bug: MMZ 0x42000000 under RAM ending 0x428cbfff"
+T no  "$(overlaps 0x42900000 428cbfff)" "parser-fixed CV608: 0x42900000 clears it"
+T no  "$(overlaps 0x42000000 41ffffff)" "mem=32M split: zone starts exactly one byte past RAM"
+T no  "$(overlaps 0x42000000 '')"       "unreadable /proc/iomem does not fabricate an error"
+
+# ----- Part 5: the fix is present where it is claimed to be -----
+echo
+echo "=== Part 5: cv6xx carries both halves ==="
+cv6xx=general/package/hisilicon-osdrv-hi3516cv6xx/files/script/load_hisilicon
+if [ ! -f "$cv6xx" ]; then
+    bad "hi3516cv6xx load_hisilicon missing -- repo layout changed?"
+else
+    grep -q 'mem=\[0-9\]+\[KMG\]' "$cv6xx" \
+        && ok "hi3516cv6xx: K/M/G parser present" \
+        || bad "hi3516cv6xx: K/M/G parser MISSING -- a vendor-env board silently mis-places the MMZ"
+    grep -q 'overlaps System RAM' "$cv6xx" \
+        && ok "hi3516cv6xx: MMZ overlap guard present" \
+        || bad "hi3516cv6xx: MMZ overlap guard MISSING"
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then
     echo "All load_hisilicon regression checks passed."

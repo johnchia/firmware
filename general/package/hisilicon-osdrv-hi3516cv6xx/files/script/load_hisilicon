@@ -20,7 +20,17 @@ mem_start=$(grep "System RAM" /proc/iomem | awk -F'[- :]' '{print "0x"$1}')
 mem_total=$(fw_printenv -n totalmem | tr -d 'M')
 mem_total=${mem_total:=64}
 
-os_mem_size=$(awk 'BEGIN{RS=" "} /^mem=[0-9]+M/{gsub(/^mem=|M.*$/,""); print; exit}' /proc/cmdline)
+# K and G as well as M, because a board that keeps its vendor U-Boot has an
+# environment this tree does not write: the CV608's OEM passes mem=41776K, which
+# an M-only pattern does not match, and the silent fall-through is to a literal
+# 32 that has no relation to the part. Round UP -- 41776K is 40.79 MiB and the
+# MMZ is placed on a whole-MiB boundary, so rounding down overlaps the kernel by
+# the fraction. A strict superset of the old pattern: every form it matched,
+# mem=64M@0xADDR and mem=32MB included, still yields the same number.
+os_mem_size=$(awk 'BEGIN{RS=" "} /^mem=[0-9]+[KMG]/{
+		n=$0; sub(/^mem=/,"",n); u=n; sub(/^[0-9]+/,"",u); u=substr(u,1,1); n=n+0
+		if (u=="K") n=int((n+1023)/1024); else if (u=="G") n*=1024
+		print n; exit}' /proc/cmdline)
 if [ -n "$os_mem_size" ] && [ "$os_mem_size" -ge "$mem_total" ]; then
 	os_mem_size=""
 fi
@@ -348,6 +358,19 @@ if [ $os_mem_size -ge $mem_total ]; then
 fi
 
 calc_mmz_info
+
+# mmz_start is arithmetic over values that may be defaults, and the only check
+# downstream is `|| report_error` on the modprobe -- which catches a failed
+# insert, not a successful insert of a zone that overlaps the kernel. Ask the
+# kernel where its memory actually ends instead of trusting the sum. Silence
+# here is the dangerous outcome: the pipeline writes over kernel memory with
+# nothing logged.
+ram_end=$(awk -F'[- :]' '/System RAM/{e=$2} END{print e}' /proc/iomem)
+if [ -n "$ram_end" ] && [ $((mmz_start)) -le $((0x$ram_end)) ]; then
+	echo "[err] MMZ $mmz_start overlaps System RAM ending 0x$ram_end"
+	echo "[err] set osmem/totalmem, or express mem= in M"
+	report_error
+fi
 
 if [ -n "$SENSOR" ]; then
 	logger -s -p daemon.info -t hisilicon "Manualy set SENSOR as ${SENSOR}"
