@@ -86,7 +86,7 @@ BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archi
 BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
 # The family config, spelled out rather than derived from SOC_MODEL: there is
 # one kernel config for both dies and no hi3516cv608.generic.config to find.
-BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/hi3516cv6xx.generic.config"
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/hi3516cv608.raptor.config"
 BR2_LINUX_KERNEL_ZIMAGE=y
 BR2_LINUX_KERNEL_XZ=y
 BR2_LINUX_KERNEL_UIMAGE_LOADADDR="0x40018000"
