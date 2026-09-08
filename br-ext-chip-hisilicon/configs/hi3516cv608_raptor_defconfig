@@ -227,6 +227,13 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 # off, so cfg80211/mac80211 USB drivers and wpa_supplicant have nothing to bind
 # to. Adding a driver symbol here builds a module against nothing.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
+# compy costs the rootfs nothing -- COMPY_INSTALL_TARGET = NO, so it lands in
+# staging only -- and without it raptor's build.sh finds no libcompy.a in this
+# tree's sysroot and falls back to a hand-built ../compy/build-arm made by some
+# other toolchain, which LTO then refuses to link. Every other raptor defconfig
+# gets it transitively through BR2_PACKAGE_RAPTOR_STREAMING; this one does not
+# select raptor-streaming (see the header), so it asks for compy directly.
+BR2_PACKAGE_COMPY=y
 BR2_PACKAGE_HISILICON_OPENSDK=y
 BR2_PACKAGE_HISILICON_OSDRV_HI3516CV6XX=y
 BR2_PACKAGE_IPCTOOL=y
