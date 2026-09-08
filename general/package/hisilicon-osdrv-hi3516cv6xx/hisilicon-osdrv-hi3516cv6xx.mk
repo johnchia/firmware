@@ -32,23 +32,44 @@ HISILICON_OSDRV_HI3516CV6XX_SITE =
 HISILICON_OSDRV_HI3516CV6XX_LICENSE = MIT
 HISILICON_OSDRV_HI3516CV6XX_LICENSE_FILES = LICENSE
 
-# Vendor MPP userspace .so files needed by majestic (transitive NEEDED
-# closure). Excludes libopus.so (provided by BR2_PACKAGE_OPUS_OPENIPC).
+# Vendor MPP userspace .so files. The core set is what any streamer on this
+# family reaches: the MPI entry points, the ISP and its algorithm libraries,
+# and the VQE front end.
 HISILICON_OSDRV_HI3516CV6XX_MPP_LIBS = \
-	libaac_comm.so libaac_dec.so libaac_enc.so \
-	libaac_sbr_dec.so libaac_sbr_enc.so \
-	libacs.so libaiisp.so libbnr.so libcalcflicker.so \
+	libacs.so libbnr.so libcalcflicker.so \
 	libdehaze.so libdnvqe.so libdrc.so \
 	libextend_stats.so libir_auto.so libldci.so \
-	libmp3_dec.so libmp3_enc.so libmp3_lame.so \
 	libot_mpi_isp.so libot_osal.so libsecurec.so \
-	libss_ivs_md.so \
 	libss_mpi.so libss_mpi_ae.so libss_mpi_audio.so libss_mpi_audio_adp.so \
-	libss_mpi_awb.so libss_mpi_isp.so libss_mpi_ive.so \
+	libss_mpi_awb.so libss_mpi_isp.so \
 	libss_mpi_sysbind.so libss_mpi_sysmem.so \
-	libsvp_acl.so libupvqe.so libvoice_engine.so \
+	libupvqe.so libvoice_engine.so \
 	libvqe_aec.so libvqe_agc.so libvqe_anr.so libvqe_eq.so \
 	libvqe_hpf.so libvqe_hs.so libvqe_record.so libvqe_res.so libvqe_talkv2.so
+
+# The rest of majestic's NEEDED closure, which nothing else on this family
+# reaches. 1681 KB, and on a 5056 KB rootfs that is the difference between
+# raptor fitting and not.
+#
+# Determined from the image rather than assumed: the transitive closure of
+# every lib*.so name the eight raptor daemons carry -- DT_NEEDED and dlopen
+# strings both, since the HAL reaches the MPI through dlopen -- contains none
+# of these. raptor encodes AAC with faac and decodes it with helix in
+# userspace, so the vendor codec chain is majestic's alone; the NPU, the AI
+# ISP and IVE have no raptor caller at all.
+#
+# The VQE libraries above stay in the core set on purpose. libupvqe and
+# libvoice_engine ARE in raptor's closure, and the individual vqe_* stages
+# they pull in at runtime do not show up as NEEDED, so pruning them would be
+# guessing at a dlopen that only fires when AEC or ANR is switched on.
+ifeq ($(BR2_PACKAGE_MAJESTIC),y)
+HISILICON_OSDRV_HI3516CV6XX_MPP_LIBS += \
+	libaac_comm.so libaac_dec.so libaac_enc.so \
+	libaac_sbr_dec.so libaac_sbr_enc.so \
+	libaiisp.so \
+	libmp3_dec.so libmp3_enc.so libmp3_lame.so \
+	libss_ivs_md.so libss_mpi_ive.so libsvp_acl.so
+endif
 
 # Sensor .so blobs shipped from vendor flash where the openhisilicon
 # V5 SDK has no source mirror. Extracted from the original CV608 DEMO
