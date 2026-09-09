@@ -252,7 +252,9 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 # supplicant and 57 KB of tools, 1150 KB compressed against a 5184 KB slot.
 # The cv608 has no standard radio, so the wired build is the one that does not
 # assume this dongle, and a board with a different one needs its own arm in
-# /etc/wireless/usb rather than this defconfig.
+# /etc/wireless/usb rather than this defconfig. Nothing has to set wlandev for
+# this image, though: with the driver in it and a dongle on the bus,
+# /etc/wireless/detect finds the arm at boot.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
 BR2_PACKAGE_HISILICON_OPENSDK=y
 BR2_PACKAGE_HISILICON_OSDRV_HI3516CV6XX=y

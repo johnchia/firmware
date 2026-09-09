@@ -5,51 +5,57 @@ set_gpio() {
 	sleep 1
 }
 
-# Generic MT7601U
-if [ "$1" = "mt7601u-generic" ]; then
-	modprobe mt7601u
-	exit 0
-fi
-
-# Generic RTL8188EU
-if [ "$1" = "rtl8188eu-generic" ]; then
-	modprobe 8188eu
-	exit 0
-fi
-
-# Generic RTL8188FU
-if [ "$1" = "rtl8188fu-generic" ]; then
-	modprobe 8188fu
-	exit 0
-fi
-
-# Generic RTL8733BU
+# The generic arms, as "<name> <modprobe arguments>". A generic arm has no
+# board wiring to release, so it is only ever a module and the parameters it
+# takes. The board-specific arms below cannot collapse this way, because
+# releasing VBUS is a different GPIO or register write on every one of them.
+#
+# /etc/wireless/detect walks this table when wlandev is unset, and asks it for
+# the module name, so keep it the only copy -- a second list maintained for
+# detect would drift the first time an arm was added to one and not the other.
+#
 # rtw_power_mgnt=0 rtw_ips_mode=0: the driver defaults to 2 and 1, which put
 # the radio to sleep between frames and cut the RF entirely once the interface
 # goes idle. A camera is mains powered and has to answer the moment it is
 # asked, and on a cv608 the defaults cost 5% of pings outright and stretched
 # the rest to 60 ms against 0.6 ms on the wire. iwconfig power off only
 # reaches the first of the two, so both are set here where the module loads.
-if [ "$1" = "rtl8733bu-generic" ]; then
-	modprobe 8733bu rtw_power_mgnt=0 rtw_ips_mode=0
-	exit 0
-fi
+GENERIC_ARMS="mt7601u-generic mt7601u
+rtl8188eu-generic 8188eu
+rtl8188fu-generic 8188fu
+rtl8733bu-generic 8733bu rtw_power_mgnt=0 rtw_ips_mode=0
+rtl8811cu-generic 8821cu
+rtl8812au-generic 88XXau rtw_ht_enable=0 rtw_led_enable=0
+atbm603x-generic-usb atbm603x_wifi_usb"
 
-# Generic RTL8811CU
-if [ "$1" = "rtl8811cu-generic" ]; then
-	modprobe 8821cu
-	exit 0
-fi
+generic_args() {
+	echo "$GENERIC_ARMS" | while read -r name args; do
+		if [ "$name" = "$1" ]; then
+			echo "$args"
+			break
+		fi
+	done
+}
 
-# Generic RTL8812AU
-if [ "$1" = "rtl8812au-generic" ]; then
-	modprobe 88XXau rtw_ht_enable=0 rtw_led_enable=0
-	exit 0
-fi
+# Both of these exist for /etc/wireless/detect, which has to know what this
+# image could load before it tries, and what to unload when nothing binds.
+case "$1" in
+	--list-generic)
+		echo "$GENERIC_ARMS" | cut -d' ' -f1
+		exit 0
+		;;
+	--module)
+		args=$(generic_args "$2")
+		[ -n "$args" ] || exit 1
+		echo "$args" | cut -d' ' -f1
+		exit 0
+		;;
+esac
 
-# Generic ATBM603x
-if [ "$1" = "atbm603x-generic-usb" ]; then
-	modprobe atbm603x_wifi_usb
+# Unquoted on purpose: the table's second field onwards is an argument list.
+args=$(generic_args "$1")
+if [ -n "$args" ]; then
+	modprobe $args
 	exit 0
 fi
 

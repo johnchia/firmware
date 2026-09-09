@@ -34,6 +34,13 @@ set_wireless() {
 start() {
 	echo "Starting network..."
 	ifup lo
+	# A board with no wlandev set is usually wired, but it may equally be a
+	# board whose radio nobody has named: a generic dongle needs no board
+	# wiring, so there is nothing to configure and no way to know it is there
+	# except to look. Detection only ever adds a radio -- it answers nothing
+	# on an image carrying no wifi driver, which is nearly all of them -- and
+	# an explicit wlandev never reaches it.
+	[ -n "$dev" ] || dev=$(/etc/wireless/detect)
 	if [ -n "$dev" ]; then
 		set_wireless
 	else
