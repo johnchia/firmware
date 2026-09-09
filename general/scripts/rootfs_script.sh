@@ -144,6 +144,67 @@ if [ -x "${TARGET_DIR}${CLAIM_SHELL}" ]; then
 		|| echo "${CLAIM_SHELL}" >> "${TARGET_DIR}/etc/shells"
 fi
 
+# Claim the camera at build time, for a bench board.
+#
+# A camera ships unclaimed: /etc/shadow gives root an empty hash and the login
+# shell is the claim gate, so the first thing anyone does with a fresh image is
+# claim it by hand at an interactive prompt. That is right for a camera someone
+# is deploying and pure friction for the tenth reflash of the morning -- and it
+# cannot be scripted, because the gate refuses anything non-interactive on
+# purpose.
+#
+# Set OPENIPC_DEV_PASSWORD in the BUILD ENVIRONMENT and the image comes up
+# already claimed:
+#
+#     make BOARD=<board> OPENIPC_DEV_PASSWORD=hunter2
+#
+# Deliberately an environment variable and not a config symbol. A symbol can be
+# written into a defconfig, committed, and shipped by somebody who never knew it
+# was there; an environment variable exists only in the command line that runs
+# the build, so no file in this tree can carry a password and CI cannot set one
+# by accident. That property is the whole design -- do not "improve" this into a
+# BR2_ symbol.
+#
+# md5crypt to match the device: busybox is built with
+# CONFIG_FEATURE_DEFAULT_PASSWD_ALGO="md5", so this is the same hash `passwd` on
+# the camera would have written, and rhd's config API pays 4ms a guess against
+# it rather than the 91ms a sha512 entry costs (see rhd_authrate.h).
+#
+# The image says so in os-release. An image with a known password must announce
+# itself, because the one failure that matters here is one escaping the bench.
+# Nothing repairs /etc/passwd: openipc-claim reads /etc/shadow live, finds the
+# camera claimed, and steps aside on the first login by itself.
+if [ -n "${OPENIPC_DEV_PASSWORD}" ]; then
+	# Never in CI. A released image with a known password is the one failure
+	# that matters here, and "no workflow sets it" is a property somebody can
+	# edit away; this is the interlock that does not depend on them not doing
+	# so. GitHub Actions sets both of these on every runner. It fails the
+	# build rather than ignoring the variable, because a build that quietly
+	# produced an unprovisioned image would be discovered on the bench, by
+	# which time the operator believes it is claimed.
+	if [ -n "${GITHUB_ACTIONS}" ] || [ -n "${CI}" ]; then
+		echo "rootfs_script: OPENIPC_DEV_PASSWORD is set in a CI build -- refusing." >&2
+		echo "rootfs_script: it exists for bench images and must never ship." >&2
+		exit 1
+	fi
+	DEV_HASH=$(openssl passwd -1 "${OPENIPC_DEV_PASSWORD}" 2>/dev/null)
+	if [ -z "${DEV_HASH}" ]; then
+		echo "rootfs_script: OPENIPC_DEV_PASSWORD is set but openssl could not hash it" >&2
+		exit 1
+	fi
+	DEV_TMP="${TARGET_DIR}/etc/.shadow.dev.$$"
+	if awk -F: -v OFS=: -v h="${DEV_HASH}" '$1 == "root" { $2 = h } 1' 		"${TARGET_DIR}/etc/shadow" > "${DEV_TMP}" && [ -s "${DEV_TMP}" ]; then
+		chmod 600 "${DEV_TMP}"
+		mv -f "${DEV_TMP}" "${TARGET_DIR}/etc/shadow"
+	else
+		rm -f "${DEV_TMP}"
+		echo "rootfs_script: could not write the dev password into /etc/shadow" >&2
+		exit 1
+	fi
+	echo DEV_PROVISIONED=y >> ${FILE}
+	echo "rootfs_script: *** DEV IMAGE -- root password baked in at build time ***"
+fi
+
 # Comments are worth writing and worth keeping in git; they are not worth
 # flashing. sysupgrade alone had grown to 52KB, 57% of it comment, and on
 # 2026-08-18 it pushed hi3519v101_lite 4KB past its 5120KB rootfs cap -- a board

@@ -235,13 +235,40 @@ def parse_error(text, shell):
         Path(tmp).unlink(missing_ok=True)
 
 
+# Build-time settings that must never appear in a workflow.
+#
+# OPENIPC_DEV_PASSWORD bakes a known root password into the rootfs
+# (general/scripts/rootfs_script.sh). It exists for bench images. A released
+# image carrying one is the worst outcome this repository can produce, so
+# rootfs_script.sh already refuses outright when GITHUB_ACTIONS or CI is set.
+# This is the earlier half of that pair: it fails the lint rather than the
+# build, so the mistake is visible in review instead of in a runner log.
+FORBIDDEN_IN_WORKFLOWS = {
+    "OPENIPC_DEV_PASSWORD": "bakes a known root password into the image",
+}
+
+
+def forbidden_settings(path, text):
+    """Names no workflow may mention, wherever they appear -- env:, run:, with:."""
+    hits = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for name, why in FORBIDDEN_IN_WORKFLOWS.items():
+            if name in line:
+                hits.append(f"{path}:{lineno}: {name} -- {why}")
+    return hits
+
+
 def check(paths, enforce_floor):
     blocks = 0
     failures = 0
+    forbidden = 0
     skipped = []
 
     for path in paths:
         text = Path(path).read_text()
+        for hit in forbidden_settings(path, text):
+            print(f"FAIL {hit}")
+            forbidden += 1
         try:
             root = yaml.compose(text)
         except yaml.YAMLError as e:
@@ -289,6 +316,12 @@ def check(paths, enforce_floor):
 
     if failures:
         print(f"{failures} block(s) failed to parse")
+        return 1
+
+    # Counted apart from parse failures: nothing is wrong with the shell, the
+    # workflow is asking for something it may not have.
+    if forbidden:
+        print(f"{forbidden} forbidden setting(s) in workflows")
         return 1
 
     print("all run blocks parse clean")
@@ -367,6 +400,18 @@ def self_test():
         "          run: also not shell 'at all\n"
     )
     found = []
+    # The forbidden-settings scan, both ways round.
+    if forbidden_settings("w.yml", "env:\n  OPENIPC_DEV_PASSWORD: hunter2\n"):
+        print("ok   self-test: a workflow setting OPENIPC_DEV_PASSWORD is rejected")
+    else:
+        print("FAIL self-test: OPENIPC_DEV_PASSWORD in a workflow was not caught")
+        ok = False
+    if forbidden_settings("w.yml", "env:\n  BUILD_ID: x\n"):
+        print("FAIL self-test: an innocent workflow was rejected")
+        ok = False
+    else:
+        print("ok   self-test: an ordinary workflow is accepted")
+
     walk(doc, DEFAULT_SHELL, found)
     names = sorted(b["name"] for b in found)
     if names != ["real"]:
