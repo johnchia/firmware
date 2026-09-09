@@ -236,9 +236,14 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 # because yaml-cli selects it, json-c because jsonfilter uses it, and
 # mbedtls because libcurl is built against it.
 #
-# No wireless stack: the openipc/linux hi3516cv6xx kernel has CONFIG_WIRELESS
-# off, so cfg80211/mac80211 USB drivers and wpa_supplicant have nothing to bind
-# to. Adding a driver symbol here builds a module against nothing.
+# Wireless, for an RTL8733BU (0bda:b733) on the USB port. The stock cv6xx
+# kernel has CONFIG_WIRELESS off, which is why this was impossible before; the
+# forked kernel config turns it on with cfg80211 as a MODULE, because the FIT
+# has one 64K block of slack and anything built in overruns the kernel slot.
+# The driver's id table matches 0xB733 (multi-function) and 0xF72B (WiFi only)
+# under CONFIG_RTL8733B, which its Makefile sets from CONFIG_RTL8733BU.
+#
+# No AP support in wpa_supplicant: this board associates, it does not serve.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
 BR2_PACKAGE_HISILICON_OPENSDK=y
 BR2_PACKAGE_HISILICON_OSDRV_HI3516CV6XX=y
@@ -261,5 +266,10 @@ BR2_PACKAGE_OPUS_FIXED_POINT=y
 # compy, faac, helix-aac, libschrift, majestic-fonts and opus arrive through
 # this symbol's selects.
 BR2_PACKAGE_RAPTOR_STREAMING=y
+BR2_PACKAGE_RTL8733BU_OPENIPC=y
 BR2_PACKAGE_VTUND_OPENIPC=y
+BR2_PACKAGE_WIRELESS_TOOLS=y
+BR2_PACKAGE_WPA_SUPPLICANT=y
+BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
+BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
 BR2_PACKAGE_YAML_CLI=y
