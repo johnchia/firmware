@@ -112,10 +112,23 @@ HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = os04d10
 endif
 
 # IQ tuning, which is a different thing from the mode INI above: not how to
-# start the part, but how the ISP should render what it sees. Generated from
-# the OEM's own scene_param_0.bin (an ot_scene_pipe_param dump off an xrscam
-# CV608) against the Hi3516CV610 SDK V1.0.2.0 key set, so it is the vendor's
-# tuning for this sensor rather than a guess.
+# start the part, but how the ISP should render what it sees. The base is the
+# OEM's own scene_param_0.bin (an ot_scene_pipe_param dump off an xrscam
+# CV608) decoded against the Hi3516CV610 SDK V1.0.2.0 key set, so it starts
+# from the vendor's tuning rather than a guess; what ships is that base after
+# a bench pass on a cv608.
+#
+# Four departures from the dump are deliberate and should not be "restored".
+# Metering is weighted to the lower half of the frame rather than flat across
+# the grid, so a bright sky cannot drive the whole scene dark. The CCM
+# interpolates over ISO and colour temperature (auto_iso_act_en,
+# auto_temp_act_en) instead of sitting on a single matrix, and the red and
+# blue cast gains go back to a neutral 256 now that it does. Saturation falls
+# away as gain rises instead of peaking mid-ISO, so high-ISO noise does not
+# arrive in colour. And the low-light ladder holds 20 fps with exposure
+# capped at 50 ms rather than sinking to 5 fps at 200 ms -- a camera that
+# trades framerate away to keep a still image bright stops being much use as
+# a camera.
 #
 # 171 KB raw and 13 KB in the squashfs -- it is repetitive numeric text.
 # Additive: hal_isp reads /etc/sensors/iq/<sensor>.ini and, finding none,
