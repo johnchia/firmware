@@ -16,8 +16,8 @@
 #
 # Both verbs decide for themselves whether there is anything to do, so all
 # three callers can be unconditional. `start` is a no-op on a camera that has
-# a network or has no radio; `stop` is a no-op on one that is not in setup
-# mode or still has nothing to leave it for. That matters most on the revert
+# a network, has no radio, or has a cable in it; `stop` is a no-op on one that
+# is not in setup mode or still has nothing to leave it for. That matters most on the revert
 # path, where rcd calls stop and then start a few hundred milliseconds apart
 # and only one of them may act.
 #
@@ -206,6 +206,15 @@ start() {
 	radio_present || return 0
 	if provisioned; then
 		say "already has a network to join"
+		return 0
+	fi
+	# A camera on a wire is not unreachable, and taking the radio into AP
+	# mode would spend the one interface it could still be provisioned over
+	# -- the setup page is served on the wired address just the same. Asked
+	# once and not waited on: S41setup runs after S40network, which has
+	# already brought the links up and paid for autonegotiation.
+	if /etc/network/wired-carrier; then
+		say "a wire is connected; leaving the radio alone"
 		return 0
 	fi
 	[ -f "$FLAG" ] && return 0

@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# wired-carrier -- is a cable plugged into any Ethernet interface?
+#
+# Two scripts have to get the same answer to this. S40network asks it to decide
+# whether eth0 takes a DHCP lease or the static fallback address, and setup-mode
+# asks it to decide whether a camera with no wireless credentials is actually
+# unreachable. Answering it in two places is how they would come to disagree.
+#
+# carrier is only readable while the link is up -- the kernel returns EINVAL on
+# a down interface -- so the interfaces are brought up before being asked. What
+# follows is autonegotiation, which takes a second or two on a 100M link, and
+# reading immediately after `ip link set up` reports 0 on a cable that is
+# plugged in. Hence the wait, which ends the moment any interface answers: a
+# camera with a cable pays almost none of it, and one without pays it once at
+# boot, which is the honest cost of not needing a config key to say which kind
+# of camera this is.
+#
+# $1: tenths of a second to wait before giving up (default 0, ask once)
+
+wait=${1:-0}
+
+for d in /sys/class/net/eth*; do
+	[ -e "$d" ] || continue
+	ip link set dev "${d##*/}" up 2>/dev/null
+done
+
+i=0
+while :; do
+	for c in /sys/class/net/eth*/carrier; do
+		[ -e "$c" ] || continue
+		[ "$(cat "$c" 2>/dev/null)" = "1" ] && exit 0
+	done
+	[ "$i" -ge "$wait" ] && exit 1
+	usleep 100000
+	i=$((i + 1))
+done

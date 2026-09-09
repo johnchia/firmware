@@ -1,2 +1,8 @@
+# metric: a camera may have both a wire and a radio, and both take a DHCP
+# lease. Without a metric each one installs a default route at 0 and the
+# kernel picks between them by insertion order -- observed on a cv608, where
+# the wire was up first and the radio still ended up carrying the default.
+# Lower wins, so the wire does. udhcpc/default.script reads this as IF_METRIC.
 iface eth0 inet dhcp
     hwaddress ether $(fw_printenv -n ethaddr || echo 00:00:23:34:45:66)
+    metric 10

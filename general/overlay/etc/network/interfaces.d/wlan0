@@ -1,7 +1,11 @@
 # The supplicant configuration is generated rather than written inline, so that
 # a pre-derived 64-hex PSK is accepted alongside a passphrase and wpa_cli has a
 # control socket to talk to. See /etc/wireless/wpa-conf.
+#
+# metric 20 against eth0's 10: on a camera with both, the wire carries the
+# default route and the radio is the fallback. See interfaces.d/eth0.
 iface wlan0 inet dhcp
     pre-up /etc/wireless/wpa-conf > /tmp/wpa_supplicant.conf
     pre-up wpa_supplicant -B -i wlan0 -D nl80211,wext -c /tmp/wpa_supplicant.conf
     post-down killall -q wpa_supplicant
+    metric 20

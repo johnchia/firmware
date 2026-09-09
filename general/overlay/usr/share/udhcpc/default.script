@@ -19,6 +19,24 @@ RESOLV_CONF="/tmp/resolv.conf"
 
 [ -z "${IF_WAIT_DELAY}" ] && IF_WAIT_DELAY=10
 
+# Is some other wire or radio already carrying an address? Only eth* and wlan*
+# are asked: wg0 is a tunnel that stands on top of one of them, and usb0 is the
+# modem path, so neither answers the question "can this camera be reached
+# without me".
+other_addressed() {
+	OTHER_IFACE=
+	for d in /sys/class/net/eth* /sys/class/net/wlan*; do
+		[ -e "$d" ] || continue
+		n=${d##*/}
+		[ "$n" = "$1" ] && continue
+		if ip -4 addr show dev "$n" 2>/dev/null | grep -q "inet "; then
+			OTHER_IFACE=$n
+			return 0
+		fi
+	done
+	return 1
+}
+
 wait_for_ipv6_default_route() {
 	printf "Waiting for IPv6 default route to appear"
 	while [ $IF_WAIT_DELAY -gt 0 ]; do
@@ -54,7 +72,19 @@ case "$1" in
 		if [ -x /usr/sbin/avahi-autoipd ]; then
 			/usr/sbin/avahi-autoipd -c $interface || /usr/sbin/avahi-autoipd -wD $interface --no-chroot
 		fi
-		/sbin/ifconfig $interface $(fw_printenv -n ipaddr || echo -n 192.168.1.10) netmask $(fw_printenv -n netmask || echo -n 255.255.255.0) up
+		# The ipaddr fallback is for a camera that has no network at all,
+		# and applying it per interface is how a camera with two ends up
+		# with the same address on both. Seen on a cv608: the radio took
+		# longer to associate than udhcpc's five retries, fell back to
+		# 192.168.1.10 on the same /24 the wire already had a lease on,
+		# and the camera was left with two connected routes and no
+		# default. If another wire or radio is already addressed, this
+		# interface has nothing to rescue and is left alone.
+		if other_addressed "$interface"; then
+			echo "$interface: no lease, but $OTHER_IFACE is up -- not taking the fallback address"
+		else
+			/sbin/ifconfig $interface $(fw_printenv -n ipaddr || echo -n 192.168.1.10) netmask $(fw_printenv -n netmask || echo -n 255.255.255.0) up
+		fi
 		;;
 
 	renew|bound)
@@ -72,8 +102,16 @@ case "$1" in
 				:
 			done
 
+			# ifupdown exports every option in an interfaces.d stanza
+			# as IF_<NAME>, which is how `metric` gets here. A camera
+			# with both a wire and a radio would otherwise install two
+			# default routes at metric 0 and choose between them by
+			# insertion order. Unset is 0, which is what a single-homed
+			# board has always had. busybox route adds one to the value
+			# and the kernel takes it back off, so N here is N in the
+			# routing table.
 			for i in $router ; do
-				route add default gw $i dev $interface
+				route add default gw $i metric ${IF_METRIC:-0} dev $interface
 			done
 		fi
 
