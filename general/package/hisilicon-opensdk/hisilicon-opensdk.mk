@@ -296,18 +296,31 @@ HISILICON_OPENSDK_SENSORS = \
 # the majestic-only list, and open_svac3e is modprobed only for socmodel
 # 20g/00s/00g, which this board is not.
 #
-# Three more, for the wifi stack's sake, each with a reason of its own:
+# Two more, for the wifi stack's sake, each with a reason of its own:
 #
 #   open_uvc    load_hisilicon's modprobe for it is commented out, and it could
 #               not load anyway -- modpost reports it needs an undefined
 #               uvc_recv_pack. It has never run on this board.
 #   open_aiisp  the AI ISP, which the 608 does not have. Already modprobed only
 #               for socmodel 20s/20g/00s/00g.
-#   open_vca    video content analysis. This is the one real loss: it is
-#               modprobed unconditionally upstream and raptor has no caller for
-#               it, but "no caller" is read from the source rather than proven
-#               on hardware. If something in the pipeline turns out to want it,
-#               take it back first.
+#
+# open_vca was a third and is not, which is worth recording rather than just
+# deleting. It was cut on the reasoning that raptor has no caller for it, and
+# that reasoning was wrong in a way reading the source could not show:
+# open_vpp's init fails without it -- `load vpp.ko ...FAILURE!` -- and vgs,
+# vpss and vi fall over behind it, so the ISP never registers and the camera
+# boots to a shell with no pipeline at all. Proven on the board with insmod,
+# vca then vpp.
+#
+# The mechanism is in the blobs, not in anything a script can be read for: vca
+# registers an export table under OT_ID_VCA, and vi_init walks thirteen of its
+# entries and refuses to init if any is NULL. hi_vi.o fetches that table in 73
+# places, hi_vpss.o in 13, hi_sys.o in 12, and hi_vgs.o, hi_venc.o and hi_vpp.o
+# in a handful each; the entries resolve to the VI/VGS tiling split, the 3DNR
+# raw-frame compression config and the VNR parameter map. A stub .ko that
+# satisfies the presence check is therefore not a way to spend the 118 KB
+# elsewhere -- there is real work behind the table. "No caller in userspace" is
+# not the same question as "nothing in the kernel needs it".
 #
 # And five that no load_hisilicon in the tree modprobes at all: the only
 # mention any of them gets is a commented-out `modprobe open_user`, repeated
@@ -316,9 +329,9 @@ HISILICON_OPENSDK_SENSORS = \
 # post-build scripts loads them, and none was resident on a board that had been
 # streaming. 43 KB.
 #
-# 901 KB of modules between the eleven.
+# 783 KB of modules between the ten.
 HISILICON_OPENSDK_KMOD_SKIP = open_ive.ko open_svac3e.ko open_svp_npu.ko \
-	open_uvc.ko open_aiisp.ko open_vca.ko \
+	open_uvc.ko open_aiisp.ko \
 	open_adc.ko open_devstat.ko open_spi_dma_transfer.ko \
 	open_user.ko open_user_proc.ko
 endif

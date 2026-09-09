@@ -142,7 +142,7 @@ insert_ko() {
 	insert_osal
 	modprobe open_base logmpp_show=${DEBUG}
 	modprobe open_vb
-	[ -e open_vca.ko ] && modprobe open_vca
+	modprobe open_vca
 	modprobe open_sys profile=$SYS_PROFILE
 	modprobe open_rgn
 	modprobe open_vpp
@@ -210,7 +210,7 @@ remove_ko() {
 	rmmod open_vpp
 	rmmod open_rgn
 	rmmod open_sys
-	rmmod open_vca 2>/dev/null
+	rmmod open_vca
 	rmmod open_vb
 	rmmod open_base
 	rmmod open_mmz

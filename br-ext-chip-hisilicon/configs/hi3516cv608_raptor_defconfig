@@ -169,10 +169,10 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # kernel/rootfs pair, plus the overlay this tree needs, leaving devinfo (which
 # holds the device identity) alone:
 #
-#   sfc:192K(uboot),64K(env),2752K(kernel),4352K(rootfs),768K(rootfs_data),64K(devinfo)
+#   sfc:192K(uboot),64K(env),2048K(kernel),5184K(rootfs),640K(rootfs_data),64K(devinfo)
 #   root=/dev/mtdblock3
 #
-# 0x40000 + 2752K = 0x2F0000, + 4352K = 0x730000, + 768K = 0x7F0000, which is
+# 0x40000 + 2048K = 0x240000, + 5184K = 0x750000, + 640K = 0x7F0000, which is
 # where devinfo begins. The OEM's 512K data partition is absorbed: it is a
 # JFFS2 volume for OEM software that is not in this image.
 #
@@ -192,13 +192,17 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # build-time complaint at all -- check the FIT by hand after any kernel bump, or
 # widen this slot and take the 64k back off the rootfs.
 #
-# 5056 leaves 1664k over the current squashfs, and that headroom is the point
-# of the kernel-config fork rather than a leftover. It is still not enough for
-# the vendor modules wholesale: hisilicon-osdrv-hi3516cv6xx carries 4.0 MB of
-# ot_*.ko in files/kmod and no split of an 8 MB part holds all of those. A
-# subset still has to be chosen -- but 1664k is the difference between choosing
-# one and not having the room to load any.
-BR2_OPENIPC_ROOTFS_PART_KB="5120"
+# 5184 IS THE ROOTFS SPENDING EVERY BLOCK IT CAN REACH. The squashfs is 5144k
+# with the wifi stack and the vendor modules in it, so this leaves one 64K
+# erase block spare and rootfs_data keeps ten. Everything above the OEM's own
+# split has already been taken: the kernel slot is cut to one spare block, the
+# OEM's 512K data partition is absorbed, and hisilicon-osdrv-hi3516cv6xx's
+# 4.0 MB of ot_*.ko in files/kmod was never going to fit an 8 MB part whole, so
+# a subset is chosen in hisilicon-opensdk.mk and the sensor blobs are cut to
+# the one this board has. What is left cannot be found by moving the boundary
+# again -- rootfs_data below 640k stops being an overlay worth having -- so the
+# next package that does not fit has to displace one that is already here.
+BR2_OPENIPC_ROOTFS_PART_KB="5184"
 
 # The environment is data in mtd1, not compiled into the OEM bootloader, so the
 # layout and the boot verbs live in a text file that is readable back off the
@@ -275,7 +279,7 @@ BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
 # so -- and writes psk="..." for the supplicant to derive, or passes a 64-hex
 # wlanpass through as a pre-derived key, which wpa_passphrase cannot even
 # accept. Nothing in the overlay, the packages or raptor execs the binary, so
-# on this board it is 30 KB of a 5120 KB slot doing nothing.
+# on this board it is 30 KB of a 5184 KB slot doing nothing.
 # Setup mode raises an access point of its own, and this is what lets the
 # supplicant be one: `mode=2` in a network block is rejected without it. No
 # hostapd, on the same reasoning as the ssc333 and t31 targets -- one binary
