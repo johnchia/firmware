@@ -45,7 +45,7 @@ HISILICON_OSDRV_HI3516CV6XX_MPP_LIBS = \
 	libss_mpi_sysbind.so libss_mpi_sysmem.so \
 	libupvqe.so libvoice_engine.so \
 	libvqe_aec.so libvqe_agc.so libvqe_anr.so libvqe_eq.so \
-	libvqe_hpf.so libvqe_hs.so libvqe_record.so libvqe_res.so libvqe_talkv2.so
+	libvqe_hpf.so libvqe_hs.so
 
 # The rest of majestic's NEEDED closure, which nothing else on this family
 # reaches. 1681 KB, and on a 5056 KB rootfs that is the difference between
@@ -58,17 +58,22 @@ HISILICON_OSDRV_HI3516CV6XX_MPP_LIBS = \
 # userspace, so the vendor codec chain is majestic's alone; the NPU, the AI
 # ISP and IVE have no raptor caller at all.
 #
-# The VQE libraries above stay in the core set on purpose. libupvqe and
-# libvoice_engine ARE in raptor's closure, and the individual vqe_* stages
-# they pull in at runtime do not show up as NEEDED, so pruning them would be
-# guessing at a dlopen that only fires when AEC or ANR is switched on.
+# The VQE split is the one judgement call here. libupvqe and libvoice_engine ARE
+# in raptor's closure and stay, with the six small per-stage libraries behind
+# them -- aec, agc, anr, eq, hpf, hs -- because those are what an AEC or ANR
+# dlopen would reach and they are 247 KB between them. The three big ones,
+# talkv2, record and res at 624 KB, are the full-duplex talk and record
+# pipelines, which raptor has no path to; they move with majestic. If a raptor
+# board ever loses audio processing at runtime rather than at link time, this is
+# the first place to look.
 ifeq ($(BR2_PACKAGE_MAJESTIC),y)
 HISILICON_OSDRV_HI3516CV6XX_MPP_LIBS += \
 	libaac_comm.so libaac_dec.so libaac_enc.so \
 	libaac_sbr_dec.so libaac_sbr_enc.so \
 	libaiisp.so \
 	libmp3_dec.so libmp3_enc.so libmp3_lame.so \
-	libss_ivs_md.so libss_mpi_ive.so libsvp_acl.so
+	libss_ivs_md.so libss_mpi_ive.so libsvp_acl.so \
+	libvqe_record.so libvqe_res.so libvqe_talkv2.so
 endif
 
 # Sensor .so blobs shipped from vendor flash where the openhisilicon
