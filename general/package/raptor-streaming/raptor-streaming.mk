@@ -39,7 +39,7 @@
 # change that calls it -- so bump them as a set and rebuild before trusting the
 # result. There is no test that a mixed set links.
 RAPTOR_STREAMING_VERSION = 6c494d2a277fc9685a8aefcc4325b32b8a42cb49
-RAPTOR_STREAMING_HAL_VERSION = cbab2b30bd225f31641e7de43de89361ee03e1d6
+RAPTOR_STREAMING_HAL_VERSION = 1b3e0adeb1568295c0a383bfc1a15c65172060a4
 RAPTOR_STREAMING_COMMON_VERSION = d6607a4417313fe9b309bb3992478d6529e300c1
 RAPTOR_STREAMING_IPC_VERSION = 706fc805ec59bccfd86f007f3af4fcdbb93c4c68
 
