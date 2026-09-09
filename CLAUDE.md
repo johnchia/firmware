@@ -81,6 +81,12 @@ Most images ship no driver for your dongle because a driver is often 1.5 MB and 
    `br-ext-chip-<vendor>/configs/<model>_<variant>_defconfig`.
 3. Rebuild and read the size line the build prints. If it overflows, see *Make an image fit flash*.
 
+Which driver a camera loads at boot is `wlandev` in the U-Boot environment, naming an arm in
+`general/overlay/etc/wireless/usb` or `.../sdio`. When it is unset, `/etc/wireless/detect`
+probes the generic arms. Read `docs/wireless-detect.md` before changing any of those four
+files — it covers what detection deliberately will not do, and the two contracts in it that
+are easy to break.
+
 Wiki: [adding-wifi-driver](https://github.com/OpenIPC/wiki/blob/master/en/adding-wifi-driver.md).
 If this is for one retail camera rather than a whole SoC or variant, it belongs in OpenIPC/builder.
 
