@@ -1,58 +1,68 @@
 #!/bin/sh
 #
-# Print the /etc/wireless/usb arm for the radio that is actually fitted, or
-# nothing at all.
+# Print the /etc/wireless arm for the radio that is actually fitted, or nothing
+# at all.
 #
 # S40network calls this only when wlandev is unset, so a board that names its
 # radio is never second-guessed. What this covers is the other case: a generic
-# dongle needs no board wiring, so there is nothing for anyone to configure,
-# and until now the only way to use one was to know which of the arms in
-# /etc/wireless/usb to write into the environment by hand.
+# part needs no board wiring, so there is nothing for anyone to configure, and
+# until now the only way to use one was to know which of the arms in
+# /etc/wireless/usb or /etc/wireless/sdio to write into the environment by hand.
 #
-# There is deliberately no USB id table here. Every driver already carries
-# one, and a copy in the overlay would be wrong the first time a driver gained
-# a device. The test used instead cannot go stale: load what this image
+# There is deliberately no USB or SDIO id table here. Every driver already
+# carries one, and a copy in the overlay would be wrong the first time a driver
+# gained a device. The test used instead cannot go stale: load what this image
 # actually carries, and see whether an interface appears.
 #
-# The limit is that a dongle has to have enumerated before anything can find
-# it, which is why only the generic arms are probed. Most of the board-
-# specific arms release VBUS with a GPIO or a register write first, so on
-# those boards there is no device on the bus to detect until board knowledge
-# has already been applied. That stays configured; it cannot be discovered.
+# The limit is that the part has to be findable before anything can find it,
+# which is why only the generic arms are probed. Most of the board-specific
+# arms release power with a GPIO or a register write first, so on those boards
+# there is nothing on the bus to detect until board knowledge has already been
+# applied. That stays configured; it cannot be discovered.
+#
+# USB is walked before SDIO because probing it costs nothing. An SDIO arm has
+# to tell the MMC controller to look again, and the ATBM ones stage calibration
+# files, so they touch the machine whether or not a card is there.
 
-usb=/etc/wireless/usb
+for helper in /etc/wireless/usb /etc/wireless/sdio; do
+	for arm in $($helper --list-generic); do
+		mod=$($helper --module "$arm")
 
-for arm in $($usb --list-generic); do
-	mod=$($usb --module "$arm")
+		# The cheap half of the probe. modprobe -l prints the path if this
+		# image carries the module and nothing if it does not -- its exit
+		# status is 0 either way -- so an image with no wifi driver in it,
+		# which is nearly all of them, walks both tables without loading
+		# a thing.
+		[ -n "$(modprobe -l "$mod")" ] || continue
 
-	# The cheap half of the probe. modprobe -l prints the path if this image
-	# carries the module and nothing if it does not -- its exit status is 0
-	# either way -- so an image with no wifi driver in it, which is nearly
-	# all of them, walks the whole table without loading a thing.
-	[ -n "$(modprobe -l "$mod")" ] || continue
+		# Silenced, not ignored: this script's stdout IS the answer --
+		# S40network reads it as the arm name -- and an arm is free to
+		# print. The ATBM ones cp two calibration files into place, and a
+		# cp that complains would end up spliced into the name.
+		$helper "$arm" >/dev/null 2>&1 || continue
 
-	$usb "$arm" || continue
-
-	# The interface appears when the driver binds a device, not when the
-	# module loads, and USB enumeration takes its own time after that. Three
-	# seconds is long enough to cover it and short enough to be worth
-	# spending on a camera that turns out to have no dongle in it.
-	i=0
-	while [ $i -lt 30 ]; do
-		for iface in /sys/class/net/wlan*; do
-			if [ -e "$iface" ]; then
-				echo "$arm"
-				exit 0
-			fi
+		# The interface appears when the driver binds a device, not when the
+		# module loads, and enumeration takes its own time after that. Three
+		# seconds is long enough to cover it and short enough to be worth
+		# spending on a camera that turns out to have no radio in it.
+		i=0
+		while [ $i -lt 30 ]; do
+			for iface in /sys/class/net/wlan*; do
+				if [ -e "$iface" ]; then
+					echo "$arm"
+					exit 0
+				fi
+			done
+			usleep 100000
+			i=$((i + 1))
 		done
-		usleep 100000
-		i=$((i + 1))
-	done
 
-	# Nothing bound, so nothing this driver knows about is fitted. Give the
-	# memory back before trying the next one -- 8733bu alone is 1276KB
-	# resident. cfg80211 stays, which is 208KB the next arm would want anyway.
-	rmmod "$mod" 2>/dev/null
+		# Nothing bound, so nothing this driver knows about is fitted. Give
+		# the memory back before trying the next one -- 8733bu alone is
+		# 1276KB resident, atbm603x_wifi_sdio 811KB. cfg80211 stays, which
+		# is memory the next arm would want anyway.
+		rmmod "$mod" 2>/dev/null
+	done
 done
 
 exit 1

@@ -250,11 +250,18 @@ BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6B0=y
 # Wireless. The RTL8188FU over USB is the interface this camera is actually used
 # on -- the SoC has an EMAC and the board exposes no socket for it.
 #
-# `wlandev=rtl8188fu-generic` in the U-Boot environment is what selects the
-# bring-up in /etc/wireless/usb, and wlanssid/wlanpass are the credentials.
-# S40network takes an unset wlandev as "this board has no radio" and falls
-# through to eth0, so a unit flashed with an empty environment comes up with no
-# network at all. Setting it is part of provisioning a board, not of this build.
+# Nothing has to set wlandev. rtl8188fu-generic is a generic arm -- no VBUS to
+# release, no board wiring of any kind -- and 8188fu is the only wifi driver in
+# this image, so /etc/wireless/detect loads it at boot and keeps it once the
+# dongle binds. Setting `wlandev=rtl8188fu-generic` still works and still wins:
+# it is now a way to skip the probe, not the only way to have a radio.
+#
+# That matters here more than on most boards. S40network used to read an unset
+# wlandev as "this board has no radio" and fall through to eth0 -- which on this
+# board is an EMAC with no socket behind it -- so a unit flashed with an empty
+# environment came up with no network at all and nothing to recover it over.
+#
+# wlanssid/wlanpass are still the credentials, and still have to be set.
 BR2_PACKAGE_RTL8188FU_OPENIPC=y
 BR2_PACKAGE_WIRELESS_TOOLS=y
 BR2_PACKAGE_WPA_SUPPLICANT=y

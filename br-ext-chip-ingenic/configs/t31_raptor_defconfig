@@ -149,6 +149,14 @@ BR2_PACKAGE_YAML_CLI=y
 # board has: the Wyze v3 has no Ethernet PHY. `wlandev=atbm603x-t31-wyze-v3`
 # in the U-Boot environment is what selects the bring-up sequence in
 # /etc/wireless/sdio, and wlanssid/wlanpass are the credentials.
+#
+# /etc/wireless/detect does not come into it, and should not be reached for
+# here. It runs only when wlandev is unset, and wyze-v3.env.txt bakes wlandev
+# in (see ENVIMAGE_SOURCE below), so on this board it never runs. Nor could it
+# stand in for the arm if it did: that sequence opens by power-cycling the
+# radio on GPIO 57, and a part with no power is not on the bus to be found.
+# Detection is for generic parts on boards that bake no environment, which is
+# every board in the tree but this one and the two cv608s.
 BR2_PACKAGE_ATBM60XX=y
 BR2_PACKAGE_ATBM60XX_MODEL_603X=y
 BR2_PACKAGE_ATBM60XX_INTERFACE_SDIO=y

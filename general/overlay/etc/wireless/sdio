@@ -10,6 +10,43 @@ set_mmc() {
 	[ "$(cat $mmc)" = "N" ] && echo "INSERT" > $mmc
 }
 
+# The generic arms and the module each one loads.
+#
+# Unlike the table in /etc/wireless/usb this is a manifest rather than the
+# implementation: an SDIO arm is not just a modprobe. The card is on a bus that
+# does not hotplug, so the controller has to be told to look again, and the
+# ATBM parts stage two calibration files before the driver loads. The branches
+# below therefore stay as they are, and this only names them for
+# /etc/wireless/detect. test_wireless_detect.sh runs each arm named here and
+# checks it loads the module claimed for it, so the two cannot drift apart.
+GENERIC_ARMS="atbm603x-generic atbm603x_wifi_sdio
+rtl8189fs-generic 8189fs
+xr829-generic xradio_wlan"
+
+generic_args() {
+	echo "$GENERIC_ARMS" | while read -r name args; do
+		if [ "$name" = "$1" ]; then
+			echo "$args"
+			break
+		fi
+	done
+}
+
+# Both of these exist for /etc/wireless/detect, which has to know what this
+# image could load before it tries, and what to unload when nothing binds.
+case "$1" in
+	--list-generic)
+		echo "$GENERIC_ARMS" | cut -d' ' -f1
+		exit 0
+		;;
+	--module)
+		args=$(generic_args "$2")
+		[ -n "$args" ] || exit 1
+		echo "$args" | cut -d' ' -f1
+		exit 0
+		;;
+esac
+
 # Generic ATBM603X
 if [ "$1" = "atbm603x-generic" ]; then
 	set_mmc 1
