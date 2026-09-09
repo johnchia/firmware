@@ -309,9 +309,18 @@ HISILICON_OPENSDK_SENSORS = \
 #               on hardware. If something in the pipeline turns out to want it,
 #               take it back first.
 #
-# 858 KB of modules between the six.
+# And five that no load_hisilicon in the tree modprobes at all: the only
+# mention any of them gets is a commented-out `modprobe open_user`, repeated
+# in the cv500, cv6xx and dv500 copies. Checked three ways before cutting --
+# nothing in modules.dep depends on them, nothing in the overlay or the
+# post-build scripts loads them, and none was resident on a board that had been
+# streaming. 43 KB.
+#
+# 901 KB of modules between the eleven.
 HISILICON_OPENSDK_KMOD_SKIP = open_ive.ko open_svac3e.ko open_svp_npu.ko \
-	open_uvc.ko open_aiisp.ko open_vca.ko
+	open_uvc.ko open_aiisp.ko open_vca.ko \
+	open_adc.ko open_devstat.ko open_spi_dma_transfer.ko \
+	open_user.ko open_user_proc.ko
 endif
 endif
 

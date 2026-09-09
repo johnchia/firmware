@@ -198,7 +198,7 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # ot_*.ko in files/kmod and no split of an 8 MB part holds all of those. A
 # subset still has to be chosen -- but 1664k is the difference between choosing
 # one and not having the room to load any.
-BR2_OPENIPC_ROOTFS_PART_KB="5056"
+BR2_OPENIPC_ROOTFS_PART_KB="5120"
 
 # The environment is data in mtd1, not compiled into the OEM bootloader, so the
 # layout and the boot verbs live in a text file that is readable back off the
@@ -271,5 +271,17 @@ BR2_PACKAGE_VTUND_OPENIPC=y
 BR2_PACKAGE_WIRELESS_TOOLS=y
 BR2_PACKAGE_WPA_SUPPLICANT=y
 BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
-BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
+# No wpa_passphrase. /etc/wireless/wpa-conf replaced it -- its own comment says
+# so -- and writes psk="..." for the supplicant to derive, or passes a 64-hex
+# wlanpass through as a pre-derived key, which wpa_passphrase cannot even
+# accept. Nothing in the overlay, the packages or raptor execs the binary, so
+# on this board it is 30 KB of a 5120 KB slot doing nothing.
+# Setup mode raises an access point of its own, and this is what lets the
+# supplicant be one: `mode=2` in a network block is rejected without it. No
+# hostapd, on the same reasoning as the ssc333 and t31 targets -- one binary
+# serves both modes.
+#
+# 8733bu registers rtw_cfg80211_ops the way 8188fu does, so -D nl80211 is the
+# right driver for it; that it beacons has not been shown on this board.
+BR2_PACKAGE_WPA_SUPPLICANT_AP_SUPPORT=y
 BR2_PACKAGE_YAML_CLI=y
