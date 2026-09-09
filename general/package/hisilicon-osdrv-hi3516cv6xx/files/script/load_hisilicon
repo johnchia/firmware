@@ -156,11 +156,15 @@ insert_ko() {
 	modprobe open_h264e
 	modprobe open_h265e
 
-	case ${socmodel} in 20g|00s|00g) modprobe open_svac3e ;; esac
+	case ${socmodel} in 20g|00s|00g) [ -e open_svac3e.ko ] && modprobe open_svac3e ;; esac
 	# modprobe open_svac3e
 	modprobe open_jpege
-	modprobe open_svp_npu
-	modprobe open_ive save_power=1
+	# Present only where the image ships them. A board whose streamer reaches
+	# neither the NPU nor IVE leaves both out to save the rootfs -- see
+	# HISILICON_OPENSDK_KMOD_SKIP -- and an unconditional modprobe would then
+	# report a failure on every boot for a block that is absent on purpose.
+	[ -e open_svp_npu.ko ] && modprobe open_svp_npu
+	[ -e open_ive.ko ] && modprobe open_ive save_power=1
 	modprobe open_pwm
 	modprobe open_piris
 	modprobe open_sensor_i2c
@@ -398,29 +402,48 @@ fi
 # majestic and the IQ files follow; SNS_TYPE0 is what open_sys_config binds the
 # VI and the MIPI lanes for. The -sensor0 arm seeds SENSOR from SNS_TYPE0; this
 # is the other half, for the SENSOR that the environment or the probe supplied.
-# Without it the modules were always configured for the SNS_TYPE0 default above
-# no matter what the board reported or carried -- an os04d10 CV608 with
-# sensor=os04d10 in its environment still came up configured for an sc4336p.
+# Without it the modules were always configured for the SNS_TYPE0 default at the
+# top of this file no matter what the board reported or carried -- an os04d10
+# CV608 with sensor=os04d10 in its environment still came up as an sc4336p.
 #
 # hi3519v101 reads fw_printenv straight into SNS_TYPE0 at the top of its own
 # script, which is the same idea; this sits after the resolution above instead
 # so it also picks up the probed sensor on a board whose environment has no
 # sensor key yet, and so the -sensor0 flag keeps winning.
 #
-# Validated against the driver set's own list rather than trusted. A name
-# open_sys_config does not know is worse than the wrong default: the default
-# misconfigures one sensor, an unknown value fails the modprobe and takes the
-# whole stack with it. Falling back keeps the old behaviour for that case.
-if [ -n "$SENSOR" ] && [ "$SENSOR" != "$SNS_TYPE0" ]; then
-	case " $SNS_SUPPORTED " in
-		*" $SENSOR "*)
-			SNS_TYPE0=$SENSOR
-			logger -s -p daemon.info -t hisilicon "Configure sns0 for ${SNS_TYPE0}"
-			;;
-		*)
-			logger -s -p daemon.warn -t hisilicon "SENSOR ${SENSOR} is not in this driver set; leaving sns0=${SNS_TYPE0}"
-			;;
-	esac
+# "Usable" is two conditions, not one. open_sys_config has to know the name --
+# an unknown one fails its modprobe and takes the whole stack with it -- and,
+# unless the name is a parallel input, the matching libsns_*.so has to be on the
+# image. The second half is not academic: a target built for one board ships
+# only the sensor drivers that board can meet, so SNS_TYPE0's compiled-in
+# default can name a driver that is not there.
+sns_usable() {
+	[ -n "$1" ] || return 1
+	case " $SNS_SUPPORTED " in *" $1 "*) ;; *) return 1 ;; esac
+	case "$1" in bt*) return 0 ;; esac
+	[ -e "/usr/lib/sensors/libsns_$1.so" ]
+}
+
+# When what we were handed is not usable, ask the bus instead of falling
+# through to a literal that may be no better. This costs a probe only on the
+# path that was already broken; a board whose environment names a sensor it
+# actually carries never reaches it.
+if ! sns_usable "$SENSOR"; then
+	logger -s -p daemon.warn -t hisilicon "SENSOR '${SENSOR:-unset}' is not usable on this image, probing the bus"
+	insert_detect
+	SENSOR_PROBED=$(ipcinfo --short-sensor)
+	remove_detect
+	if sns_usable "$SENSOR_PROBED"; then
+		export SENSOR=$SENSOR_PROBED
+		logger -s -p daemon.info -t hisilicon "Probe reports ${SENSOR}, using it"
+	else
+		logger -s -p daemon.err -t hisilicon "Probe reports '${SENSOR_PROBED:-nothing}', which is no better; sns0 stays ${SNS_TYPE0}"
+	fi
+fi
+
+if sns_usable "$SENSOR" && [ "$SENSOR" != "$SNS_TYPE0" ]; then
+	SNS_TYPE0=$SENSOR
+	logger -s -p daemon.info -t hisilicon "Configure sns0 for ${SNS_TYPE0}"
 fi
 
 if [ "$SENSOR" = "unknown" ]; then

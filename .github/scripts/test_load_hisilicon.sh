@@ -160,25 +160,48 @@ T no  "$(overlaps 0x42000000 '')"       "unreadable /proc/iomem does not fabrica
 # the MIPI lanes for) name the same part. The -sensor0 arm seeds SENSOR from
 # SNS_TYPE0; the reverse direction was missing, so a board whose environment
 # said os04d10 still configured the family default sc4336p.
+#
+# "Usable" is two conditions: open_sys_config must know the name, and unless it
+# is a parallel input the libsns_*.so must be on the image. A target trimmed to
+# one board's sensor can have a compiled-in default naming a driver it no longer
+# ships, which is the case the second condition exists for.
 echo
 echo "=== Part 5: SENSOR seeds SNS_TYPE0 ==="
 
 SNS_SUPPORTED="sc4336p gc4023 sc450ai sc500ai sc431hai os04d10 imx307 os02m10 bt1120 bt656 bt601"
-seed_sns() {  # SENSOR, starting SNS_TYPE0 -> the SNS_TYPE0 handed to modprobe
-    SENSOR="$1"; SNS_TYPE0="$2"
-    if [ -n "$SENSOR" ] && [ "$SENSOR" != "$SNS_TYPE0" ]; then
-        case " $SNS_SUPPORTED " in
-            *" $SENSOR "*) SNS_TYPE0=$SENSOR ;;
-        esac
+sns_dir=$(mktemp -d)
+: > "$sns_dir/libsns_os04d10.so"
+: > "$sns_dir/libsns_imx307.so"
+
+sns_usable() {  # mirrors the script; $sns_dir stands in for /usr/lib/sensors
+    [ -n "$1" ] || return 1
+    case " $SNS_SUPPORTED " in *" $1 "*) ;; *) return 1 ;; esac
+    case "$1" in bt*) return 0 ;; esac
+    [ -e "$sns_dir/libsns_$1.so" ]
+}
+usable() { if sns_usable "$1"; then echo yes; else echo no; fi; }
+
+T yes "$(usable os04d10)" "a sensor this image ships is usable"
+T no  "$(usable sc4336p)" "open_sys_config knows sc4336p but the driver is not shipped"
+T no  "$(usable imx335)"  "a name the driver set does not carry is never usable"
+T yes "$(usable bt1120)"  "parallel inputs are usable with no libsns at all"
+T no  "$(usable '')"      "an unset SENSOR is not usable"
+
+seed_sns() {  # SENSOR, starting SNS_TYPE0, probe answer -> SNS_TYPE0 for modprobe
+    SENSOR="$1"; SNS_TYPE0="$2"; probe="$3"
+    if ! sns_usable "$SENSOR"; then
+        sns_usable "$probe" && SENSOR="$probe"
     fi
+    if sns_usable "$SENSOR" && [ "$SENSOR" != "$SNS_TYPE0" ]; then SNS_TYPE0=$SENSOR; fi
     echo "$SNS_TYPE0"
 }
-T os04d10 "$(seed_sns os04d10 sc4336p)" "the CV608 bug: sensor=os04d10 now reaches sns0"
-T sc4336p "$(seed_sns sc4336p sc4336p)" "a board that really is the default is unchanged"
-T gc4023  "$(seed_sns gc4023  sc4336p)" "any other supported sensor follows too"
-T sc4336p "$(seed_sns ''      sc4336p)" "no SENSOR at all keeps the family default"
-T sc4336p "$(seed_sns imx335  sc4336p)" "a name this driver set lacks does NOT reach modprobe"
-T os04d10 "$(seed_sns os04d10 os04d10)" "-sensor0 already agreed; nothing to do"
+T os04d10 "$(seed_sns os04d10 sc4336p '')"        "the CV608 bug: sensor=os04d10 now reaches sns0"
+T imx307  "$(seed_sns '' sc4336p imx307)"         "no SENSOR: the probe supplies one"
+T imx307  "$(seed_sns sc4336p sc4336p imx307)"    "SENSOR names a driver we dropped: the probe wins"
+T sc4336p "$(seed_sns sc4336p sc4336p '')"        "...and with no probe answer, the default is left alone"
+T sc4336p "$(seed_sns imx335 sc4336p imx999)"     "neither SENSOR nor probe usable: nothing reaches modprobe"
+T os04d10 "$(seed_sns os04d10 os04d10 '')"        "-sensor0 already agreed; nothing to do"
+rm -rf "$sns_dir"
 
 # ----- Part 6: the fix is present where it is claimed to be -----
 echo
@@ -196,6 +219,12 @@ else
     grep -q 'SNS_TYPE0=$SENSOR' "$cv6xx" \
         && ok "hi3516cv6xx: SENSOR seeds SNS_TYPE0" \
         || bad "hi3516cv6xx: SENSOR->SNS_TYPE0 seed MISSING -- every board configures the default sensor"
+    grep -q 'libsns_$1.so' "$cv6xx" \
+        && ok "hi3516cv6xx: usability checks the driver is shipped" \
+        || bad "hi3516cv6xx: sns_usable does not check libsns_*.so -- a trimmed image can select a driver it lacks"
+    grep -q 'ipcinfo --short-sensor' "$cv6xx" \
+        && ok "hi3516cv6xx: falls back to the bus probe" \
+        || bad "hi3516cv6xx: no probe fallback -- an unusable SENSOR lands on a literal default"
     # The list is validated against, and printed by usage(). Two copies drift.
     grep -q 'Available sensors:$SNS_SUPPORTED' "$cv6xx" \
         && ok "hi3516cv6xx: usage prints the list it validates against" \
