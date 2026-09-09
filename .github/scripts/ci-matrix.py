@@ -76,11 +76,15 @@ ALL_BOARDS = [
     "hi3516av300_lite", "hi3516av300_neo", "hi3516cv500_lite", "hi3516dv300_lite",
     # Hisilicon [HI3516CV6XX]
     #
-    # hi3516cv608_raptor is this fork's target on the same family, pinned to
-    # one die and to 8 MB NOR. It carries no raptor-streaming -- the HAL has no
-    # V5 backend -- so it is not in raptor-nightly.yml's matrix and a pin bump
-    # does not reach it.
-    "hi3516cv6xx_ultimate", "hi3516cv608_raptor",
+    # The two hi3516cv608 targets are this fork's on the same family, pinned to
+    # one die, one sensor and 8 MB NOR. They differ only in the radio:
+    # raptorwifi carries the RTL8733BU stack and raptor does not, which is a
+    # fifth of the rootfs, and the cv608 has no standard part to justify
+    # putting it in both. Both build raptor-streaming against the HAL's hisi_v5
+    # backend, so a pin bump does reach them; neither is in
+    # raptor-nightly.yml's matrix.
+    "hi3516cv6xx_ultimate", "hi3516cv608_os04d10_raptor",
+    "hi3516cv608_os04d10_raptorwifi",
     # Hisilicon [HI3519DV500]
     "hi3519dv500_ultimate",
     # Hisilicon [HI3516EV200]
@@ -257,7 +261,14 @@ SMOKE_BOARDS = [
     "nt98566_lite",           # Novatek
     "fh8852v200_lite",        # Fullhan
     "v851s_lite",             # Allwinner
-    "ssc377qe_raptor",        # the raptor variant, and the only Raptor image
+    "ssc377qe_raptor",        # the raptor variant, and SigmaStar's Raptor image
+    # The raptorwifi variant exists only so the two cv608 images do not
+    # land on the same openipc.<soc>-<layout>-<variant> filename, and it
+    # is here because every variant has to be provable. It is the cheaper
+    # of the pair to carry: identical to hi3516cv608_os04d10_raptor in
+    # every build-step trait, so what it proves is the wireless packages
+    # still resolve, not a new shape.
+    "hi3516cv608_os04d10_raptorwifi",
     "xm530_lite",             # Xiongmai
 ]
 
@@ -802,7 +813,7 @@ def self_test():
         (["general/package/hisilicon-osdrv-hi3516ev200/files/script/load_hisilicon"],
         10, "osdrv narrows to its family"),
         (["general/package/hisilicon-opensdk/hisilicon-opensdk.mk"],
-        46, "opensdk spans HiSilicon and Goke"),
+        47, "opensdk spans HiSilicon and Goke"),
         (["general/package/goke-osdrv-gk7205v200/Config.in"], 7, "goke osdrv"),
         (["general/package/hisilicon-osdrv-hi3520dv200/files/script/load_hisilicon"],
          1, "single-board osdrv"),

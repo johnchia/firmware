@@ -35,7 +35,7 @@ sha256  59f1397302c1b6992481bcc4f45b2cbbdaf8590c1e3fab7b541e7e76469054db  toolch
 # Downloaded 2026-09-01.
 sha256  75fa360224e3e0f7b1934d94e17dafa32c8d5a7745e8b6cf6e2e5ac1b9784641  toolchain.hisilicon-hi3516ev200.tgz
 
-# hi3516cv608_raptor, and unmirrored for the same reason as the line above --
+# hi3516cv608_os04d10_raptor, and unmirrored for the same reason as the line above --
 # the mirror carries the three SigmaStar families only, so this is upstream's
 # asset on the moving `toolchain` tag. Same bargain: the tag can be rewritten
 # under the port, and a line here is what turns that from silent into a stopped

@@ -1,0 +1,275 @@
+# Hi3516CV608 on 8 MB NOR, running Raptor on the V5 backend.
+#
+# WHY THE NAME IS NOW LITERAL. raptor-hal used to carry one HiSilicon backend,
+# src/hisi_v4, which declares the gen-4 HiMPP ABI itself in v4_*.h and dlopens
+# libmpi.so against it. The CV608 is V5: a different MPP with ot_*-prefixed
+# entry points, encode-only (no VO, no TDE, no NNIE -- see the CHIPARCH arms in
+# hisilicon-opensdk.mk), one libss_mpi.so where gen4 had libmpi, and MMZ moved
+# back out of OSAL. That is a second backend rather than #ifdefs in the first,
+# and src/hisi_v5 is it. This target is where it landed.
+#
+# Nothing here selects that backend. raptor-hal keys it off PLATFORM, and
+# raptor-streaming.mk already maps the hi3516cv6xx family to HI3516CV610 -- the
+# name the MPP gives itself on either die -- so the family picks it.
+#
+# ONE FAMILY, TWO DIES. SOC_FAMILY is hi3516cv6xx because that is what selects
+# the kernel branch, the toolchain, the board directory, the Majestic tarball
+# and the repack path; SOC_MODEL is the die, so the image is named for the part
+# it was built for and a CV608 matches it directly on upgrade. That is also why
+# BR2_OPENIPC_SOC_ALIASES is absent here and present on hi3516cv6xx_ultimate:
+# the shared image needs a route from either die's reported id, a per-die image
+# does not.
+#
+# ITS FLASH IS THE CONSTRAINT, THE SAME WAY THE EV200'S IS. 7360K holds the
+# kernel and the rootfs together on this board -- see BR2_OPENIPC_FLASH_SIZE --
+# so weigh anything added below against 7360k total, not against the 8192k
+# repack prints. It used to be tight enough to exclude hisilicon-opensdk: the
+# FIT was 2688k and the rootfs 5388k with opensdk in, which overran the region
+# however it was cut. Forking the kernel config (hi3516cv608.raptor.config)
+# took the FIT to 1984k and 620k of dead modules out of the squashfs, 1331k off
+# the pair, and the table was re-cut to bank it -- kernel slot back to 2048k,
+# every freed block to the rootfs. opensdk fits in the result at 4792k of a
+# 5056k slot. It would not fit the old 4352k one, so the two changes are what
+# bought the driver stack and neither would have done it alone.
+#
+# BOARD-VERIFIED, BUT ON THE PREVIOUS CUT. An H4-52POX-S CV608 boots this image
+# to a root shell with the OEM U-Boot left in place, from an environment saved
+# to mtd1 and with no serial console attached; rootfs_data mounts jffs2 there,
+# so a root password set through openipc-claim survives a reboot. /proc/mtd
+# reported a 00010000 erase size, which is where the 64K granularity in the
+# sizing above comes from.
+#
+# The re-cut table below -- 2048K kernel, 5056K rootfs, banking the
+# kernel-config fork -- has since been flashed to that board with opensdk in
+# the image, and it boots. Note it could not be delivered as a rootfs upgrade:
+# partition starts move, so the env and both partitions had to be written
+# together, rootfs beginning at 0x240000 rather than 0x2F0000. rootfs_data and
+# devinfo start at the same offsets under either table, which is what let the
+# overlay survive the change.
+#
+# Still unverified: nothing has streamed. Majestic is out for space and Raptor
+# has no V5 backend, so no process in this image opens a stream -- what opensdk
+# buys is the kernel side underneath one.
+#
+# Declaring env in that table is what lets fw_printenv work, and the mechanism
+# is worth knowing because it leaves a file behind that the image did not ship.
+# all-patches/uboot-tools/0011-env-partition-autosearch.patch CRC-scans the
+# partitions in /proc/mtd when /etc/fw_env.config is missing, and on a hit
+# WRITES that file with what it found -- so /etc/fw_env.config appearing on a
+# running camera is the patch's cache, not something from this tree.
+#
+# A cut-down table that omits env leaves the environment in no mtd device for
+# the scan to find, and every fw_printenv reader in the overlay -- rcS for
+# sensor and ethaddr, S40network for the wlan keys -- then falls back silently.
+# On this board that is visible from the outside: with env declared the
+# hostname suffix follows the OEM ethaddr, and without it a MAC is generated
+# and the suffix changes.
+#
+# If autosearch ever picks the wrong partition, the fix is a board overlay
+# carrying /etc/fw_env.config, the way br-ext-chip-ingenic/board/t31 does it.
+
+# Architecture
+BR2_arm=y
+BR2_cortex_a7=y
+BR2_ARM_EABI=y
+BR2_ARM_FPU_NEON_VFPV4=y
+BR2_ARM_INSTRUCTIONS_THUMB2=y
+
+# Toolchain
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/openipc/firmware/releases/download/$(OPENIPC_TOOLCHAIN).tgz"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="arm-openipc-linux-musleabi"
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_10=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_MUSL=y
+BR2_GCC_VERSION_13_X=y
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+
+# Kernel
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+# PINNED, NOT TRACKED, for the reason the other two raptor boards are: a
+# bring-up that cannot say which kernel it ran is not evidence, and a branch
+# name would mean one filename forever against a download cache that keys on
+# the filename. hi3516cv6xx_ultimate tracks the branch; this does not, so the
+# two can and will diverge.
+#
+#   git ls-remote https://github.com/openipc/linux refs/heads/hisilicon-hi3516cv6xx
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/linux/archive/533467722c14ef76507d15352ee0a9a9a331c11f.tar.gz"
+BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
+# The family config, spelled out rather than derived from SOC_MODEL: there is
+# one kernel config for both dies and no hi3516cv608.generic.config to find.
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/hi3516cv608.raptor.config"
+BR2_LINUX_KERNEL_ZIMAGE=y
+BR2_LINUX_KERNEL_XZ=y
+BR2_LINUX_KERNEL_UIMAGE_LOADADDR="0x40018000"
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+# BR2_LINUX_KERNEL_DTB_IS_SELF_BUILT is not set
+# Not the in-tree demo-board tree: that one enables eMMC on mmc0 and WiFi on
+# sdio1, and sdio1's pads are GPIO1_0..1_3 and GPIO7_6/7_7 -- the OEM's IR-cut,
+# LED, CDS and reset lines -- which the SD driver takes away from GPIO at
+# probe. The board tree includes the demo tree and flips the three SD nodes to
+# what the hardware has (microSD on sdio0, nothing else). Buildroot copies it
+# into the kernel's dts directory, so the #include resolves in-tree, and builds
+# it under its own basename; INTREE_DTS_NAME stays empty so that
+# post-image.sh's hi35*.dtb glob finds exactly one file.
+BR2_LINUX_KERNEL_INTREE_DTS_NAME=""
+BR2_LINUX_KERNEL_CUSTOM_DTS_PATH="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/hi3516cv608-raptor.dts"
+# Two scripts, size check first so it fails before the FIT is assembled.
+# post-image.sh builds the FIT (zImage + dtb) and concatenates rootfs.squashfs
+# onto it at the next 64K boundary; that firmware.bin is what repack ships.
+#
+# The combined blob is a transport, NOT the layout on the chip. sysupgrade's
+# do_update_firmware splits it back at the FIT boundary and writes each half to
+# its own partition whenever the flash has both, which this one does -- so the
+# caps that matter are the partitions', below, not the blob's.
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL)/scripts/check-rootfs-size.sh $(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/post-image.sh"
+
+# Filesystem
+BR2_PACKAGE_BUSYBOX_CONFIG="$(BR2_EXTERNAL)/package/busybox/busybox.config"
+BR2_PACKAGE_UBOOT_TOOLS=y
+# libcurl links libz and nothing else here enables it, so without this the
+# image ships a libcurl.so.4 and a curl that cannot load at all -- and the
+# first thing to notice is sysupgrade --url failing on "Error loading shared
+# library libz.so.1", by which point the camera is mid-upgrade.
+BR2_PACKAGE_ZLIB=y
+# BR2_PACKAGE_IFUPDOWN_SCRIPTS is not set
+BR2_PACKAGE_WIREGUARD_LINUX_COMPAT=y
+BR2_PACKAGE_WIREGUARD_TOOLS=y
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+
+# OpenIPC
+BR2_OPENIPC_SOC_VENDOR="hisilicon"
+BR2_OPENIPC_SOC_MODEL="hi3516cv608"
+BR2_OPENIPC_SOC_FAMILY="hi3516cv6xx"
+BR2_OPENIPC_VARIANT="raptor"
+BR2_OPENIPC_FLASH_SIZE="8"
+# 4288, and the number comes from the BOARD, not from OpenIPC/u-boot-hi3516cv6xx.
+# The H4-52POX-S ships an OEM U-Boot 2022.07 whose saved environment partitions
+# the 8 MB part as
+#
+#   sfc:192K(uboot),64K(env),7360K(rootfs),512K(data),64K(devinfo)
+#
+# with root=/dev/mtdblock2. That single 7360K "rootfs" region stacks BOTH
+# halves: squashfs at its head, where the kernel mounts it, and the kernel FIT
+# appended after it at a 4K boundary, which the OEM load_kernel command finds
+# through a trailer recording the two sizes. Verified against a dump of the
+# part -- hsqs at 0x40000, d00dfeed at 0x55B000, JFFS2 at 0x770000.
+#
+# So do NOT reach for the OpenIPC cv6xx table here. That one is
+# 2048k(kernel),5120k(rootfs) (u-boot-hi3516cv6xx, include/configs/hi-common.h)
+# and this family does not fit its kernel slot: the FIT built from
+# hi3516cv6xx.generic.config is ~2688k and OpenIPC's own published cv6xx image
+# carries a 2709k one. A board running that bootloader can take neither.
+#
+# WHAT THE NUMBER BELOW ASSUMES. The OEM stacking is not the shape
+# post-image.sh builds -- FIT first, squashfs after -- and its trailer is not
+# something this tree writes, so this target re-cuts the region into a plain
+# kernel/rootfs pair, plus the overlay this tree needs, leaving devinfo (which
+# holds the device identity) alone:
+#
+#   sfc:192K(uboot),64K(env),2048K(kernel),5184K(rootfs),640K(rootfs_data),64K(devinfo)
+#   root=/dev/mtdblock3
+#
+# 0x40000 + 2048K = 0x240000, + 5184K = 0x750000, + 640K = 0x7F0000, which is
+# where devinfo begins. The OEM's 512K data partition is absorbed: it is a
+# JFFS2 volume for OEM software that is not in this image.
+#
+# rootfs_data IS THE OVERLAY AND THE NAME IS LOAD-BEARING. general/overlay/init
+# greps /proc/mtd for exactly that string, mounts it jffs2, formats it with
+# flash_eraseall on first boot, and overlays it on /. With no such partition it
+# falls through to a tmpfs and every change to /etc is lost on reboot -- which
+# looks like a working overlay right up until the camera is power-cycled.
+#
+# THE KERNEL SLOT IS CUT TO ONE SPARE ERASE BLOCK ON PURPOSE, so that the room
+# in this region sits with the rootfs, which is the half that grows when a
+# package is added. The FIT is 1975k and takes 1984k in 64K blocks, so 2048k
+# leaves exactly one 64K block free. Nothing enforces that: check-rootfs-size.sh
+# covers the rootfs only and says so in its own header, and repack's CHECK_SIZE
+# measures the combined blob against the whole chip on this family. A kernel
+# that grows by a single erase block therefore overruns its partition with no
+# build-time complaint at all -- check the FIT by hand after any kernel bump, or
+# widen this slot and take the 64k back off the rootfs.
+#
+# 5184 IS THE ROOTFS SPENDING EVERY BLOCK IT CAN REACH. The squashfs is 5144k
+# with the wifi stack and the vendor modules in it, so this leaves one 64K
+# erase block spare and rootfs_data keeps ten. Everything above the OEM's own
+# split has already been taken: the kernel slot is cut to one spare block, the
+# OEM's 512K data partition is absorbed, and hisilicon-osdrv-hi3516cv6xx's
+# 4.0 MB of ot_*.ko in files/kmod was never going to fit an 8 MB part whole, so
+# a subset is chosen in hisilicon-opensdk.mk and the sensor blobs are cut to
+# the one this board has. What is left cannot be found by moving the boundary
+# again -- rootfs_data below 640k stops being an overlay worth having -- so the
+# next package that does not fit has to displace one that is already here.
+BR2_OPENIPC_ROOTFS_PART_KB="5184"
+
+# The environment is data in mtd1, not compiled into the OEM bootloader, so the
+# layout and the boot verbs live in a text file that is readable back off the
+# chip. Same idiom as t31_raptor. mkenvimage turns it into images/uboot-env.bin.
+# (openipc.fragment already sets BR2_PACKAGE_HOST_UBOOT_TOOLS.)
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE=y
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SOURCE="$(BR2_EXTERNAL)/../br-ext-chip-hisilicon/board/$(OPENIPC_SOC_FAMILY)/hi3516cv608.env.txt"
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
+
+# Packages
+#
+# WHAT ENCODES HERE IS RAPTOR, and only raptor. Majestic stays out: it is the
+# other streamer rather than a companion, and this partition has no room for
+# both. hisilicon-opensdk is in: it builds every open_*.ko that
+# load_hisilicon modprobes by name -- open_osal, open_mmz, open_isp,
+# open_sys_config and the rest, 42 modules -- so the load script can now get
+# past its first modprobe, which is the step this target exists to reach.
+#
+# It also brings the six source-built sensor drivers (gc4023, os04d10, sc4336p,
+# sc450ai, sc500ai, sc431hai) alongside the two blobs osdrv installs, imx307
+# and os02m10.
+#
+# This is what makes the MMZ arithmetic in hi3516cv608.env.txt live rather than
+# latent. Until now load_hisilicon died before open_mmz was ever modprobed, so
+# a wrong mmz= was harmless; from here it is handed to the driver.
+#
+# osdrv separately carries a vendor ot_*.ko set in files/kmod/ that its
+# INSTALL_TARGET_CMDS does not install. That set is not needed now that opensdk
+# builds the open_*.ko equivalents.
+#
+# Majestic's exclusive dependencies leave with it: libevent, libogg, the
+# ot_opus_* shim that exists for the V5 naming Majestic wanted, and protobuf-c,
+# which only the cv6xx Majestic build dlopens. opus itself is back, because
+# raptor's rad wants it. libyaml stays
+# because yaml-cli selects it, json-c because jsonfilter uses it, and
+# mbedtls because libcurl is built against it.
+#
+# No radio. There is no standard part on a cv608 -- whatever is on the USB
+# port is whatever someone plugged in -- and a driver that matches one dongle
+# cost 1150 KB of a 5184 KB rootfs here, a fifth of the image, to serve two USB
+# ids. hi3516cv608_os04d10_raptorwifi is that build; this one is the wired
+# camera and spends the space on the picture instead.
+#
+# The kernel config is shared with it and still has CONFIG_CFG80211=m, so this
+# image carries a 109 KB cfg80211.ko it cannot use. Splitting that off means a
+# second 2800-line kernel config, which is a worse trade than the 109 KB.
+BR2_PACKAGE_DROPBEAR_OPENIPC=y
+BR2_PACKAGE_HISILICON_OPENSDK=y
+BR2_PACKAGE_HISILICON_OSDRV_HI3516CV6XX=y
+BR2_PACKAGE_IPCTOOL=y
+BR2_PACKAGE_JSONFILTER=y
+BR2_PACKAGE_LIBCURL_OPENIPC=y
+BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
+BR2_PACKAGE_LIBCURL_OPENIPC_MBEDTLS=y
+# BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
+BR2_PACKAGE_MBEDTLS_OPENIPC=y
+BR2_PACKAGE_MOSQUITTO=y
+# BR2_PACKAGE_MOSQUITTO_BROKER is not set
+BR2_PACKAGE_MOTORS=y
+# Buildroot's own opus, which BR2_PACKAGE_RAPTOR_STREAMING selects. Fixed
+# point because this is a soft-float userland with no FPU calling convention;
+# it is the same arithmetic opus-openipc was built with here before.
+BR2_PACKAGE_OPUS_FIXED_POINT=y
+# compy, faac, helix-aac, libschrift, majestic-fonts and opus arrive through
+# this symbol's selects.
+BR2_PACKAGE_RAPTOR_STREAMING=y
+BR2_PACKAGE_VTUND_OPENIPC=y
+BR2_PACKAGE_YAML_CLI=y

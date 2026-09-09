@@ -143,7 +143,7 @@ BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
 BR2_OPENIPC_SOC_VENDOR="hisilicon"
 BR2_OPENIPC_SOC_MODEL="hi3516cv608"
 BR2_OPENIPC_SOC_FAMILY="hi3516cv6xx"
-BR2_OPENIPC_VARIANT="raptor"
+BR2_OPENIPC_VARIANT="raptorwifi"
 BR2_OPENIPC_FLASH_SIZE="8"
 # 4288, and the number comes from the BOARD, not from OpenIPC/u-boot-hi3516cv6xx.
 # The H4-52POX-S ships an OEM U-Boot 2022.07 whose saved environment partitions
@@ -247,7 +247,12 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 # The driver's id table matches 0xB733 (multi-function) and 0xF72B (WiFi only)
 # under CONFIG_RTL8733B, which its Makefile sets from CONFIG_RTL8733BU.
 #
-# No AP support in wpa_supplicant: this board associates, it does not serve.
+# THIS IS THE ONLY DIFFERENCE FROM hi3516cv608_os04d10_raptor, and it is a
+# fifth of the rootfs: 543 KB of driver, 109 KB of cfg80211, 455 KB of
+# supplicant and 57 KB of tools, 1150 KB compressed against a 5184 KB slot.
+# The cv608 has no standard radio, so the wired build is the one that does not
+# assume this dongle, and a board with a different one needs its own arm in
+# /etc/wireless/usb rather than this defconfig.
 BR2_PACKAGE_DROPBEAR_OPENIPC=y
 BR2_PACKAGE_HISILICON_OPENSDK=y
 BR2_PACKAGE_HISILICON_OSDRV_HI3516CV6XX=y
