@@ -294,8 +294,24 @@ HISILICON_OPENSDK_SENSORS = \
 # DISABLE_VO/DISABLE_TDE note above -- and raptor reaches none of these: IVE
 # and the NPU lost their userspace when libss_mpi_ive and libsvp_acl went to
 # the majestic-only list, and open_svac3e is modprobed only for socmodel
-# 20g/00s/00g, which this board is not. 679 KB of modules.
-HISILICON_OPENSDK_KMOD_SKIP = open_ive.ko open_svac3e.ko open_svp_npu.ko
+# 20g/00s/00g, which this board is not.
+#
+# Three more, for the wifi stack's sake, each with a reason of its own:
+#
+#   open_uvc    load_hisilicon's modprobe for it is commented out, and it could
+#               not load anyway -- modpost reports it needs an undefined
+#               uvc_recv_pack. It has never run on this board.
+#   open_aiisp  the AI ISP, which the 608 does not have. Already modprobed only
+#               for socmodel 20s/20g/00s/00g.
+#   open_vca    video content analysis. This is the one real loss: it is
+#               modprobed unconditionally upstream and raptor has no caller for
+#               it, but "no caller" is read from the source rather than proven
+#               on hardware. If something in the pipeline turns out to want it,
+#               take it back first.
+#
+# 858 KB of modules between the six.
+HISILICON_OPENSDK_KMOD_SKIP = open_ive.ko open_svac3e.ko open_svp_npu.ko \
+	open_uvc.ko open_aiisp.ko open_vca.ko
 endif
 endif
 

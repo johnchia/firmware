@@ -85,6 +85,15 @@ HISILICON_OSDRV_HI3516CV6XX_SENSOR_BLOBS = \
 	libsns_imx307.so \
 	libsns_os02m10.so
 
+# ...but not on a raptor target, which is built for one board rather than
+# published for a family. The cv608 bench board is an os04d10, hisilicon-opensdk
+# already ships that one alone for the same reason, and these two are 155 KB of
+# an 8 MB NOR that also has to hold a wifi driver, cfg80211 and a supplicant in
+# AP mode. A published cv6xx image keeps them.
+ifeq ($(OPENIPC_VARIANT),raptor)
+HISILICON_OSDRV_HI3516CV6XX_SENSOR_BLOBS =
+endif
+
 define HISILICON_OSDRV_HI3516CV6XX_INSTALL_TARGET_CMDS
 
 	$(INSTALL) -m 755 -d $(TARGET_DIR)/usr/bin
@@ -104,7 +113,12 @@ define HISILICON_OSDRV_HI3516CV6XX_INSTALL_TARGET_CMDS
 	# (0x5302) as "SP2308" (rebadged SuperPix marker — same silicon).
 	# Symlink so devices whose u-boot env still carries that legacy
 	# name resolve to the correct driver without a manual fix.
-	ln -sf libsns_os02m10.so $(TARGET_DIR)/usr/lib/sensors/libsns_sp2308.so
+	# ...and only where that driver is actually installed. The raptor
+	# target ships no blob sensors, and a dangling symlink there would be
+	# dead weight -- sns_usable's -e follows it and correctly answers no,
+	# so it would buy nothing and confuse anyone reading the directory.
+	[ -f $(TARGET_DIR)/usr/lib/sensors/libsns_os02m10.so ] && \
+		ln -sf libsns_os02m10.so $(TARGET_DIR)/usr/lib/sensors/libsns_sp2308.so || true
 
 endef
 

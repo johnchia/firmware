@@ -142,7 +142,7 @@ insert_ko() {
 	insert_osal
 	modprobe open_base logmpp_show=${DEBUG}
 	modprobe open_vb
-	modprobe open_vca
+	[ -e open_vca.ko ] && modprobe open_vca
 	modprobe open_sys profile=$SYS_PROFILE
 	modprobe open_rgn
 	modprobe open_vpp
@@ -173,7 +173,7 @@ insert_ko() {
 	insert_audio
 	modprobe open_mipi_rx
 	# modprobe open_user
-	case ${socmodel} in 20s|20g|00s|00g) modprobe open_aiisp ;; esac
+	case ${socmodel} in 20s|20g|00s|00g) [ -e open_aiisp.ko ] && modprobe open_aiisp ;; esac
 	# modprobe open_uvc
 	modprobe open_pm
 	modprobe open_wdt
@@ -194,8 +194,8 @@ remove_ko() {
 	rmmod open_sensor_i2c &> /dev/null
 	rmmod open_piris 2>/dev/null
 	rmmod open_pwm 2>/dev/null
-	rmmod open_ive
-	rmmod open_svp_npu
+	rmmod open_ive 2>/dev/null
+	rmmod open_svp_npu 2>/dev/null
 	rmmod open_jpege
 	rmmod open_h265e
 	rmmod open_svac3e &> /dev/null
@@ -210,7 +210,7 @@ remove_ko() {
 	rmmod open_vpp
 	rmmod open_rgn
 	rmmod open_sys
-	rmmod open_vca
+	rmmod open_vca 2>/dev/null
 	rmmod open_vb
 	rmmod open_base
 	rmmod open_mmz
