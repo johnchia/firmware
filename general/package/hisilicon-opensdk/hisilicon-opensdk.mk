@@ -272,6 +272,33 @@ HISILICON_OPENSDK_SENSORS = \
 endif
 endif
 
+# Same reasoning for the V5 raptor variant, which shares its 8 MB NOR with a
+# wifi driver and the cfg80211 module. A raptor target is built for one board
+# rather than published for a family, so the sensor it carries is known: the
+# H4-52POX-S is an os04d10 and the other five are ~727 KB of rootfs for parts
+# this image will never meet.
+#
+# Note what this gives up. sc4336p is load_hisilicon's SNS_TYPE0 default, so a
+# board that reaches that fallback -- no sensor key in the environment and no
+# successful probe -- now finds no driver behind it. That is the right trade
+# for a single-board target whose environment carries sensor=os04d10 and whose
+# script writes the probed value back, and the wrong one for a published image.
+#
+# hi3516cv6xx_ultimate is the published cv6xx image and keeps all six.
+ifeq ($(OPENIPC_VARIANT),raptor)
+ifeq ($(OPENIPC_SOC_FAMILY),hi3516cv6xx)
+HISILICON_OPENSDK_SENSORS = \
+	omnivision_os04d10/libsns_os04d10
+
+# Blocks the CV608 has no use for. The part is encode-only -- see the
+# DISABLE_VO/DISABLE_TDE note above -- and raptor reaches none of these: IVE
+# and the NPU lost their userspace when libss_mpi_ive and libsvp_acl went to
+# the majestic-only list, and open_svac3e is modprobed only for socmodel
+# 20g/00s/00g, which this board is not. 679 KB of modules.
+HISILICON_OPENSDK_KMOD_SKIP = open_ive.ko open_svac3e.ko open_svp_npu.ko
+endif
+endif
+
 # Kernel version from the actual build — no hardcoded fallback.
 # The kernel is always built before opensdk (dependency), so kernel.release exists.
 HISILICON_OPENSDK_KVER = $(shell cat $(BUILD_DIR)/linux-custom/include/config/kernel.release 2>/dev/null)
@@ -524,7 +551,11 @@ HISILICON_OPENSDK_KMOD_DST = $(HISILICON_OPENSDK_KMOD_BASE)
 define HISILICON_OPENSDK_INSTALL_TARGET_CMDS
 	$(INSTALL) -m 755 -d $(HISILICON_OPENSDK_KMOD_DST)
 	for ko in $(@D)/kernel/open_*.ko; do \
-		[ -f $${ko} ] && $(INSTALL) -m 644 -t $(HISILICON_OPENSDK_KMOD_DST) $${ko} || true; \
+		[ -f $${ko} ] || continue; \
+		case " $(HISILICON_OPENSDK_KMOD_SKIP) " in \
+			*" $$(basename $${ko}) "*) continue ;; \
+		esac; \
+		$(INSTALL) -m 644 -t $(HISILICON_OPENSDK_KMOD_DST) $${ko}; \
 	done
 	$(INSTALL) -m 755 -d $(TARGET_DIR)/usr/lib/sensors
 	$(foreach s,$(HISILICON_OPENSDK_SENSORS), \
