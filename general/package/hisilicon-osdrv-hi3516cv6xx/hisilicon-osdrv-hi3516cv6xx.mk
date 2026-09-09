@@ -94,6 +94,36 @@ ifeq ($(OPENIPC_VARIANT),raptor)
 HISILICON_OSDRV_HI3516CV6XX_SENSOR_BLOBS =
 endif
 
+# Sensor mode INIs, which say how to bring a part up: the ISP object and
+# DllFile names, the MIPI lane map, the raw bitness. raptor's gen5 HAL looks in
+# /etc/sensors first and /usr/share/sensors after (hisi_sensor.c), and the
+# comment there names this package as where a cv6xx image gets them -- so this
+# is that.
+#
+# A mode INI for a sensor whose libsns_<name>.so is not on the image is dead
+# weight: sns_usable in load_hisilicon tests for the library, so the config
+# alone can never be reached. The raptor target therefore ships the one that
+# matches the one driver it carries, exactly as the blobs above do.
+HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = \
+	gc4023 imx307 os02m10 os04d10 sc431hai sc4336p sc450ai sc500ai
+
+ifeq ($(OPENIPC_VARIANT),raptor)
+HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = os04d10
+endif
+
+# IQ tuning, which is a different thing from the mode INI above: not how to
+# start the part, but how the ISP should render what it sees. Generated from
+# the OEM's own scene_param_0.bin (an ot_scene_pipe_param dump off an xrscam
+# CV608) against the Hi3516CV610 SDK V1.0.2.0 key set, so it is the vendor's
+# tuning for this sensor rather than a guess.
+#
+# 171 KB raw and 13 KB in the squashfs -- it is repetitive numeric text.
+# Additive: hal_isp reads /etc/sensors/iq/<sensor>.ini and, finding none,
+# simply runs untuned with one WARN, so this only ever applies to a board
+# actually using this sensor. /usr/share/raptor/iq stays the per-unit override
+# that wins over it.
+HISILICON_OSDRV_HI3516CV6XX_SENSOR_IQ = os04d10
+
 define HISILICON_OSDRV_HI3516CV6XX_INSTALL_TARGET_CMDS
 
 	$(INSTALL) -m 755 -d $(TARGET_DIR)/usr/bin
@@ -119,6 +149,16 @@ define HISILICON_OSDRV_HI3516CV6XX_INSTALL_TARGET_CMDS
 	# so it would buy nothing and confuse anyone reading the directory.
 	[ -f $(TARGET_DIR)/usr/lib/sensors/libsns_os02m10.so ] && \
 		ln -sf libsns_os02m10.so $(TARGET_DIR)/usr/lib/sensors/libsns_sp2308.so || true
+
+	$(INSTALL) -m 755 -d $(TARGET_DIR)/etc/sensors
+	$(foreach s,$(HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS), \
+		$(INSTALL) -m 644 -t $(TARGET_DIR)/etc/sensors $(HISILICON_OSDRV_HI3516CV6XX_PKGDIR)/files/sensor/config/$(s).ini ; \
+	)
+
+	$(INSTALL) -m 755 -d $(TARGET_DIR)/etc/sensors/iq
+	$(foreach s,$(HISILICON_OSDRV_HI3516CV6XX_SENSOR_IQ), \
+		$(INSTALL) -m 644 -t $(TARGET_DIR)/etc/sensors/iq $(HISILICON_OSDRV_HI3516CV6XX_PKGDIR)/files/sensor/iq/$(s).ini ; \
+	)
 
 endef
 
