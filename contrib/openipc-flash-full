@@ -1,0 +1,195 @@
+#!/bin/sh
+# openipc-flash-full — write a full NOR image to a running camera over SSH.
+#
+# `make BOARD=<board> fullimage` produces one blob spanning boot..rootfs. There
+# is no mtd device covering the whole chip, so it cannot be written in one
+# call; this splits it along the camera's own partition table and writes the
+# pieces. Nothing is assumed about the layout -- it is read from /proc/mtd on
+# the target, so a board whose rootfs partition is 5120k and one whose is 8192k
+# both work without being told which.
+#
+# WHY NOT ONE flashcp
+#
+# An mtd partition spanning the flash (thingino's `16384k@0(all)`) would allow
+# it, at the cost of a bootargs change that a camera with a saved environment
+# never sees, and of spelling rootfs_data with a size because cmdlinepart
+# rejects any partition after a fill-up one. This needs neither.
+#
+# WHY THE ROOTFS DOES NOT GO THROUGH flashcp
+#
+# The camera is running from it. squashfs faults pages in on demand, so erasing
+# mtd3 under a live root kills the process doing the erasing. sysupgrade already
+# solves this -- enter_ramfs moves the running system into a ramfs before it
+# touches flash -- so kernel and rootfs are handed to it as files and it does
+# the dangerous half. The bootloader partition is not in use and is written
+# directly, first, with a read-back check, because it is the one partition with
+# no software recovery.
+#
+# THE ENVIRONMENT IS SKIPPED
+#
+# mtd1 holds ethaddr, derived once from the flash unique ID, plus whatever the
+# operator has set. A full image leaves that sector erased on purpose (see
+# general/scripts/make_full_image.sh), so writing it would blank the camera's
+# MAC. --env writes it anyway.
+#
+# Usage:
+#   openipc-flash-full <image.bin> <host> [--env] [--dry-run] [--boot-only]
+#
+# SSH=... overrides the ssh command (e.g. SSH="sshpass -p x ssh -o ...").
+
+set -eu
+
+SSH=${SSH:-ssh}
+IMG=; HOST=; WRITE_ENV=0; DRY=0; BOOT_ONLY=0
+
+for a in "$@"; do
+	case "$a" in
+		--env)       WRITE_ENV=1 ;;
+		--dry-run)   DRY=1 ;;
+		--boot-only) BOOT_ONLY=1 ;;
+		-h|--help)   sed -n '2,40p' "$0"; exit 0 ;;
+		-*)          echo "unknown option: $a" >&2; exit 2 ;;
+		*)           if [ -z "$IMG" ]; then IMG=$a; elif [ -z "$HOST" ]; then HOST=$a; else
+			         echo "unexpected argument: $a" >&2; exit 2; fi ;;
+	esac
+done
+[ -n "$IMG" ] && [ -n "$HOST" ] || { echo "usage: $0 <image.bin> <host> [--env] [--dry-run] [--boot-only]" >&2; exit 2; }
+[ -f "$IMG" ] || { echo "no such image: $IMG" >&2; exit 1; }
+
+say() { printf '%s\n' "$*"; }
+sshc() { $SSH "root@$HOST" "$@"; }
+
+IMG_BYTES=$(wc -c < "$IMG")
+
+# The table, from the camera rather than from a constant here. /proc/mtd gives
+# names and sizes in order; offsets are the running sum. A partition that
+# overlaps (an `all` spanning the chip, say) would break that sum silently, so
+# it is cross-checked against sysfs, which reports each offset directly.
+say "reading the partition table from $HOST"
+# Fetched raw and parsed here: quoting an awk program through ssh is a way to
+# get an empty answer that looks like an empty flash.
+# The trailing `:` matters. /sys/class/mtd also holds the read-only mtdNro
+# aliases, and the loop's status is that of its last iteration -- so without it
+# a table that arrived intact still exits 1 and set -e takes the script down.
+TABLE=$(sshc 'cat /proc/mtd; echo ---; for d in /sys/class/mtd/mtd[0-9]*; do [ -f "$d/offset" ] && echo "$(basename $d) $(cat $d/offset)"; done; :')
+PARTS=$(printf '%s\n' "$TABLE" | sed -n '1,/^---$/p' | sed -n 's/^\(mtd[0-9]*\): *\([0-9a-f]*\) *[0-9a-f]* *"\(.*\)"$/\1 \2 \3/p')
+SYSOFF=$(printf '%s\n' "$TABLE" | sed -n '/^---$/,$p' | grep -v '^---$')
+
+[ -n "$PARTS" ] || { echo "could not read /proc/mtd from $HOST" >&2; exit 1; }
+
+# Walk the table once: derive each offset, check it against sysfs when sysfs
+# has one, and work out which partitions the image actually covers.
+plan=$(printf '%s\n' "$PARTS" | {
+	off=0
+	while read -r dev hexsize name; do
+		size=$((0x$hexsize))
+		want=$(printf '%s\n' "$SYSOFF" | awk -v d="$dev" '$1==d {print $2}')
+		if [ -n "$want" ] && [ "$want" -ne "$off" ]; then
+			echo "MISMATCH $dev $name sysfs=$want walked=$off"
+			off=$((off + size)); continue
+		fi
+		end=$((off + size))
+		if [ "$end" -le "$IMG_BYTES" ]; then
+			echo "COVERED $dev $name $off $size"
+		else
+			echo "BEYOND $dev $name $off $size"
+		fi
+		off=$((off + size))
+	done
+})
+
+if printf '%s\n' "$plan" | grep -q '^MISMATCH'; then
+	printf '%s\n' "$plan" | grep '^MISMATCH' >&2
+	echo "the partition table does not lay out end to end -- refusing to guess where the image maps" >&2
+	exit 1
+fi
+
+covered=$(printf '%s\n' "$plan" | grep -c '^COVERED' || true)
+[ "$covered" -gt 0 ] || { echo "the image covers no partition on this camera" >&2; exit 1; }
+
+say ""
+say "image:  $IMG ($IMG_BYTES bytes)"
+say "target: $HOST"
+printf '%s\n' "$plan" | while read -r state dev name off size; do
+	case "$state" in
+		COVERED)
+			act="write"
+			[ "$name" = env ] && [ "$WRITE_ENV" = 0 ] && act="skip (keeps ethaddr; --env to write)"
+			[ "$BOOT_ONLY" = 1 ] && [ "$name" != boot ] && act="skip (--boot-only)"
+			printf '  %-4s %-12s %8d + %-8d  %s\n' "$dev" "$name" "$off" "$size" "$act" ;;
+		BEYOND)
+			printf '  %-4s %-12s %8d + %-8d  not in the image\n' "$dev" "$name" "$off" "$size" ;;
+	esac
+done
+say ""
+[ "$DRY" = 1 ] && exit 0
+
+# The bootloader first, and directly: mtd0 is not in use by the running system,
+# and getting it wrong is the one failure that needs a soldering iron, so it is
+# worth doing while the camera is still healthy enough to answer.
+bootline=$(printf '%s\n' "$plan" | awk '$1=="COVERED" && $3=="boot"')
+if [ -n "$bootline" ]; then
+	set -- $bootline
+	dev=$2; off=$4; size=$5
+	tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
+	dd if="$IMG" of="$tmp" bs=1M iflag=skip_bytes,count_bytes skip="$off" count="$size" status=none
+	sum=$(md5sum < "$tmp" | cut -d' ' -f1)
+	say "writing $dev (boot, $size bytes, md5 $sum)"
+	sshc 'cat > /tmp/openipc-boot.bin' < "$tmp"
+	got=$(sshc 'md5sum < /tmp/openipc-boot.bin' | cut -d' ' -f1)
+	[ "$got" = "$sum" ] || { echo "upload corrupted: $got != $sum" >&2; exit 1; }
+	sshc "flashcp /tmp/openipc-boot.bin /dev/$dev"
+	back=$(sshc "dd if=/dev/$dev bs=1 count=$size 2>/dev/null | md5sum" | cut -d' ' -f1)
+	[ "$back" = "$sum" ] || { echo "READ-BACK MISMATCH on $dev: $back != $sum" >&2; \
+		echo "do not reboot this camera until that is understood" >&2; exit 1; }
+	say "  read back clean"
+	sshc 'rm -f /tmp/openipc-boot.bin'
+	rm -f "$tmp"; trap - EXIT
+fi
+
+if [ "$WRITE_ENV" = 1 ]; then
+	envline=$(printf '%s\n' "$plan" | awk '$1=="COVERED" && $3=="env"')
+	if [ -n "$envline" ]; then
+		set -- $envline
+		dev=$2; off=$4; size=$5
+		say "writing $dev (env) -- the camera's MAC and saved settings go with it"
+		tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
+		dd if="$IMG" of="$tmp" bs=1M iflag=skip_bytes,count_bytes skip="$off" count="$size" status=none
+		sshc 'cat > /tmp/openipc-env.bin' < "$tmp"
+		sshc "flashcp /tmp/openipc-env.bin /dev/$dev; rm -f /tmp/openipc-env.bin"
+		rm -f "$tmp"; trap - EXIT
+	fi
+fi
+
+[ "$BOOT_ONLY" = 1 ] && { say "--boot-only: kernel and rootfs left alone"; exit 0; }
+
+# Kernel and rootfs go through sysupgrade, which pivots into a ramfs first. It
+# reboots on its own once it has rewritten the flash the camera runs from -- -x
+# is documented as ignored in exactly that case -- so this is the last step.
+args=""
+for name in kernel rootfs; do
+	line=$(printf '%s\n' "$plan" | awk -v n="$name" '$1=="COVERED" && $3==n')
+	[ -n "$line" ] || continue
+	set -- $line
+	off=$4; size=$5
+	case "$name" in
+		kernel) remote=/tmp/uImage.upload;   flag=--kernel ;;
+		rootfs) remote=/tmp/rootfs.upload;   flag=--rootfs ;;
+	esac
+	tmp=$(mktemp)
+	dd if="$IMG" of="$tmp" bs=1M iflag=skip_bytes,count_bytes skip="$off" count="$size" status=none
+	sum=$(md5sum < "$tmp" | cut -d' ' -f1)
+	say "uploading $name ($size bytes, md5 $sum)"
+	sshc "cat > $remote" < "$tmp"
+	got=$(sshc "md5sum < $remote" | cut -d' ' -f1)
+	rm -f "$tmp"
+	[ "$got" = "$sum" ] || { echo "upload corrupted: $got != $sum" >&2; exit 1; }
+	args="$args $flag=$remote"
+done
+
+if [ -n "$args" ]; then
+	say ""
+	say "handing off to sysupgrade:$args"
+	say "(it pivots into a ramfs, writes, and reboots -- the connection will drop)"
+	sshc "sysupgrade $args" || true
+fi
