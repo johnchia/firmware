@@ -112,7 +112,8 @@ jobs:
       fail-fast: false
       matrix:
         board: [ssc377qe_raptor, ssc377d_raptor, ssc30kq_raptor, ssc333_sc3336_raptor,
-                t31_raptor, hi3516ev300_raptor, hi3516ev200_raptor]
+                t31_raptor, hi3516ev300_raptor, hi3516ev200_raptor,
+                hi3516cv608_os04d10_raptor, hi3516cv608_os04d10_raptorwifi]
     env:
       BUILD_ID:  ${{ needs.gate.outputs.build_id }}
       BUILD_SHA: ${{ needs.gate.outputs.head_sha }}
@@ -199,11 +200,15 @@ jobs:
       # whole-flash write there produces a camera that has to be opened rather
       # than reflashed.
       #
-      # The two HiSilicon targets -- hi3516ev300_raptor and hi3516ev200_raptor
-      # -- simply have no bootloader package yet. That is a gap rather than a
-      # decision, and the .tgz is the honest thing to publish until one exists:
-      # a bring-up target that has never streamed has no proven bootloader to
-      # ship with it either.
+      # Four HiSilicon targets -- hi3516ev300_raptor, hi3516ev200_raptor and
+      # the two hi3516cv608_os04d10 variants -- simply have no bootloader
+      # package yet. That is a gap rather than a decision, and the .tgz is the
+      # honest thing to publish until one exists: a bring-up target that has
+      # never streamed has no proven bootloader to ship with it either. The
+      # cv608 pair is the exception to the "never streamed" half -- that board
+      # streams and is the bench unit for the HiSilicon gen5 work -- but it
+      # reflashes over sysupgrade, so the tarball is the artifact it wants
+      # anyway.
       #
       # t31_raptor has the same shape and not the same consequence, which is
       # why it builds one. Its environment is erased by a full write too and it

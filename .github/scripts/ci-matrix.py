@@ -81,8 +81,9 @@ ALL_BOARDS = [
     # raptorwifi carries the RTL8733BU stack and raptor does not, which is a
     # fifth of the rootfs, and the cv608 has no standard part to justify
     # putting it in both. Both build raptor-streaming against the HAL's hisi_v5
-    # backend, so a pin bump does reach them; neither is in
-    # raptor-nightly.yml's matrix.
+    # backend, so a pin bump does reach them, and both are now in
+    # raptor-nightly.yml's matrix -- they were not, and raptorwifi spent that
+    # time 400 KB over its partition with nothing building it to say so.
     "hi3516cv6xx_ultimate", "hi3516cv608_os04d10_raptor",
     "hi3516cv608_os04d10_raptorwifi",
     # Hisilicon [HI3519DV500]
