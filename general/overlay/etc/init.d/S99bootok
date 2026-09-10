@@ -15,19 +15,40 @@ command -v fw_printenv >/dev/null 2>&1 || exit 0
 [ "$(fw_printenv -n upgrade_available 2>/dev/null)" = "1" ] || exit 0
 
 # Armed. Disarm only once the new image is PROVEN healthy -- and prove it,
-# don't just glimpse it: pidof sees majestic the instant S95majestic forks,
-# before the pipeline is up, so a streamer that crashes during startup would
-# look healthy for a moment. Require it to stay up across a sustained window;
-# if it dies the window restarts, and if it never holds we leave the flag armed
-# so U-Boot escalates to recovery instead of looping on an image that boots but
-# does not stream. An image built without majestic is healthy once it boots
-# this far. Backgrounded so nothing here holds up boot.
+# don't just glimpse it. What gets proven here is that something is serving
+# RTSP, not that a particular binary exists: this fork ships raptor rather than
+# majestic, and a check written around one streamer's process name goes quietly
+# blind the moment the image carries the other. A listening socket is the
+# service, whoever provides it.
+#
+# 554 is hardcoded on purpose. Reading the port back out of a config file would
+# tie this to one streamer's configuration format, which is the coupling the
+# port check exists to avoid; a camera moved off the default port, or onto
+# RTSPS, will not disarm and gets recovered instead. That is the safe direction
+# to be wrong in, and it is a deliberate trade.
+#
+# The socket also binds on an unclaimed camera -- authentication is per-request
+# -- which matters because `sysupgrade -n` wipes the overlay and arms recovery
+# in the same breath. A health check that needed a successful stream would call
+# a freshly wiped camera dead and reflash it.
+#
+# Require the socket to stay up across a sustained window; if it goes the
+# window restarts, and if it never holds we leave the flag armed so U-Boot
+# escalates to recovery instead of looping on an image that boots but does not
+# stream. Backgrounded so nothing here holds up boot.
 {
+	# LISTEN is state 0A, and local_address is <hex addr>:<hex port>;
+	# 554 is 022A. /proc rather than netstat: no dependency, no output to
+	# parse, and it costs one read.
+	nets=/proc/net/tcp
+	[ -e /proc/net/tcp6 ] && nets="$nets /proc/net/tcp6"
+
 	need=8       # consecutive good checks (~16s) before trusting the image
 	ok=0
 	tries=0
 	while [ "$tries" -lt 90 ]; do
-		if [ ! -x /usr/bin/majestic ] || pidof majestic >/dev/null 2>&1; then
+		if awk '$4 == "0A" && $2 ~ /:022A$/ { f = 1 } END { exit !f }' \
+			$nets 2>/dev/null; then
 			ok=$((ok + 1))
 			if [ "$ok" -ge "$need" ]; then
 				if fw_setenv upgrade_available 0 2>/dev/null &&
@@ -45,5 +66,5 @@ command -v fw_printenv >/dev/null 2>&1 || exit 0
 		sleep 2
 		tries=$((tries + 1))
 	done
-	logger -s -t bootok "majestic did not stay up; leaving boot-count recovery armed" 2>/dev/null
+	logger -s -t bootok "nothing held a listener on RTSP 554; leaving boot-count recovery armed" 2>/dev/null
 } &
