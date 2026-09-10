@@ -272,11 +272,20 @@ HISILICON_OPENSDK_SENSORS = \
 endif
 endif
 
-# Same reasoning for the V5 raptor variant, which shares its 8 MB NOR with a
-# wifi driver and the cfg80211 module. A raptor target is built for one board
-# rather than published for a family, so the sensor it carries is known: the
-# H4-52POX-S is an os04d10 and the other five are ~727 KB of rootfs for parts
-# this image will never meet.
+# Same reasoning for the V5 raptor variants, one of which shares its 8 MB NOR
+# with a wifi driver and the cfg80211 module. A raptor target is built for one
+# board rather than published for a family, so the sensor it carries is known:
+# the H4-52POX-S is an os04d10 and the other five are ~727 KB of rootfs for
+# parts this image will never meet.
+#
+# Both variants, and the plural is the whole of why this is a filter rather
+# than the comparison it was. There was one cv608 raptor target when this trim
+# was written and it carried the radio -- that is what "shares its 8 MB NOR
+# with a wifi driver" above is describing. Splitting it into raptor and
+# raptorwifi left this guard naming only the wired half, so the variant with
+# 1.5 MB less room was the one keeping 1.49 MB of sensors and modules the
+# wired one drops, and it overflowed its partition by 400 KB. The trim was
+# always meant for the radio build; nothing about it is specific to either.
 #
 # Note what this gives up. sc4336p is load_hisilicon's SNS_TYPE0 default, so a
 # board that reaches that fallback -- no sensor key in the environment and no
@@ -285,7 +294,7 @@ endif
 # script writes the probed value back, and the wrong one for a published image.
 #
 # hi3516cv6xx_ultimate is the published cv6xx image and keeps all six.
-ifeq ($(OPENIPC_VARIANT),raptor)
+ifneq ($(filter $(OPENIPC_VARIANT),raptor raptorwifi),)
 ifeq ($(OPENIPC_SOC_FAMILY),hi3516cv6xx)
 HISILICON_OPENSDK_SENSORS = \
 	omnivision_os04d10/libsns_os04d10
