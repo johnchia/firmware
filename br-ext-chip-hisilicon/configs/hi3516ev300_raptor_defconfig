@@ -132,8 +132,11 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
-BR2_PACKAGE_LIBEVENT_OPENIPC=y
-BR2_PACKAGE_LIBOGG_OPENIPC=y
+# libevent-openipc and libogg-openipc used to be here because majestic linked
+# them. Nothing on this image does: readelf across every ELF in the rootfs finds
+# the only DT_NEEDED references to either are the libraries' own, and raptor's
+# RTSP path goes through compy, which links mbedtls3 rather than libevent. They
+# cost 258 KB of rootfs to sit unopened.
 # Majestic stays out. It was here as the reference encoder to cross-check
 # raptor against -- the post-build hook still defuses its init script to
 # K95majestic for exactly that -- but a dev tool does not have to ship in the
