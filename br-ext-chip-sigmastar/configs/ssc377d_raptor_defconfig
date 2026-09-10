@@ -137,7 +137,18 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
-BR2_PACKAGE_MAJESTIC=y
+# Majestic stays out. It was here as the reference encoder to cross-check
+# raptor against -- the post-build hook still defuses its init script to
+# K95majestic for exactly that -- but a dev tool does not have to ship in the
+# image people flash. Copy the binary into a board's overlay when a comparison
+# run is wanted; nothing else needs it, and majestic-fonts, which raptor does
+# need for the OSD, is a separate package that comes in through raptor's own
+# dependencies.
+#
+# Not shipping it also keeps the image clear of the Majestic EULA, which the
+# claim gate keys on the presence of /usr/share/openipc/eula/ (#2346). That
+# document is majestic's licence, and a camera that never carries the binary
+# should not be asking anyone to accept it.
 # mDNS-SD, so the camera answers to <hostname>.local and its services can be
 # found without knowing the address. It pairs with the per-MAC hostname derived
 # in rcS: that is what makes the name unique across cameras on the same SoC,
