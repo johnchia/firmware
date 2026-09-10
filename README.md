@@ -33,9 +33,42 @@ A fork of [OpenIPC/firmware][upstream] that builds camera images running
 | `t31_raptor` | T31X · ingenic | 8192 KB | [sysupgrade][t-t31] · [whole-flash][f-t31] |
 | `hi3516ev300_raptor` | Hi3516EV300 · hi3516ev200 | 10240 KB | [sysupgrade][t-ev300] |
 | `hi3516ev200_raptor` | Hi3516EV200 · hi3516ev200 | 5120 KB | [sysupgrade][t-ev200] |
+| `hi3516cv608_os04d10_raptor` | Hi3516CV608 · hi3516cv6xx | 5184 KB | [sysupgrade][t-cv608] |
+| `hi3516cv608_os04d10_raptorwifi` | Hi3516CV608 · hi3516cv6xx | 5184 KB | [sysupgrade][t-cv608w] |
 
-Every board here is tested on hardware and in service, but none is widely
-tested. Flash at your own risk.
+The two `hi3516cv608` targets are the same board and differ only in the radio:
+`raptorwifi` carries the RTL8733BU driver, cfg80211 and a supplicant that can
+run as an access point; `raptor` carries none of that and is for a camera on a
+cable. Both are pinned to one sensor, the OS04D10. Pick the wired one unless
+you have the dongle -- the radio stack is a fifth of the rootfs.
+
+## Before you flash
+
+> **These are experimental builds. Have a recovery path before you write one
+> to a camera.**
+
+A recovery path means a way to get the camera booting again when the image you
+just wrote does not: soldered UART leads you have already used once, or a SPI
+flash clip and a programmer. Not a plan to acquire one afterwards. Nothing in
+this fork is widely deployed, several targets have run on exactly one unit, and
+a rootfs is only discovered to be bad after it has been written to flash.
+
+Two specifics worth knowing before you pick a board:
+
+- **A bad image is found late.** `sysupgrade` writes first and boots second, so
+  a kernel or rootfs that does not come up leaves a camera that answers nothing
+  -- no SSH, no console, no portal.
+- **Some of these cameras have no second door.** `ssc333_sc3336_raptor` and
+  `t31_raptor` reach the network over the radio alone -- the Wyze v3 has no
+  Ethernet PHY at all -- so losing the radio loses every way in. A whole-flash
+  write erases the U-Boot environment those two keep their wifi credentials in,
+  which is why `ssc333_sc3336_raptor` publishes no such image: a blanked one has
+  to be opened. `t31_raptor` publishes one because a blanked Wyze v3 talks its
+  way back -- it raises its own setup access point, and its bootloader can be
+  driven from an SD card.
+
+Read the wiki on [flashing][wiki-flash] and [serial/UART][wiki-uart] first if
+you have not done this before.
 
 ## Installing
 
@@ -51,9 +84,19 @@ ssh root@<board> 'sysupgrade --url=<link from the table>'
 
 The configuration console is at `http://<camera>:8080/`.
 
-A new camera ships unclaimed and has to be claimed over SSH before anything
-else: log in as `root` with an empty password, and it will prompt you to set
-one. That password is what protects the console.
+A new camera ships **unclaimed**: root has no password, so nothing can be
+configured and anyone who can reach the camera can take it. Claiming it means
+setting that password, and it is what protects the console afterwards. Three
+doors do it, and any one is enough:
+
+- the console at `http://<camera>:8080/`, which draws a claim card instead of
+  its settings while the camera has no password;
+- the setup page on the camera's own access point, if it has no network yet;
+- SSH -- log in as `root` with an empty password and it prompts for one.
+
+They all write the same file and read it live, so whichever you use, the other
+two see it immediately. `sysupgrade -n` wipes the overlay and returns the
+camera to unclaimed, which is also the way back from a forgotten password.
 
 ## Licence and credit
 
@@ -74,12 +117,16 @@ packaging and the Buildroot tree are theirs. See the [project][project], the
 [t-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.t31_gc2053-nor-raptor-latest.tgz
 [t-ev200]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516ev200-nor-raptor-latest.tgz
 [t-ev300]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516ev300-nor-raptor-latest.tgz
+[t-cv608]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516cv608-nor-raptor-latest.tgz
+[t-cv608w]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516cv608-nor-raptorwifi-latest.tgz
 [f-377]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377qe-nor-full.bin
 [f-377d]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377d-nor-full.bin
 [f-30k]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc30kq-nor-full.bin
 [f-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-t31-nor-full.bin
 [opencollective]: https://opencollective.com/openipc
 [project]: https://github.com/openipc
+[wiki-flash]: https://github.com/OpenIPC/wiki/blob/master/en/equipment-flashing.md
+[wiki-uart]: https://github.com/OpenIPC/wiki/blob/master/en/serial_pins_uart.md
 [raptor]: https://github.com/gtxaspec/raptor
 [upstream]: https://github.com/OpenIPC/firmware
 [website]: https://openipc.org
