@@ -36,12 +36,6 @@ A fork of [OpenIPC/firmware][upstream] that builds camera images running
 | `hi3516cv608_os04d10_raptor` | Hi3516CV608 · hi3516cv6xx | 5184 KB | [sysupgrade][t-cv608] |
 | `hi3516cv608_os04d10_raptorwifi` | Hi3516CV608 · hi3516cv6xx | 5184 KB | [sysupgrade][t-cv608w] |
 
-The two `hi3516cv608` targets are the same board and differ only in the radio:
-`raptorwifi` carries the RTL8733BU driver, cfg80211 and a supplicant that can
-run as an access point; `raptor` carries none of that and is for a camera on a
-cable. Both are pinned to one sensor, the OS04D10. Pick the wired one unless
-you have the dongle -- the radio stack is a fifth of the rootfs.
-
 ## Before you flash
 
 > **These are experimental builds. Have a recovery path before you write one
@@ -52,20 +46,6 @@ just wrote does not: soldered UART leads you have already used once, or a SPI
 flash clip and a programmer. Not a plan to acquire one afterwards. Nothing in
 this fork is widely deployed, several targets have run on exactly one unit, and
 a rootfs is only discovered to be bad after it has been written to flash.
-
-Two specifics worth knowing before you pick a board:
-
-- **A bad image is found late.** `sysupgrade` writes first and boots second, so
-  a kernel or rootfs that does not come up leaves a camera that answers nothing
-  -- no SSH, no console, no portal.
-- **Some of these cameras have no second door.** `ssc333_sc3336_raptor` and
-  `t31_raptor` reach the network over the radio alone -- the Wyze v3 has no
-  Ethernet PHY at all -- so losing the radio loses every way in. A whole-flash
-  write erases the U-Boot environment those two keep their wifi credentials in,
-  which is why `ssc333_sc3336_raptor` publishes no such image: a blanked one has
-  to be opened. `t31_raptor` publishes one because a blanked Wyze v3 talks its
-  way back -- it raises its own setup access point, and its bootloader can be
-  driven from an SD card.
 
 Read the wiki on [flashing][wiki-flash] and [serial/UART][wiki-uart] first if
 you have not done this before.
