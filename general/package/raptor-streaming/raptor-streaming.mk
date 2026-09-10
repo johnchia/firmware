@@ -38,9 +38,9 @@
 # All four move together in practice -- a HAL change usually needs the daemon
 # change that calls it -- so bump them as a set and rebuild before trusting the
 # result. There is no test that a mixed set links.
-RAPTOR_STREAMING_VERSION = 6c494d2a277fc9685a8aefcc4325b32b8a42cb49
+RAPTOR_STREAMING_VERSION = b7bf670574b29a15bff186fbfed3a98858249180
 RAPTOR_STREAMING_HAL_VERSION = 1b3e0adeb1568295c0a383bfc1a15c65172060a4
-RAPTOR_STREAMING_COMMON_VERSION = d6607a4417313fe9b309bb3992478d6529e300c1
+RAPTOR_STREAMING_COMMON_VERSION = e5b1a88a9410f8a474176ea5e48bc15985a79c97
 RAPTOR_STREAMING_IPC_VERSION = 706fc805ec59bccfd86f007f3af4fcdbb93c4c68
 
 # A FIFTH PIN, BECAUSE A TARBALL IS NOT A CLONE
