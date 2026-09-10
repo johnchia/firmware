@@ -149,15 +149,12 @@ jobs:
           restore-keys: raptor-dl-${{ matrix.board }}-
 
       # The Raptor tarballs are named by commit sha, so a stale cache cannot
-      # feed those an old revision -- but the image is not only Raptor. The
-      # SigmaStar boards pull sigmastar-osdrv-sensors, which upstream pins to
-      # HEAD, and a moving ref keeps a constant download filename. The delete
-      # is by filename pattern rather than by package, so it covers any other
-      # moving ref a board picks up later -- t31_raptor's ingenic-opensdk and
-      # atbm60xx among them. The cache key is the
-      # month and actions/cache only saves on a miss, so that tarball would be
-      # frozen for weeks and the nightly would quietly ship old vendor drivers.
-      # Same reasoning and same patterns as build.yml's own purge step.
+      # feed those an old revision -- but the image is not only Raptor. A
+      # package pinned to a moving ref keeps a constant download filename, and
+      # the cache key is the month while actions/cache only saves on a miss, so
+      # such a tarball would be frozen for weeks and the nightly would quietly
+      # ship old vendor drivers. t31_raptor's ingenic-opensdk and atbm60xx are
+      # two; the SigmaStar sensors package was a third until it was pinned.
       #
       # It runs unguarded on purpose. The `2>/dev/null || true` this used to
       # carry is what let the wrong directory go unnoticed: find printed
@@ -170,6 +167,43 @@ jobs:
           find "$BR2_DL_DIR" -type f -regextype posix-extended \
             -regex '.*[-.](HEAD|master|main|dist)\.tar\.(gz|bz2|xz)' \
             -print -delete
+
+          # The four words above are not the whole set. A package pinned to a
+          # named BRANCH downloads as <pkg>-<branch>.tar.gz, and a branch name
+          # is whatever the vendor called it: openipc/realtek-wlan keeps one
+          # branch per chip, so hi3516cv608_os04d10_raptorwifi's radio arrives
+          # as rtl8733bu-openipc-rtl8733bu.tar.gz and ssc333_sc3336_raptor's as
+          # rtl8188fu-openipc-rtl8188fu.tar.gz. Both are moving refs behind a
+          # constant filename -- exactly what this step exists for -- and
+          # neither ends in HEAD, master, main or dist. A driver fix merged
+          # today would otherwise wait for the monthly cache key to roll over.
+          #
+          # Derived from the .mk files rather than listed here, so a board that
+          # later picks up another branch-pinned package is covered without
+          # anyone remembering to edit this. A pin is a moving ref when it is
+          # not a commit sha and not a version number; ALL of the tree's other
+          # pins are one or the other, and both stay cached because both name
+          # immutable bytes. The kernel is in the second group: every board of
+          # ours sets BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION to a full sha
+          # and gets <sha>.tar.gz, so dl/linux is content-addressed and must
+          # NOT be purged -- upstream #2387 refreshes it because upstream
+          # fetches openipc/linux by branch name, which we do not.
+          #
+          # Unguarded like the find above, and for the same reason: a purge
+          # that silently reached nothing is what this step must never become.
+          # A version is read even from an indented line, because a package
+          # with a per-variant pin sets it inside an ifeq.
+          grep -rE '^[[:space:]]*[A-Z0-9_]+_VERSION[[:space:]]*=[[:space:]]*[A-Za-z_]' \
+            general/package/*/*.mk |
+            sed -E "s|^general/package/([^/]+)/[^:]*:[[:space:]]*[A-Z0-9_]+_VERSION[[:space:]]*=[[:space:]]*'?([^'[:space:]]+)'?.*|\1 \2|" |
+            grep -vE ' [0-9a-f]{40}$' |
+            grep -vE ' v?[0-9]' |
+            sort -u |
+            while read -r pkg ver; do
+              [ -d "$BR2_DL_DIR/$pkg" ] || continue
+              find "$BR2_DL_DIR/$pkg" -maxdepth 1 -type f \
+                -name "*${ver}.tar.*" -print -delete
+            done
 
       - name: Build
         run: |
