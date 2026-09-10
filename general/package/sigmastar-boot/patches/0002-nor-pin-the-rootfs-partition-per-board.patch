@@ -1,0 +1,163 @@
+From: John Chia <john@johnchia.com>
+Subject: [PATCH] nor: pin the rootfs partition per board, instead of deriving it
+
+`sf probe` read the squashfs superblock at CONFIG_ENV_ROOTADDR and set
+rootmtd from bytes_used -- 5120k under 5 MB, 8192k at or above it -- and
+set rootsize the same way from ${filesize}. rootmtd is what fills
+${rootmtd} in bootargs, so the partition table the kernel was handed, and
+with it the offset rootfs_data begins at, was a function of how well one
+particular filesystem happened to compress.
+
+Crossing the threshold in either direction moves the start of rootfs_data
+by 3 MB. The overlay that had been living at the old offset is then found
+unmountable, reformatted on the next boot, and every setting on the camera
+is gone -- with nothing on the camera saying why.
+
+It is triggered by ordinary work. Dropping one unused package from a
+board's defconfig in the firmware tree moved ssc377qe and ssc377d from
+5.9 MB to 4.5 MB, which flips both. ssc30kq builds at 5,189,632 bytes
+today, 48 KB under the line: a package that gains 48 KB repartitions that
+board and nothing in the change would look related.
+
+Where it is actively unsafe is a board whose part is too small for the
+larger table. 2368k precedes the rootfs, so 8192k needs 10560k before
+rootfs_data starts, which the 8 MB parts infinity6b0 boards carry do not
+have. A 5120k-capped board is size-checked at 5,242,880 and repartitions
+at 5,238,784, leaving a 4 KB window where an image passes its build-time
+check and still asks for a table the flash cannot hold.
+
+So make it a constant: ROOTMTD and ROOTSIZE per board in sstar-common.h,
+next to the flash layout, matching the rootfs cap the firmware tree checks
+images against -- infinity6c and infinity6e are 16 MB parts with an 8192k
+rootfs, infinity6 and infinity6b0 are 8 MB with 5120k.
+
+WHY THE ASSIGNMENT STAYS IN cmd_sf.c
+
+The obvious version of this deletes the assignment along with the
+derivation and puts the size straight into CONFIG_BOOTARGS. That bricks
+every camera that has already booted once, which was established the
+direct way on an ssc377qe.
+
+A camera that has run saves its environment, and what it saves is bootargs
+holding ${rootmtd} unexpanded, plus a rootmtd of its own -- stale, because
+the derivation only ever setenv'd in RAM and never wrote it back. The
+saved environment wins over the compiled-in default, so removing the
+assignment leaves the stale value expanding: a board running an 8192k
+table because the derivation said so every boot falls back to the 5120k
+its environment has held since the day it was flashed. Its 5.6 MB rootfs
+no longer fits the partition, the squashfs mount fails, and panic=20 puts
+it in a reboot loop that only serial gets it out of.
+
+So the constant is assigned where the derivation was, on every probe,
+which bootcmd runs before it expands bootargs. Nothing is written to
+flash. The derivation's own behaviour is the proof this reaches a saved
+environment: that camera booted an 8192k table for months while its saved
+rootmtd said 5120k.
+
+Carried here rather than in the pinned branch so that the pin stays
+commit-identical to openipc/u-boot-sigmastar master.
+
+Signed-off-by: John Chia <john@johnchia.com>
+diff --git a/common/cmd_sf.c b/common/cmd_sf.c
+index c4f812e..a68739d 100644
+--- a/common/cmd_sf.c
++++ b/common/cmd_sf.c
+@@ -18,6 +18,7 @@
+ 
+ #if defined(CONFIG_MS_NOR_ONEBIN)
+ #include <jffs2/load_kernel.h>
++#include <linux/stringify.h>
+ 
+ extern struct spi_flash* spi_flash_probe_driver(u32 u32_address, unsigned int bus, unsigned int cs,
+         unsigned int max_hz, unsigned int spi_mode);
+@@ -171,31 +172,25 @@ static int do_spi_flash_probe(int argc, char * const argv[])
+ 	flash = new;
+ #endif
+ 
+-	char buf[64];
+-	unsigned int magic, bytes;
+-
+-	if (spi_flash_read(flash, CONFIG_ENV_ROOTADDR, sizeof(buf), buf)) {
+-		printf("Failed to read from SPI flash\n");
+-		return 1;
+-	}
+-
+-	memcpy(&magic, &buf[0], sizeof(magic));
+-	memcpy(&bytes, &buf[40], sizeof(bytes));
+-
+-	if (magic == 0x73717368) {
+-		if (bytes + 0x1000 < 0x500000) {
+-			setenv("rootmtd", "5120k");
+-		} else {
+-			setenv("rootmtd", "8192k");
+-		}
+-	}
+-
+-	ulong file = getenv_ulong("filesize", 16, 0);
+-	if (file < 0x500000) {
+-		setenv("rootsize", "0x500000");
+-	} else {
+-		setenv("rootsize", "0x800000");
+-	}
++	/* rootmtd sizes the rootfs partition in bootargs, and rootsize is the
++	 * length urwrite erases. Both used to be worked out right here: rootmtd
++	 * from bytes_used in the squashfs superblock at CONFIG_ENV_ROOTADDR, and
++	 * rootsize from ${filesize}. That made the partition table a function of
++	 * how well one filesystem happened to compress -- crossing 5 MB moved the
++	 * start of rootfs_data by 3 MB, and the overlay living at the old offset
++	 * was reformatted on the next boot with nothing saying why.
++	 *
++	 * They are per-board constants now (sstar-common.h), but they are still
++	 * assigned here rather than left to the default environment, and that is
++	 * the load-bearing part: a camera that has booted once has a SAVED
++	 * bootargs holding ${rootmtd} unexpanded, and a saved rootmtd beside it
++	 * that the default environment cannot reach. Assigning it on every probe
++	 * -- which bootcmd runs before it expands bootargs -- is what reaches
++	 * those cameras. Nothing is written to flash; this is the running
++	 * environment only.
++	 */
++	setenv("rootmtd", __stringify(CONFIG_ENV_ROOTMTD));
++	setenv("rootsize", __stringify(CONFIG_ENV_ROOTSIZE));
+ 
+ 	return 0;
+ }
+diff --git a/include/configs/sstar-common.h b/include/configs/sstar-common.h
+index 79dac2d..48a793e 100755
+--- a/include/configs/sstar-common.h
++++ b/include/configs/sstar-common.h
+@@ -32,7 +32,26 @@
+ #define CONFIG_ENV_KERNADDR 0x50000
+ #define CONFIG_ENV_KERNSIZE 0x200000
+ #define CONFIG_ENV_ROOTADDR 0x250000
++
++/* The rootfs partition is a property of the board: it is the size the board's
++ * images are built and size-checked against, so it is spelled out per board
++ * here rather than worked out at boot from whatever happens to be in flash.
++ * cmd_sf.c assigns both on every `sf probe`, which is what reaches a camera
++ * whose saved environment still holds a rootmtd of its own.
++ *
++ * ROOTMTD must equal the rootfs cap the firmware tree checks each image
++ * against, or an image that passes its build-time size check still overruns
++ * the partition it is written to. 2368k precedes the rootfs, so ROOTMTD is
++ * also bounded by the part: 8192k needs a 16 MB flash, and asking for it on an
++ * 8 MB one puts rootfs_data past the end of the chip.
++ */
++#if defined(CONFIG_ARCH_INFINITY6C) || defined(CONFIG_ARCH_INFINITY6E)
++#define CONFIG_ENV_ROOTMTD  8192k	/* 16 MB parts */
++#define CONFIG_ENV_ROOTSIZE 0x800000
++#else					/* infinity6, infinity6b0: 8 MB parts */
++#define CONFIG_ENV_ROOTMTD  5120k
+ #define CONFIG_ENV_ROOTSIZE 0x500000
++#endif
+ 
+ #define CONFIG_BOOTARGS "console=ttyS0,115200 panic=20 root=/dev/mtdblock3 init=/init mtdparts=NOR_FLASH:256k(boot),64k(env),2048k(kernel),\\${rootmtd}(rootfs),-(rootfs_data) LX_MEM=\\${memlx} mma_heap=mma_heap_name0,miu=0,sz=\\${memsz} cma=2M"
+ #define CONFIG_BOOTCOMMAND "setenv bootcmd ${cmdnor}; sf probe 0; saveenv; run bootcmd"
+@@ -43,7 +62,7 @@
+ 	"kernsize=" __stringify(CONFIG_ENV_KERNSIZE) "\0" \
+ 	"rootaddr=" __stringify(CONFIG_ENV_ROOTADDR) "\0" \
+ 	"rootsize=" __stringify(CONFIG_ENV_ROOTSIZE) "\0" \
+-	"rootmtd=5120k\0" \
++	"rootmtd=" __stringify(CONFIG_ENV_ROOTMTD) "\0" \
+ 	"cmdnor=sf probe 0; setenv setargs setenv bootargs ${bootargs}; run setargs; sf read ${baseaddr} ${kernaddr} ${kernsize}; bootm ${baseaddr}\0" \
+ 	"ubnor=${updatetool} ${baseaddr} u-boot-${soc}-nor.bin && run ubwrite\0" \
+ 	"uknor=${updatetool} ${baseaddr} uImage.${soc} && run ukwrite\0" \

@@ -81,42 +81,30 @@ for f in "$UBOOT" "$KERNEL" "$ROOTFS"; do
 	fi
 done
 
-# THE ROOTFS PARTITION IS NOT A CONSTANT
+# THE ROOTFS PARTITION IS A CONSTANT, AND THE BOOTLOADER SAYS WHICH
 #
-# rootmtd above is a U-Boot variable, and the bootloader picks it by reading the
-# squashfs superblock at the rootfs offset and looking at how big the filesystem
-# says it is (common/cmd_sf.c):
+# It did not used to be. The bootloader picked ${rootmtd} by reading the
+# squashfs superblock at the rootfs offset and comparing bytes_used against
+# 5 MB (common/cmd_sf.c), so the partition table was a function of how well one
+# night's filesystem compressed, and this script had to answer the same
+# question on the same bytes to agree with it. Crossing the threshold moved the
+# start of rootfs_data by 3 MB and cost the camera its overlay.
 #
-#   if (magic == 0x73717368) {
-#       if (bytes + 0x1000 < 0x500000) setenv("rootmtd", "5120k");
-#       else                           setenv("rootmtd", "8192k");
-#   }
+# sigmastar-boot's 0002 patch replaces that with CONFIG_ENV_ROOTMTD, set per
+# board next to the flash layout. So the number is now decided in two places
+# that must agree -- the bootloader in this image, and the cap the rootfs was
+# built and size-checked against -- and the Makefile passes the second one in
+# as ROOTFS_KB, which is the same ROOTFS_CAP_KB that CHECK_SIZE uses.
 #
-# where `bytes` is bytes_used at offset 40 of the superblock. So the partition
-# table is a function of the image being flashed, and this script has to answer
-# the same question the bootloader will -- with the same rule, on the same
-# bytes, rather than by assuming either size.
-#
-# Getting it wrong is not a size check that fails. It decides where rootfs_data
-# begins, so an image padded for the 8192k layout and then booted into the
-# 5120k one writes 0xFF over the first 3MB of the overlay: not a brick, but
-# every setting on the camera is gone with nothing saying why.
-#
-# The magic is checked because U-Boot checks it: a rootfs it cannot recognise
-# leaves rootmtd at its compiled-in default, which is 5120k.
-SQUASH_MAGIC=73717368
-ROOTFS_MAGIC=$(od -An -tx4 -N4 "$ROOTFS" | tr -d ' ')
-ROOTFS_BYTES=$(od -An -tu4 -j40 -N4 "$ROOTFS" | tr -d ' ')
-
-if [ "$ROOTFS_MAGIC" != "$SQUASH_MAGIC" ]; then
-	ROOTFS_MAX_KB=5120
-	echo "- rootfs   not squashfs (magic 0x$ROOTFS_MAGIC); U-Boot will keep its"
-	echo "-          default 5120k rootfs, so that is what this image assumes"
-elif [ $((ROOTFS_BYTES + 4096)) -lt 5242880 ]; then
-	ROOTFS_MAX_KB=5120
-else
-	ROOTFS_MAX_KB=8192
+# Refusing to guess is the point: an image assembled for one table and booted
+# on another writes 0xFF over the start of the overlay, which is not a brick
+# and not visible either.
+if [ -z "$ROOTFS_KB" ]; then
+	echo "ROOTFS_KB is unset: the rootfs partition size must come from the" >&2
+	echo "  board's ROOTFS_CAP_KB, not be guessed from the image" >&2
+	exit 1
 fi
+ROOTFS_MAX_KB=$ROOTFS_KB
 
 IMAGE_KB=$((ROOTFS_OFF_KB + ROOTFS_MAX_KB))
 
@@ -172,5 +160,5 @@ trap - EXIT
 
 echo "- full:   $OUT ($IMAGE_KB KB, env sector left erased)"
 echo "-         boot@${BOOT_OFF_KB}K env@${ENV_OFF_KB}K kernel@${KERNEL_OFF_KB}K rootfs@${ROOTFS_OFF_KB}K"
-echo "-         rootfs partition ${ROOTFS_MAX_KB}k, which is what U-Boot will pick"
-echo "-         for a squashfs of ${ROOTFS_BYTES} bytes; rootfs_data starts at ${IMAGE_KB}K"
+echo "-         rootfs partition ${ROOTFS_MAX_KB}k, the board's cap and what the"
+echo "-         bootloader in this image is built for; rootfs_data starts at ${IMAGE_KB}K"

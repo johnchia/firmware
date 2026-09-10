@@ -355,6 +355,7 @@ else
 		echo "container, not u-boot.bin)"; \
 		exit 2; }
 	@FLASH_KB=$(shell expr $(subst ",,$(BR2_OPENIPC_FLASH_SIZE)) \* 1024) \
+	ROOTFS_KB=$(ROOTFS_CAP_KB) \
 	$(SHELL) $(PWD)/general/scripts/make_full_image.sh \
 		"$(FULLIMAGE_UBOOT)" \
 		"$(TARGET)/images" \
