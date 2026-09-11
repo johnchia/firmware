@@ -153,20 +153,19 @@ RAPTOR_STREAMING_POST_EXTRACT_HOOKS += RAPTOR_STREAMING_LAYOUT_SIBLINGS
 # carried -lhelix-aac all along. AAC=1 is one switch for the two libraries, so
 # an image that wants AAC out of rad has to supply the decoder as well.
 RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
-	$(OPENIPC_SOC_VENDOR)-osdrv-$(OPENIPC_SOC_FAMILY) faac helix-aac opus mosquitto
+	$(OPENIPC_SOC_VENDOR)-osdrv-$(OPENIPC_SOC_FAMILY) faac helix-aac opus
 
-# libmdnsd, for finding a service on the LAN rather than being told where it is
-# -- rmq's broker address is the case in hand.
+# No mosquitto and no libmdnsd, because no image built here runs rmq -- see the
+# daemon list below. Both were only ever its: nothing else on an image links
+# libmosquitto, and raptor hands libmdnsd to rmq and to the mdnsprobe tool this
+# tree does not build. With the bridge gone the two packages would install
+# three shared libraries, three mosquitto_* clients, a 40 KB stock
+# mosquitto.conf and an mdnsd daemon that no process on the image opens.
 #
-# Conditional, where mosquitto above is not, and the difference is whether the
-# daemon can be built without it. rmq always links libmosquitto, so that one is
-# unconditional; mDNS discovery is a feature of a board that asked for mDNS, and
-# an unconditional entry here would build and install mdnsd on every raptor
-# target whether or not its defconfig selected it. A board without
-# BR2_PACKAGE_MDNSD_OPENIPC simply does not get the discovery path.
-ifeq ($(BR2_PACKAGE_MDNSD_OPENIPC),y)
-RAPTOR_STREAMING_DEPENDENCIES += mdnsd-openipc
-endif
+# mdnsd did do one thing for the camera rather than for rmq: it answered
+# <hostname>.local and published the http, rtsp and ssh records in /etc/mdns.d.
+# Dropping it is therefore a visible change and not only a size one -- a camera
+# built from this tree is reached at its address, not at its name.
 
 # What this image runs. Deliberately a subset of upstream's DAEMONS: the rest
 # (recording, web, motion, wifibroadcast...) are either unported to this backend
@@ -178,17 +177,23 @@ endif
 #   rad  audio
 #   rod  OSD text rendering -- draws into SHM, which rvd uploads to MI_RGN
 #   ric  IR-cut day/night; exits immediately unless [ircut] enabled
-#   rmq  MQTT bridge; needs libmosquitto, which is why mosquitto is a dependency
-#        above. Idle unless [mqtt] enabled. It plans nothing itself: every
-#        command it receives is handed to rcd.
 #   rhd  HTTP: snapshots and MJPEG served off the same rings, plus the status
 #        page. Gated by [http] enabled, which the overlay config turns on.
 #   rcd  Config daemon. Owns raptor.conf -- validates every edit, applies what
 #        a running daemon can take live, writes what it cannot, and sequences
-#        the restarts for the rest. rmq and raptorctl are its clients, and
-#        neither writes the file, so a build without it can start the daemons
-#        but cannot change their configuration.
-RAPTOR_STREAMING_DAEMONS = rvd rsd rad rod ric rmq rhd rcd
+#        the restarts for the rest. raptorctl is its client and does not write
+#        the file itself, so a build without rcd can start the daemons but
+#        cannot change their configuration.
+#
+# rmq, upstream's MQTT bridge, is dropped rather than unported, which makes it
+# the one omission here that is a decision about the product and not about the
+# backend. It was the only consumer of libmosquitto and libmdnsd on an image,
+# with mosquitto it came to 76 KB of squashfs -- measured by building
+# hi3516cv608_os04d10_raptorwifi both ways, where it was the difference between
+# 20 KB and 96 KB spare in a 5184 KB slot -- with mdnsd worth a further 20 KB
+# or so on the boards that carried it. Putting the bridge back on a board is
+# two edits: name mosquitto in that defconfig, and add rmq to the list below.
+RAPTOR_STREAMING_DAEMONS = rvd rsd rad rod ric rhd rcd
 RAPTOR_STREAMING_TOOLS = raptorctl
 
 # The HAL backend to compile, one per SoC family. Derived from the family so a

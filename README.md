@@ -18,7 +18,6 @@ A fork of [OpenIPC/firmware][upstream] that builds camera images running
 - **A MAC address per camera,** derived from the flash unique ID or the SoC die
   ID, so two cameras on one network do not arrive sharing one.
 - **A hostname per camera,** derived from the SoC and the sensor.
-- **mDNS announcement,** on the SigmaStar and Ingenic boards.
 
 ![The Raptor configuration console](docs/console.png)
 

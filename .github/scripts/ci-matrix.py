@@ -305,6 +305,13 @@ UNBUILT_FAMILIES = {
 # It is selected by the FPV variants in OpenIPC/builder. A mainline defconfig
 # with Majestic off would take it off this list.
 #
+# mdnsd-openipc is the newest arrival and the only one here that left the
+# matrix by choice: it was on the five SigmaStar and Ingenic raptor boards until
+# raptor-streaming stopped building rmq, which was the only thing linking
+# libmdnsd. The daemon also published the camera's own <hostname>.local record,
+# so this is a feature that was dropped and not a package that was orphaned --
+# a defconfig naming the symbol again takes it straight off this list.
+#
 # usb-dual-role is here for the ordinary reason: it needs a device tree that
 # wires dwc3 as dual-role and a kernel built with CONFIG_USB_DWC3_DUAL_ROLE,
 # which no defconfig in ALL_BOARDS has. OpenIPC/builder's gk7205v200_otg_generic
@@ -315,7 +322,7 @@ NOT_BUILT = {
     "faceter-detector", "fdk-aac-openipc", "ffmpeg-openipc", "gdbserver-lite",
     "go2rtc", "herald", "hisi-gpio", "hisilicon-osdrv-hi3536dv100", "i2c-telemetry",
     "libhv-openipc", "libre-openipc", "libsrt-openipc", "linux-patcher", "matter",
-    "mavfwd", "mini", "mqtt-bot", "msposd", "n3n-openipc", "nabto",
+    "mavfwd", "mdnsd-openipc", "mini", "mqtt-bot", "msposd", "n3n-openipc", "nabto",
     "netblink", "node-exporter", "ntfy", "onvif-simple-server", "openipc-nfs-root",
     "osd-openipc", "rtl8188eus-openipc", "rtl8192eu-openipc", "rtl8811cu-openipc",
     "rtl8812au", "rtl8812au-openipc", "rtl88x2eu-openipc", "rtw-hostapd", "rubyfpv",

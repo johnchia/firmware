@@ -151,8 +151,6 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # should not be asking anyone to accept it.
 BR2_PACKAGE_MAJESTIC_FONTS=y
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
-BR2_PACKAGE_MOSQUITTO=y
-# BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_MOTORS=y
 # Buildroot's own opus, which BR2_PACKAGE_RAPTOR_STREAMING selects. Fixed
 # point because this is a soft-float userland with no FPU calling convention;

@@ -247,9 +247,11 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 # The driver's id table matches 0xB733 (multi-function) and 0xF72B (WiFi only)
 # under CONFIG_RTL8733B, which its Makefile sets from CONFIG_RTL8733BU.
 #
-# THIS IS THE ONLY DIFFERENCE FROM hi3516cv608_os04d10_raptor, and it is a
-# fifth of the rootfs: 543 KB of driver, 109 KB of cfg80211, 455 KB of
-# supplicant and 57 KB of tools, 1150 KB compressed against a 5184 KB slot.
+# THIS IS WHY THE VARIANT EXISTS, and it is a fifth of the rootfs: 543 KB of
+# driver, 109 KB of cfg80211, 455 KB of supplicant and 57 KB of tools, 1150 KB
+# compressed against a 5184 KB slot. The only other difference from
+# hi3516cv608_os04d10_raptor is what had to leave to pay for it: mosquitto,
+# below.
 # The cv608 has no standard radio, so the wired build is the one that does not
 # assume this dongle, and a board with a different one needs its own arm in
 # /etc/wireless/usb rather than this defconfig. Nothing has to set wlandev for
@@ -267,8 +269,6 @@ BR2_PACKAGE_LIBCURL_OPENIPC_MBEDTLS=y
 # BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
 # BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
-BR2_PACKAGE_MOSQUITTO=y
-# BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_MOTORS=y
 # Buildroot's own opus, which BR2_PACKAGE_RAPTOR_STREAMING selects. Fixed
 # point because this is a soft-float userland with no FPU calling convention;

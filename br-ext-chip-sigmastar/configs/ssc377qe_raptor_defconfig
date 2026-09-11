@@ -143,15 +143,6 @@ BR2_PACKAGE_LIBCURL_OPENIPC_MBEDTLS3=y
 # claim gate keys on the presence of /usr/share/openipc/eula/ (#2346). That
 # document is majestic's licence, and a camera that never carries the binary
 # should not be asking anyone to accept it.
-# mDNS-SD, so the camera answers to <hostname>.local and its services can be
-# found without knowing the address. It pairs with the per-MAC hostname derived
-# in rcS: that is what makes the name unique across cameras on the same SoC,
-# and this is what publishes it. Services are files in /etc/mdns.d.
-#
-# mquery (the LAN scanner) is deliberately left out. It is a diagnostic, this
-# rootfs has about 20 KB of slack, and browsing from a host answers the same
-# question without spending any of it.
-BR2_PACKAGE_MDNSD_OPENIPC=y
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
 # Both series, because Majestic is a blob linked against the 2.x SONAMEs and
 # cannot be rebuilt, while new code should not be starting on a branch that
@@ -159,12 +150,6 @@ BR2_PACKAGE_MBEDTLS_OPENIPC=y
 # keeps its headers out of the shared staging path. No process may reach
 # both -- see the rule in mbedtls3-openipc.mk.
 BR2_PACKAGE_MBEDTLS3_OPENIPC=y
-# The client library only. The broker is a forking server with no role on a
-# camera that publishes to one elsewhere, and Buildroot ties mosquitto's TLS to
-# OpenSSL, which this image does not carry -- mbedTLS is its TLS -- so
-# libmosquitto here speaks plain MQTT.
-BR2_PACKAGE_MOSQUITTO=y
-# BR2_PACKAGE_MOSQUITTO_BROKER is not set
 BR2_PACKAGE_RAPTOR_STREAMING=y
 BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6C=y
 # The bootloader, built here rather than downloaded. It is upstream's, unmodified

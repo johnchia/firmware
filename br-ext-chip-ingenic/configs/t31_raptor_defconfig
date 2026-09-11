@@ -135,12 +135,6 @@ BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
 # RTSP path goes through compy, which links mbedtls3 rather than libevent. They
 # cost 258 KB of rootfs to sit unopened.
 BR2_PACKAGE_MBEDTLS_OPENIPC=y
-# mDNS-SD, so the camera answers to <hostname>.local. On a wireless camera with
-# no Ethernet and a DHCP address, being findable by name is not a convenience.
-BR2_PACKAGE_MDNSD_OPENIPC=y
-# The client library only; rmq publishes to a broker elsewhere.
-BR2_PACKAGE_MOSQUITTO=y
-# BR2_PACKAGE_MOSQUITTO_BROKER is not set
 # Buildroot's own opus, which BR2_PACKAGE_RAPTOR_STREAMING selects. Fixed
 # point because this is a soft-float userland with no FPU calling convention;
 # it is the same arithmetic opus-openipc was built with here before.
