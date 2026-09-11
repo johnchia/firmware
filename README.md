@@ -24,17 +24,22 @@ A fork of [OpenIPC/firmware][upstream] that builds camera images running
 
 ## Boards
 
-| Board | SoC · family | Rootfs | Download |
-|---|---|---|---|
-| `ssc377qe_raptor` | SSC377QE · infinity6c | 8192 KB | [sysupgrade][t-377] · [whole-flash][f-377] |
-| `ssc377d_raptor` | SSC377D · infinity6c | 8192 KB | [sysupgrade][t-377d] · [whole-flash][f-377d] |
-| `ssc30kq_raptor` | SSC30KQ · infinity6e | 8192 KB | [sysupgrade][t-30k] · [whole-flash][f-30k] |
-| `ssc333_sc3336_raptor` | SSC333 · infinity6b0 | 5120 KB | [sysupgrade][t-333] |
-| `t31_raptor` | T31X · ingenic | 8192 KB | [sysupgrade][t-t31] · [whole-flash][f-t31] |
-| `hi3516ev300_raptor` | Hi3516EV300 · hi3516ev200 | 10240 KB | [sysupgrade][t-ev300] |
-| `hi3516ev200_raptor` | Hi3516EV200 · hi3516ev200 | 5120 KB | [sysupgrade][t-ev200] |
-| `hi3516cv608_os04d10_raptor` | Hi3516CV608 · hi3516cv6xx | 5184 KB | [sysupgrade][t-cv608] |
-| `hi3516cv608_os04d10_raptorwifi` | Hi3516CV608 · hi3516cv6xx | 5184 KB | [sysupgrade][t-cv608w] |
+Sizes are the squashfs from the latest nightly, so they move with every
+build. Free is the headroom a Wi-Fi driver or an IQ tuning has to fit into --
+a driver is often 1.5 MB, which is why the column is here and why
+`hi3516cv608_os04d10_raptorwifi`, at 28 KB, already carries one.
+
+| Board | SoC · family | Flash | Rootfs | Free | Download |
+|---|---|---|---|---|---|
+| `ssc377qe_raptor` | SSC377QE · infinity6c | 16 MB NOR | 4580 of 8192 KB | 3612 KB | [sysupgrade][t-377] · [whole-flash][f-377] |
+| `ssc377d_raptor` | SSC377D · infinity6c | 16 MB NOR | 4264 of 8192 KB | 3928 KB | [sysupgrade][t-377d] · [whole-flash][f-377d] |
+| `ssc30kq_raptor` | SSC30KQ · infinity6e | 16 MB NOR | 5068 of 8192 KB | 3124 KB | [sysupgrade][t-30k] · [whole-flash][f-30k] |
+| `ssc333_sc3336_raptor` | SSC333 · infinity6b0 | 8 MB NOR | 4796 of 5120 KB | 324 KB | [sysupgrade][t-333] |
+| `t31_raptor` | T31X · ingenic | 16 MB NOR | 4608 of 8192 KB | 3584 KB | [sysupgrade][t-t31] · [whole-flash][f-t31] |
+| `hi3516ev300_raptor` | Hi3516EV300 · hi3516ev200 | 16 MB NOR | 4684 of 10240 KB | 5556 KB | [sysupgrade][t-ev300] |
+| `hi3516ev200_raptor` | Hi3516EV200 · hi3516ev200 | 8 MB NOR | 4588 of 5120 KB | 532 KB | [sysupgrade][t-ev200] |
+| `hi3516cv608_os04d10_raptor` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 3996 of 5184 KB | 1188 KB | [sysupgrade][t-cv608] |
+| `hi3516cv608_os04d10_raptorwifi` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 5156 of 5184 KB | 28 KB | [sysupgrade][t-cv608w] |
 
 ## Before you flash
 
