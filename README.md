@@ -8,8 +8,8 @@ A fork of [OpenIPC/firmware][upstream] that builds camera images running
 - **Raptor replaces Majestic** as the streamer: a set of small daemons sharing
   frames through shared memory, all GPL-3.0 and rebuildable, where the stock
   image runs one closed binary.
-- **Retuned ISP calibration** -- IMX335 on infinity6c, GC4653 on infinity6e,
-  IMX335 on hi3516ev300.
+- **Retuned ISP calibration** on most of the sensors this fork has had on a
+  bench -- the sensor table below marks which.
 - **Sensor driver fixes.** SC450AI reports its model ID, so the ISP loads its
   IQ tuning instead of none; and mirror/flip is applied on nine SigmaStar
   drivers that staged the register and then dropped it.
@@ -40,6 +40,38 @@ a driver is often 1.5 MB, which is why the column is here and why
 | `hi3516ev200_raptor` | Hi3516EV200 · hi3516ev200 | 8 MB NOR | 4588 of 5120 KB | 532 KB | [sysupgrade][t-ev200] |
 | `hi3516cv608_os04d10_raptor` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 3996 of 5184 KB | 1188 KB | [sysupgrade][t-cv608] |
 | `hi3516cv608_os04d10_raptorwifi` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 5156 of 5184 KB | 28 KB | [sysupgrade][t-cv608w] |
+
+## Sensors
+
+Every image carries drivers for more sensors than have ever been in front of
+one. **Bold** is tested on a camera here and carries a tuning made for this
+fork; *italic* is tested on a camera but renders with the stock tuning; the
+rest ship a driver nobody here has run.
+
+| Family | Images | Sensors on the image |
+|---|---|---|
+| infinity6c | `ssc377qe_raptor`, `ssc377d_raptor` | **imx335**, **sc450ai**, gc4653, imx415, os04a10, sc401ai, sc4336p, sc501ai, sc830ai, sc850sl |
+| infinity6e | `ssc30kq_raptor` | **gc4653**, gc2053, gc2093, imx307, imx335, imx347, imx415, os04a10, os04c10, sc501ai, sc8235 |
+| infinity6b0 | `ssc333_sc3336_raptor` | **sc3336** |
+| hi3516ev200 | `hi3516ev200_raptor`, `hi3516ev300_raptor` | **imx307**, **imx335**, gc2053, gc4653, jxf22, jxf23, jxf37, sc2231, sc2232h, sc2239, sc2315e, sc3235, sc3335, sc4236, sp2305, sp2308 |
+| hi3516cv6xx | both `hi3516cv608_os04d10` variants | **os04d10** |
+| ingenic t31 | `t31_raptor` | *gc2053* |
+
+Three of those rows are one sensor long on purpose, not for lack of drivers.
+`ssc333_sc3336_raptor` and `t31_raptor` name their part in the defconfig, and
+the cv608 images drop the other five the family builds -- 727 KB of driver for
+sensors a single-board target will never meet. Changing sensor on those means
+editing the defconfig and rebuilding, not just setting `sensor` in the U-Boot
+environment.
+
+A driver is also only half of what a part needs. The hi3516ev200 images carry
+34 sensor libraries but 16 mode configs, and raptor needs the mode config to
+bring a part up -- the library on its own does nothing, which is why the row
+above is the shorter list. On SigmaStar the equivalent gap is the IQ tuning: a
+sensor whose `.bin` is missing runs with no tuning at all rather than a poor
+one. That is infinity6c's sc4336p, sc501ai and sc850sl, infinity6e's gc2093,
+imx347, os04a10, os04c10 and sc8235, and on hi3516ev200 everything except
+imx307, imx335 and jxf23.
 
 ## Before you flash
 
