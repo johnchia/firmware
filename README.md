@@ -83,14 +83,14 @@ ssh root@<board> 'sysupgrade --url=<link from the table>'
 
 ## Configuring a running camera
 
-The configuration console is at `http://<camera>:8080/`.
+The configuration console is at `http://<camera>/`.
 
 A new camera ships **unclaimed**: root has no password, so nothing can be
 configured and anyone who can reach the camera can take it. Claiming it means
 setting that password, and it is what protects the console afterwards. Three
 doors do it, and any one is enough:
 
-- the console at `http://<camera>:8080/`, which draws a claim card instead of
+- the console at `http://<camera>/`, which draws a claim card instead of
   its settings while the camera has no password;
 - the setup page on the camera's own access point, if it has no network yet;
 - SSH -- log in as `root` with an empty password and it prompts for one.
