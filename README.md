@@ -57,22 +57,6 @@ rest ship a driver nobody here has run.
 | hi3516cv6xx | both `hi3516cv608_os04d10` variants | **os04d10** |
 | ingenic t31 | `t31_raptor` | *gc2053* |
 
-Three of those rows are one sensor long on purpose, not for lack of drivers.
-`ssc333_sc3336_raptor` and `t31_raptor` name their part in the defconfig, and
-the cv608 images drop the other five the family builds -- 727 KB of driver for
-sensors a single-board target will never meet. Changing sensor on those means
-editing the defconfig and rebuilding, not just setting `sensor` in the U-Boot
-environment.
-
-A driver is also only half of what a part needs. The hi3516ev200 images carry
-34 sensor libraries but 16 mode configs, and raptor needs the mode config to
-bring a part up -- the library on its own does nothing, which is why the row
-above is the shorter list. On SigmaStar the equivalent gap is the IQ tuning: a
-sensor whose `.bin` is missing runs with no tuning at all rather than a poor
-one. That is infinity6c's sc4336p, sc501ai and sc850sl, infinity6e's gc2093,
-imx347, os04a10, os04c10 and sc8235, and on hi3516ev200 everything except
-imx307, imx335 and jxf23.
-
 ## Before you flash
 
 > **These are experimental builds. Have a recovery path before you write one
