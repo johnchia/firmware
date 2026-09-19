@@ -46,11 +46,18 @@ DNSD=$(command -v dnsd)
 
 say() { echo "setup-mode: $*"; }
 
-# The same question S40network and rcd both ask: the boot environment names a
-# radio and the kernel found one. Either alone is a camera with no interface
-# to raise an access point on.
+# The interface is the whole question. wlan0 exists only where a driver bound a
+# device, and there are two ways it gets there: S40network brings up the arm the
+# environment names, or -- when wlandev is unset -- /etc/wireless/detect probes
+# the generic arms and keeps whichever one binds.
+#
+# This used to demand a non-empty wlandev as well, which made that second path
+# invisible: a camera with a detected dongle has a working radio, a wlan0 and no
+# wlandev, so the gate refused and no access point went up. It refused silently,
+# too, because start() asks this before its first message -- the symptom was a
+# portal that never appeared with nothing in the log to say why. Detection only
+# ever adds a radio, so nothing is lost by trusting what it found.
 radio_present() {
-	[ -n "$(fw_printenv -n wlandev 2>/dev/null)" ] || return 1
 	[ -e "/sys/class/net/$IFACE" ]
 }
 
