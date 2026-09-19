@@ -19,7 +19,7 @@
 # sigmastar-boot hooks build a container into <images-dir> from the commit the
 # board defconfig pins.
 #
-# THE ENVIRONMENT IS DELIBERATELY BLANK
+# THE ENVIRONMENT IS BLANK UNLESS A BOARD ASKS OTHERWISE
 #
 # The image spans boot..rootfs, so writing it clears the environment sector that
 # sits between them. That is intended rather than tolerated: a blank environment
@@ -27,6 +27,17 @@
 # the NOR part's unique ID when it is empty or still the vendor default, so a
 # board flashed with this comes up with an address of its own. Preserving a stale
 # environment would carry the shared 00:00:23:34:45:66 forward instead.
+#
+# ENV_BIN overrides that for the boards that cannot live with a blank one. The
+# case it exists for is a radio whose power pin has to be driven before the
+# interface appears: wlandev has to name the arm before S40network runs, and on
+# a camera with no login there is no later moment to set it. ssc377_tapo_c120 is
+# that board, and BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE is what builds the blob.
+#
+# A written environment must be a COMPLETE one. U-Boot uses a stored env with a
+# good CRC instead of its compiled-in default, not as well as it, so a partial
+# blob is a board missing whatever was left out. ethaddr stays out of it either
+# way, which is what keeps the MAC derivation above working.
 #
 # ON THE FLASH DESCRIPTOR (SNI)
 #
@@ -42,6 +53,9 @@
 #
 # Usage:
 #   make_full_image.sh <uboot.bin> <images-dir> <soc-model> <output.bin> [sni-ref]
+#
+# ENV_BIN=<uboot-env.bin> in the environment writes the env sector; unset leaves
+# it erased. FLASH_KB and ROOTFS_KB are read from the environment too.
 #
 
 set -e
@@ -146,6 +160,18 @@ dd if="$UBOOT"  of="$tmp" bs=1K seek="$BOOT_OFF_KB"   conv=notrunc status=none
 dd if="$KERNEL" of="$tmp" bs=1K seek="$KERNEL_OFF_KB" conv=notrunc status=none
 dd if="$ROOTFS" of="$tmp" bs=1K seek="$ROOTFS_OFF_KB" conv=notrunc status=none
 
+# The environment, when the board builds one. Checked against its partition like
+# every other piece: mkenvimage pads to the size it was given, and a blob built
+# for a bigger env than this layout has would otherwise run into the kernel.
+if [ -n "$ENV_BIN" ]; then
+	if [ ! -f "$ENV_BIN" ]; then
+		echo "missing environment image: $ENV_BIN" >&2
+		exit 1
+	fi
+	check env "$ENV_BIN" "$((KERNEL_OFF_KB - ENV_OFF_KB))"
+	dd if="$ENV_BIN" of="$tmp" bs=1K seek="$ENV_OFF_KB" conv=notrunc status=none
+fi
+
 if [ -n "$SNI_REF" ]; then
 	if [ ! -f "$SNI_REF" ]; then
 		echo "missing SNI reference: $SNI_REF" >&2
@@ -158,7 +184,11 @@ fi
 mv "$tmp" "$OUT"
 trap - EXIT
 
-echo "- full:   $OUT ($IMAGE_KB KB, env sector left erased)"
+if [ -n "$ENV_BIN" ]; then
+	echo "- full:   $OUT ($IMAGE_KB KB, env written from $ENV_BIN)"
+else
+	echo "- full:   $OUT ($IMAGE_KB KB, env sector left erased)"
+fi
 echo "-         boot@${BOOT_OFF_KB}K env@${ENV_OFF_KB}K kernel@${KERNEL_OFF_KB}K rootfs@${ROOTFS_OFF_KB}K"
 echo "-         rootfs partition ${ROOTFS_MAX_KB}k, the board's cap and what the"
 echo "-         bootloader in this image is built for; rootfs_data starts at ${IMAGE_KB}K"

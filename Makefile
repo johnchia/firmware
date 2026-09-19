@@ -291,6 +291,18 @@ repack-final: build
 FULLIMAGE_UBOOT = $(strip $(if $(strip $(UBOOT_BIN)),$(abspath $(UBOOT_BIN)),\
 	$(TARGET)/images/u-boot-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor.bin))
 
+# The environment sector, for the boards that build one. Empty for every other
+# board, and make_full_image.sh then leaves the sector erased as it always has.
+#
+# Keyed on the symbol rather than on the file existing, so that a board that
+# asked for an environment and did not get one fails here instead of quietly
+# shipping a blank sector -- which on ssc377_tapo_c120 is a camera whose radio
+# never powers up, with nothing in the image to say why. ENV_BIN overrides, for
+# a blob built elsewhere.
+FULLIMAGE_ENV = $(strip $(if $(strip $(ENV_BIN)),$(abspath $(ENV_BIN)),\
+	$(if $(filter y,$(BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE)),\
+		$(TARGET)/images/uboot-env.bin)))
+
 fullimage: defconfig
 ifeq ($(BR2_OPENIPC_SOC_FAMILY),"hi3516cv6xx")
 # cv6xx keeps its environment in a text file the board defconfig names, so the
@@ -356,6 +368,7 @@ else
 		exit 2; }
 	@FLASH_KB=$(shell expr $(subst ",,$(BR2_OPENIPC_FLASH_SIZE)) \* 1024) \
 	ROOTFS_KB=$(ROOTFS_CAP_KB) \
+	ENV_BIN=$(FULLIMAGE_ENV) \
 	$(SHELL) $(PWD)/general/scripts/make_full_image.sh \
 		"$(FULLIMAGE_UBOOT)" \
 		"$(TARGET)/images" \
