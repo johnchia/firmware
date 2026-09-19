@@ -58,6 +58,11 @@ ALL_BOARDS = [
     # built by anything at all -- left out, the package checks below report each
     # of them as reaching no board.
     "ssc377qe_raptor", "ssc377d_raptor", "ssc30kq_raptor", "ssc333_sc3336_raptor",
+    # ssc377_raptor is ssc377d_raptor on the suffixless part. ssc377_tapo_c120 is
+    # that plus an RTL8188FU and the baked environment naming the arm that powers
+    # it -- a pin number is board knowledge and cannot be probed for, so the board
+    # gets a target rather than the driver getting a symbol.
+    "ssc377_raptor", "ssc377_tapo_c120",
     # Ingenic. t31_raptor is a Raptor board and belongs with the three above by
     # kind; it sits here because the vendor groupings are what a reader scans
     # for, and it is the only Ingenic board that carries ingenic-uboot --
@@ -270,6 +275,12 @@ SMOKE_BOARDS = [
     # every build-step trait, so what it proves is the wireless packages
     # still resolve, not a new shape.
     "hi3516cv608_os04d10_raptorwifi",
+    # The only SigmaStar board that bakes a U-Boot environment, and the only
+    # user of the tapo_c120 variant. Both are why it is here: the variant has to
+    # be provable like every other, and the environment is new plumbing --
+    # BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE feeding make_full_image.sh's ENV_BIN
+    # path, which no other board in this list exercises on this vendor.
+    "ssc377_tapo_c120",
     "xm530_lite",             # Xiongmai
 ]
 
@@ -836,10 +847,10 @@ def self_test():
         # through a Config.in select; either one missing zeroes them out.
         (["general/package/uclibc-compat/src/uclibc-compat-static.c"],
          3, "reached via .mk _DEPENDENCIES"),
-        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 37,
-        # and the extra thirteen are two separate things:
+        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 39,
+        # and the extra fifteen are two separate things:
         #
-        #   - the four raptor boards, which are SigmaStar and belong here;
+        #   - the six raptor boards, which are SigmaStar and belong here;
         #   - nine HiSilicon and Goke *ultimate* boards, which do not.
         #
         # The nine arrive through divinus. general/package/divinus/divinus.mk
@@ -854,7 +865,7 @@ def self_test():
         # recorded rather than the guard taught. Narrowing it means giving those
         # two lines a BR2_ symbol to hang on, in divinus.mk.
         (["general/package/sigmastar-osdrv-sensors/Config.in"],
-         37, "reached via Config.in select"),
+         39, "reached via Config.in select"),
         # Shared packages narrow too, just barely.
         (["general/package/majestic/majestic.mk"], 87, "majestic is nearly everywhere"),
         # Board configs and kernel configs.

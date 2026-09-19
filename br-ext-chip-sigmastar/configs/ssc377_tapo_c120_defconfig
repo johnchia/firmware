@@ -1,0 +1,263 @@
+# TP-Link Tapo C120 -- ssc377_raptor plus the radio this camera actually has.
+#
+# Against ssc377_raptor: an RTL8188FU, the supplicant, and a baked U-Boot
+# environment naming the arm that powers the chip. Nothing else differs, and a
+# bug fixed there is fixed here.
+#
+# THE RADIO NEEDS TWO PINS DRIVEN BEFORE IT EXISTS. GPIO 42 (PAD_FUART_RX on
+# infinity6c) gates the RTL8188FTV's supply, and this tree's kernel holds it
+# low: the infinity6c padmux table in OpenIPC/linux muxes that pad to PWM0 at
+# boot and an idle PWM output is a low. The vendor's device tree leaves the
+# pad alone. GPIO 8 (PAD_UART1_TX) is the chip enable, which the stock
+# firmware pulses from userspace -- "wifi_enable":8, active high, in
+# /etc/oem.config, driven by its tmpd_insmod_driver script: low a second,
+# high, two seconds, insmod. Until both are driven the USB host comes up with
+# nothing on it.
+#
+# That is what makes this a board target rather than a symbol. A pin number is
+# board knowledge, it cannot be probed for -- /etc/wireless/detect only walks
+# the generic arms, because a board-specific one has to release power before
+# there is anything on the bus to find -- and the arm that knows it therefore
+# has to be named. wlandev names it, and the environment below is why it is set
+# on a camera nobody can log in to yet.
+#
+# WHERE THE PINS COME FROM. GPIO 42 is what OpenIPC/builder#57 and the wiki's
+# Tapo C120 page (OpenIPC/wiki#549) drive, the latter from a unit running
+# OpenIPC with the radio up. GPIO 8 is the vendor's own number, and its
+# kernel's pad table is byte-for-byte this tree's, so the numbering agrees.
+#
+# NOT BOARD-VERIFIED HERE: the arm, the environment, and the image. On a unit
+# where the dongle still does not enumerate, the supply is the first thing to
+# check -- the wifi rail should come up the moment GPIO 42 is exported high.
+#
+# Some C120 units are not this board. The vendor image also ships esp32.ko, a
+# TP-Link SDIO driver matching sdio:c*v6666d3333*, selected by an ESP32_SUPPORT
+# flag in the manufacturing block. Those units have no Realtek part and this
+# target does not fit them.
+
+# Architecture
+BR2_arm=y
+BR2_cortex_a35=y
+BR2_ARM_FPU_NEON_VFPV4=y
+BR2_ARM_INSTRUCTIONS_THUMB2=y
+
+# Toolchain
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM=y
+BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
+# Mirrored, not tracked. This is a byte-for-byte copy of the toolchain OpenIPC
+# publishes -- nothing rebuilt, so it is the compiler the ssc377qe board was
+# verified with -- taken 2026-08-28 and given a name
+# that carries the date.
+#
+# Upstream keeps all of them on one `toolchain` tag and overwrites the assets in
+# place: published 2025-02-24, last rewritten 2026-05-29. Buildroot caches a
+# download by filename, so toolchain.<family>.tgz named one file forever while
+# the bytes behind it were free to change, on a tag nothing prevents from being
+# rewritten again. A dated name makes a new upload a new filename, which a stale
+# download cache cannot answer for.
+#
+# sha256 of all three is in the release notes. OPENIPC_KERNEL is <vendor>-<family>
+# -- the toolchain is per family, and this is the same string OPENIPC_TOOLCHAIN
+# was built from.
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/johnchia/firmware/releases/download/toolchain-2026-08-28/toolchain.$(OPENIPC_KERNEL)-20260828.tgz"
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="arm-openipc-linux-musleabihf"
+BR2_TOOLCHAIN_EXTERNAL_HEADERS_5_10=y
+BR2_TOOLCHAIN_EXTERNAL_CUSTOM_MUSL=y
+BR2_TOOLCHAIN_EXTERNAL_CXX=y
+
+# Kernel
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+# The kernel from a fork of openipc/linux, on a branch of the same name.
+#
+# It carries /proc/flash_uid: the NOR part's factory unique ID, which on
+# this SoC is the only per-unit identity there is, the die ID registers reading
+# zero. rcS derives a MAC address from it, so that every camera built from this
+# image does not answer to 00:00:23:34:45:66.
+#
+# PINNED, NOT TRACKED. The URL names a commit; it used to name the branch, and
+# a branch name means one filename forever. Buildroot caches a download by
+# filename and does not re-fetch, so a tree that had built this board kept
+# building whatever it fetched first -- with nothing anywhere able to say which
+# commit that was. A commit in the URL makes the filename change when the source
+# does, and makes the tarball sitting in dl/linux/ answer the question.
+#
+# The branch is still where new work lands. Bumping this line is the deliberate
+# act that brings it here, and this says what it has moved to since:
+#   git ls-remote https://github.com/johnchia/linux refs/heads/sigmastar-infinity6c
+#
+# The pin is the amended commit, and the distinction is not academic. The
+# version an unpinned tree here had cached clamped the RDUID read and returned
+# 114a3f3b09910000 -- six bytes of the ID and two zeros -- which folds into a
+# different MAC than the 114a3f3b09914824 the ssc377qe unit was verified on. Both
+# answered to the name "sigmastar-infinity6c".
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="https://github.com/johnchia/linux/archive/83a9f82c5716031ddfa51bf838e9f8fb93605c7a.tar.gz"
+BR2_LINUX_KERNEL_USE_CUSTOM_CONFIG=y
+BR2_LINUX_KERNEL_CUSTOM_CONFIG_FILE="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/infinity6c-ssc027a.config"
+BR2_LINUX_KERNEL_UIMAGE=y
+BR2_LINUX_KERNEL_XZ=y
+
+# Filesystem
+BR2_PACKAGE_BUSYBOX_CONFIG="$(BR2_EXTERNAL)/package/busybox/busybox.config"
+BR2_PACKAGE_EXFATPROGS=y
+BR2_PACKAGE_UBOOT_TOOLS=y
+BR2_PACKAGE_WIREGUARD_TOOLS=y
+BR2_PACKAGE_ZLIB=y
+# BR2_PACKAGE_IFUPDOWN_SCRIPTS is not set
+BR2_TARGET_ROOTFS_SQUASHFS=y
+BR2_TARGET_ROOTFS_SQUASHFS4_XZ=y
+# Fail the build, not the flash, when the rootfs outgrows its partition. The
+# limit is BR2_OPENIPC_ROOTFS_PART_KB below.
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL)/scripts/check-rootfs-size.sh"
+
+# OpenIPC
+BR2_OPENIPC_SOC_VENDOR="sigmastar"
+BR2_OPENIPC_SOC_MODEL="ssc377"
+BR2_OPENIPC_SOC_FAMILY="infinity6c"
+BR2_OPENIPC_VARIANT="tapo_c120"
+BR2_OPENIPC_FLASH_SIZE="16"
+# The rootfs partition, stated because it does not follow from the chip size.
+# u-boot picks between two layouts at boot and reconfigures to the larger one
+# once the rootfs outgrows 5120KB; on 16MB the larger layout gives the rootfs
+# 8MB, as the ssc377qe board reports it:
+#
+#   mtd2 kernel      offset 0x00050000  size 0x00200000  (2048 KB)
+#   mtd3 rootfs      offset 0x00250000  size 0x00800000  (8192 KB)
+#   mtd4 rootfs_data offset 0x00a50000  size 0x005b0000  (5824 KB)
+#
+# summing to exactly 0x1000000. The layout is u-boot's and follows the chip
+# size, not the SoC model, which is why it is expected to carry over to this
+# part -- and it is the same bootloader commit, built here from the same
+# infinity6c defconfig. It has not been read off an SSC377. This image needs
+# the larger layout: with the radio in it the rootfs does not fit a 5120k mtd3,
+# so a board that selected the smaller layout would refuse the flash rather
+# than take a short image -- which is the safe way for the guess to be wrong.
+BR2_OPENIPC_ROOTFS_PART_KB="8192"
+
+# Packages
+#
+# Raptor owns the camera on this image: nothing else streams from it, so the
+# OSDRV package installs the full Infinity6C vendor library bundle on its own
+# and the HAL dlopens what it needs from there.
+#
+# Majestic is carried anyway, as a reference encoder rather than a streamer. It
+# is the second opinion when the MI stack refuses something and it is not clear
+# whether the fault is Raptor's or the SoC's -- the H.265 rate-control question
+# on this part is exactly that shape. It does not start on its own: a post-build
+# hook renames its init script to K95majestic (see
+# general/scripts/late-post-build-hooks.list), because /etc/init.d runs in name
+# order and S95majestic would otherwise take the MI devices before S95raptor.
+# To use it: /etc/init.d/S95raptor stop, then run majestic by hand.
+#
+# Raptor is fetched from four pinned commits on github.com/johnchia (the
+# sigmastar branches are not upstream yet), so this target builds with no
+# checkout. To build one instead:
+#
+#   make BOARD=ssc377_tapo_c120 RAPTOR_SRCDIR=/path/to/raptor-parent
+#
+# libschrift (the glyph rasteriser) and majestic-fonts (the TrueType file it
+# loads) are pulled in by the Raptor package rather than listed here.
+BR2_PACKAGE_DROPBEAR_OPENIPC=y
+BR2_PACKAGE_EXFAT_OPENIPC=y
+BR2_PACKAGE_IPCTOOL=y
+BR2_PACKAGE_JSONFILTER=y
+BR2_PACKAGE_LIBCURL_OPENIPC=y
+BR2_PACKAGE_LIBCURL_OPENIPC_CURL=y
+# BR2_PACKAGE_LIBCURL_OPENIPC_PROXY_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_COOKIES_SUPPORT is not set
+# BR2_PACKAGE_LIBCURL_OPENIPC_EXTRA_PROTOCOLS_FEATURES is not set
+# Majestic stays out. It was here as the reference encoder to cross-check
+# raptor against -- the post-build hook still defuses its init script to
+# K95majestic for exactly that -- but a dev tool does not have to ship in the
+# image people flash. Copy the binary into a board's overlay when a comparison
+# run is wanted; nothing else needs it, and majestic-fonts, which raptor does
+# need for the OSD, is a separate package that comes in through raptor's own
+# dependencies.
+#
+# Not shipping it also keeps the image clear of the Majestic EULA, which the
+# claim gate keys on the presence of /usr/share/openipc/eula/ (#2346). That
+# document is majestic's licence, and a camera that never carries the binary
+# should not be asking anyone to accept it.
+BR2_PACKAGE_MBEDTLS_OPENIPC=y
+BR2_PACKAGE_RAPTOR_STREAMING=y
+BR2_PACKAGE_SIGMASTAR_OSDRV_INFINITY6C=y
+# The bootloader, built here rather than downloaded. It is upstream's, unmodified
+# but for a packaging patch: the MAC derivation that used to justify a fork now
+# lives in rootfs, where rcS folds /proc/flash_uid into an address. What building
+# it locally buys is that a bootloader change can reach an image at all -- both
+# paths that assemble a full .bin otherwise fetch u-boot from the release server.
+# It is not in the sysupgrade tarball; it lands in images/ as
+# u-boot-ssc377-nor.bin for `make fullimage`, because mtd0 has no software
+# recovery and writing it is a deliberate act.
+BR2_TARGET_UBOOT=y
+BR2_TARGET_UBOOT_BUILD_SYSTEM_KCONFIG=y
+BR2_TARGET_UBOOT_CUSTOM_TARBALL=y
+# Pinned by commit, like the kernel and the toolchain above. The branch is
+# openipc/u-boot-sigmastar master and this is where it stood; bumping the line is
+# the deliberate act that moves it, and the hash in all-patches/uboot/uboot.hash
+# says which bytes that commit must arrive as.
+BR2_TARGET_UBOOT_CUSTOM_TARBALL_LOCATION="https://github.com/openipc/u-boot-sigmastar/archive/bf77aff5d44f34d14b89b3f4014aa8dda9834794.tar.gz"
+# One defconfig per family; the SoC model reaches the code as -DPRODUCT_SOC,
+# which sigmastar-boot passes. The vendor's own arrangement, from build.sh.
+#
+# Spelled out rather than written as $(OPENIPC_SOC_FAMILY), which does not work
+# here and fails in a way worth knowing about. uboot.mk refuses an empty board
+# defconfig with $(error) at parse time -- boot/common.mk, buildroot/Makefile
+# line 532 -- and this tree's OPENIPC_* variables are not defined until
+# external.mk is included thirteen lines later. The expansion is empty exactly
+# at the moment it is checked, so the build dies claiming nothing was specified.
+# (The kernel's $(EXTERNAL_VENDOR) paths are fine: those are read in recipes,
+# not at parse time.) sigmastar-boot asserts the two agree before building.
+BR2_TARGET_UBOOT_BOARD_DEFCONFIG="infinity6c"
+# The container make_boot_spinor.sh assembles, not u-boot.bin. Naming it here is
+# what makes a build that produced no container fail rather than quietly install
+# nothing; sigmastar-boot then renames it to u-boot-<soc>-nor.bin.
+BR2_TARGET_UBOOT_FORMAT_CUSTOM=y
+BR2_TARGET_UBOOT_FORMAT_CUSTOM_NAME="BOOT.bin"
+# Not the global patch dir. t31_raptor builds a different U-Boot through the
+# same Buildroot package, and all-patches/uboot/ would reach it too.
+BR2_TARGET_UBOOT_PATCH="$(BR2_EXTERNAL)/package/sigmastar-boot/patches"
+BR2_PACKAGE_SIGMASTAR_BOOT=y
+BR2_PACKAGE_VTUND_OPENIPC=y
+
+# Wireless. The RTL8188FU over USB, powered by the arm the environment below
+# names. Copied from ssc333_sc3336_raptor, which is where this driver has run
+# on hardware.
+#
+# cfg80211 is a module in this kernel config, not built in, so the driver pulls
+# it in at modprobe time rather than costing kernel-slot space -- which matters
+# here, because the kernel partition is the tight one on this image while the
+# rootfs has megabytes spare.
+BR2_PACKAGE_RTL8188FU_OPENIPC=y
+BR2_PACKAGE_WIRELESS_TOOLS=y
+BR2_PACKAGE_WPA_SUPPLICANT=y
+BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
+# No wpa_passphrase, on the same reasoning as hi3516cv608_os04d10_raptorwifi.
+# /etc/wireless/wpa-conf replaced it and writes psk="..." for the supplicant to
+# derive, or passes a 64-hex wlanpass through as a pre-derived key, which
+# wpa_passphrase cannot accept. Nothing execs the binary.
+# Setup mode raises an access point of its own, and this is what lets the
+# supplicant be one: `mode=2` in a network block is rejected without it. No
+# hostapd, on the same reasoning as the ssc333, t31 and cv608 targets.
+#
+# 8188fu registers rtw_cfg80211_ops and defines cfg80211_rtw_start_ap, so
+# -D nl80211 is the right driver for it. That it beacons has not been shown on
+# this board.
+BR2_PACKAGE_WPA_SUPPLICANT_AP_SUPPORT=y
+
+# The U-Boot environment, baked rather than left erased.
+#
+# Every other SigmaStar target here ships an erased env sector and lets U-Boot
+# write its own defaults on the first boot. This one cannot: wlandev has to be
+# set before S40network runs, and on a camera with no login there is no moment
+# at which anyone could set it. Same idiom as t31_raptor, which bakes
+# wlandev=atbm603x-t31-wyze-v3 for the same reason.
+#
+# The file is a full transcription of U-Boot's compiled-in defaults plus that
+# one line, because a stored environment with a good CRC replaces the default
+# rather than merging with it. See the header of tapo-c120.env.txt.
+# (openipc.fragment already sets BR2_PACKAGE_HOST_UBOOT_TOOLS.)
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE=y
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SOURCE="$(BR2_EXTERNAL)/../br-ext-chip-sigmastar/board/$(OPENIPC_SOC_FAMILY)/tapo-c120.env.txt"
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"

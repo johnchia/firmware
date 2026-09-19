@@ -211,6 +211,50 @@ if [ "$1" = "rtl8188fu-ssc333-meari-speed-6s" ]; then
 	exit 0
 fi
 
+# SSC377 TP-Link Tapo C120
+#
+# The radio has no power until this pin is driven, which is why the dongle never
+# enumerates on a stock OpenIPC image: the USB host comes up and nothing answers.
+#
+# Pin and polarity are the vendor firmware's own. Its /etc/oem.config carries
+#
+#	"wifi_enable":8, "wifi_enable_gpio_active_low":0
+#
+# and the app reads exactly those two keys -- WIFI_ENABLE_GPIO and
+# WIFI_ENABLE_GPIO_ACTIVE_LOW. active_low 0 is why this sets the pin rather than
+# clearing it, unlike the Imou and Meari arms above.
+#
+# The number is the one the vendor app hands to its own gpio.ko, and this
+# helper exports through /sys/class/gpio instead, so the two numbering schemes
+# have not been shown to agree on this part. If the dongle still does not
+# enumerate, that is the thing to doubt first -- `gpio search` sweeps a range.
+#
+# Some C120 units are not this board at all: the vendor image also ships
+# esp32.ko, a TP-Link SDIO driver matching sdio:c*v6666d3333*, selected by an
+# ESP32_SUPPORT flag in the manufacturing block. Those have no Realtek part and
+# nothing here reaches them.
+if [ "$1" = "rtl8188fu-ssc377-tapo-c120" ]; then
+	# Two pins, and the order matters. GPIO 42 (PAD_FUART_RX) gates the
+	# RTL8188FTV's supply; the infinity6c padmux table in OpenIPC/linux muxes
+	# that pad to PWM0 at boot and the idle PWM output holds it low, so the
+	# radio is unpowered until something claims the pad back as a GPIO.
+	# A gpio export does exactly that (camdriver_gpio_request -> pad set to
+	# GPIO mode), which is why this needs no kernel change. The same pin is
+	# what OpenIPC/builder#57 and the wiki's C120 page drive.
+	# GPIO 8 (PAD_UART1_TX) is the chip enable the vendor's own bring-up
+	# script (tmpd_insmod_driver, from the OEM module partition, with
+	# wifi_enable=8 in /etc/oem.config) pulses: low for a second, high, then
+	# two seconds before insmod. Pulsed after power so the chip sees a real
+	# reset edge with its rail already up.
+	set_gpio 42 1
+	gpio clear 8
+	sleep 1
+	gpio set 8
+	sleep 2
+	modprobe 8188fu
+	exit 0
+fi
+
 # SSC333 Tapo C110
 if [ "$1" = "ssw101b-ssc333-tapo-c110" ]; then
 	set_gpio 16 1
