@@ -23,7 +23,7 @@ arms in `usb`, 36 release VBUS with a GPIO or a register write before the `modpr
 3 of the 9 in `sdio` do the same. Which pin, and which polarity, is a fact about a
 circuit board. Nothing can discover it.
 
-It is pure friction for the *generic* arms — 7 in `usb`, 3 in `sdio` — which carry no
+It is pure friction for the *generic* arms — 8 in `usb`, 3 in `sdio` — which carry no
 wiring at all. There, `wlandev` is a string somebody has to know, and the only thing
 standing between a working dongle and a working camera was knowing it.
 
@@ -90,7 +90,7 @@ detection would silently find nothing — it would not misbehave, but it would s
 
 ## The two helpers are shaped differently, on purpose
 
-`/etc/wireless/usb` — a generic arm is *only* a module plus its parameters, so the seven
+`/etc/wireless/usb` — a generic arm is *only* a module plus its parameters, so the eight
 of them are a table, and the table is the implementation:
 
 ```
@@ -199,7 +199,7 @@ that select it are brought up some other way. Unexamined.
 
 ## Changing this
 
-Run `bash .github/scripts/test_wireless_detect.sh` — 33 assertions, no device, no build.
+Run `bash .github/scripts/test_wireless_detect.sh` — 35 assertions, no device, no build.
 It runs in CI as the `wireless-detect` job in `.github/workflows/shell-tests.yml`.
 
 - Adding a generic USB arm: one line in `GENERIC_ARMS` in `usb`, one `check_generic` line

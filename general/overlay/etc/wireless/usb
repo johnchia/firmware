@@ -23,6 +23,7 @@ set_gpio() {
 GENERIC_ARMS="mt7601u-generic mt7601u
 rtl8188eu-generic 8188eu
 rtl8188fu-generic 8188fu
+rtl8192eu-generic 8192eu rtw_power_mgnt=0 rtw_ips_mode=0
 rtl8733bu-generic 8733bu rtw_power_mgnt=0 rtw_ips_mode=0
 rtl8811cu-generic 8821cu
 rtl8812au-generic 88XXau rtw_ht_enable=0 rtw_led_enable=0

@@ -72,6 +72,7 @@ check_generic() {  # <helper> <arm> <expected modprobe args>
 check_generic "$USB" mt7601u-generic      "mt7601u"
 check_generic "$USB" rtl8188eu-generic    "8188eu"
 check_generic "$USB" rtl8188fu-generic    "8188fu"
+check_generic "$USB" rtl8192eu-generic    "8192eu rtw_power_mgnt=0 rtw_ips_mode=0"
 check_generic "$USB" rtl8733bu-generic    "8733bu rtw_power_mgnt=0 rtw_ips_mode=0"
 check_generic "$USB" rtl8811cu-generic    "8821cu"
 check_generic "$USB" rtl8812au-generic    "88XXau rtw_ht_enable=0 rtw_led_enable=0"
@@ -80,7 +81,7 @@ check_generic "$SDIO" atbm603x-generic    "atbm603x_wifi_sdio atbm_printk_mask=0
 check_generic "$SDIO" rtl8189fs-generic   "8189fs"
 check_generic "$SDIO" xr829-generic       "xradio_wlan"
 
-T "mt7601u-generic rtl8188eu-generic rtl8188fu-generic rtl8733bu-generic rtl8811cu-generic rtl8812au-generic atbm603x-generic-usb" \
+T "mt7601u-generic rtl8188eu-generic rtl8188fu-generic rtl8192eu-generic rtl8733bu-generic rtl8811cu-generic rtl8812au-generic atbm603x-generic-usb" \
   "$(arm "$USB" --list-generic | tr '\n' ' ' | sed 's/ $//')" \
   "usb --list-generic lists exactly the table, in table order"
 T "atbm603x-generic rtl8189fs-generic xr829-generic" \

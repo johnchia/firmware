@@ -63,6 +63,11 @@ ALL_BOARDS = [
     # it -- a pin number is board knowledge and cannot be probed for, so the board
     # gets a target rather than the driver getting a symbol.
     "ssc377_raptor", "ssc377_tapo_c120",
+    # ssc377d_raptor plus an RTL8192EU, the way hi3516cv608_os04d10_raptorwifi
+    # sits on its wired board. No environment is baked: the dongle enumerates on
+    # its own and detect finds it. It is the only user of rtl8192eu-openipc,
+    # which sat in NOT_BUILT until it.
+    "ssc377d_raptorwifi",
     # Ingenic. t31_raptor is a Raptor board and belongs with the three above by
     # kind; it sits here because the vendor groupings are what a reader scans
     # for, and it is the only Ingenic board that carries ingenic-uboot --
@@ -335,7 +340,7 @@ NOT_BUILT = {
     "libhv-openipc", "libre-openipc", "libsrt-openipc", "linux-patcher", "matter",
     "mavfwd", "mdnsd-openipc", "mini", "mqtt-bot", "msposd", "n3n-openipc", "nabto",
     "netblink", "node-exporter", "ntfy", "onvif-simple-server", "openipc-nfs-root",
-    "osd-openipc", "rtl8188eus-openipc", "rtl8192eu-openipc", "rtl8811cu-openipc",
+    "osd-openipc", "rtl8188eus-openipc", "rtl8811cu-openipc",
     "rtl8812au", "rtl8812au-openipc", "rtl88x2eu-openipc", "rtw-hostapd", "rubyfpv",
     "siproxd-openipc", "ssv615x-openipc", "ssv635x-openipc", "txw8301-openipc",
     "uqmi-openipc", "usb-dual-role", "vdec-openipc", "venc-openipc",
@@ -847,10 +852,10 @@ def self_test():
         # through a Config.in select; either one missing zeroes them out.
         (["general/package/uclibc-compat/src/uclibc-compat-static.c"],
          3, "reached via .mk _DEPENDENCIES"),
-        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 39,
-        # and the extra fifteen are two separate things:
+        # Upstream expects 24 here -- the SigmaStar boards. This tree gets 40,
+        # and the extra sixteen are two separate things:
         #
-        #   - the six raptor boards, which are SigmaStar and belong here;
+        #   - the seven raptor boards, which are SigmaStar and belong here;
         #   - nine HiSilicon and Goke *ultimate* boards, which do not.
         #
         # The nine arrive through divinus. general/package/divinus/divinus.mk
@@ -865,7 +870,7 @@ def self_test():
         # recorded rather than the guard taught. Narrowing it means giving those
         # two lines a BR2_ symbol to hang on, in divinus.mk.
         (["general/package/sigmastar-osdrv-sensors/Config.in"],
-         39, "reached via Config.in select"),
+         40, "reached via Config.in select"),
         # Shared packages narrow too, just barely.
         (["general/package/majestic/majestic.mk"], 87, "majestic is nearly everywhere"),
         # Board configs and kernel configs.
