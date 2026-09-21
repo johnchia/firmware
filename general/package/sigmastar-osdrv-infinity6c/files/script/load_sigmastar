@@ -50,6 +50,12 @@ set_sensor() {
 			# Experimental sensors will be listed in a separate section. For contact: https://t.me/FlyRouter
 			insmod $MODULE/sensor_${SENSOR}_mipi.ko chmap=1
 			;;
+		sc5235)
+			# From the SSC377 SDK, carried on the sensors fork's integration
+			# branch. Inserts and registers its modes on an SSC377D; not yet
+			# seen streaming, which is why it sits apart from the list above.
+			insmod $MODULE/sensor_${SENSOR}_mipi.ko chmap=1
+			;;
 		*)
 			echo -e "\n\e[1;31mUNSUPPORTED sensor - $SENSOR\e[0m\n" | logger -s -t OpenIPC
 			;;
