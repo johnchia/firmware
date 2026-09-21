@@ -64,9 +64,9 @@ ALL_BOARDS = [
     # gets a target rather than the driver getting a symbol.
     "ssc377_raptor", "ssc377_tapo_c120",
     # ssc377d_raptor plus an RTL8192EU, the way hi3516cv608_os04d10_raptorwifi
-    # sits on its wired board. No environment is baked: the dongle enumerates on
-    # its own and detect finds it. It is the only user of rtl8192eu-openipc,
-    # which sat in NOT_BUILT until it.
+    # sits on its wired board. Like the C120 it bakes an environment naming the
+    # arm that powers the dongle on GPIO 42. It is the only user of
+    # rtl8192eu-openipc, which sat in NOT_BUILT until it.
     "ssc377d_raptorwifi",
     # Ingenic. t31_raptor is a Raptor board and belongs with the three above by
     # kind; it sits here because the vendor groupings are what a reader scans

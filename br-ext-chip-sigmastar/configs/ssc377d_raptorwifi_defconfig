@@ -3,12 +3,16 @@
 # over hi3516cv608_os04d10_raptor, and named the same way so the two images do
 # not land on one openipc.<soc>-<layout>-<variant> filename.
 #
-# NO BAKED ENVIRONMENT, ON PURPOSE. Unlike ssc377_tapo_c120, nothing here names
-# an arm: an RTL8192EU dongle enumerates on its own, so with the driver on the
-# image /etc/wireless/detect loads it at boot and S40network takes the answer.
-# A board that gates the dongle's supply behind a GPIO cannot be found that way
-# and wants a board-specific arm in /etc/wireless/usb and an environment that
-# names it, the way the C120 has -- not a symbol added here.
+# THE DONGLE IS POWER-GATED, SO THE ENVIRONMENT NAMES THE ARM. The board this
+# was written on has the RTL8192EU's supply enable on pin 42 of the QFN88,
+# PAD_FUART_RX, GPIO 42 -- which is WIFI_PWR_EN on SigmaStar's own SSC37X
+# reference design, and the pin the Tapo C120 uses for the same job. This
+# kernel muxes that pad to PWM0 at boot and the idle output holds it low, so
+# until something drives it there is nothing on the USB bus for
+# /etc/wireless/detect to find. The rtl8192eu-ssc377d-refboard arm in
+# /etc/wireless/usb raises it and modprobes; the baked environment below is
+# what names the arm before S40network runs. A board whose dongle is always
+# powered wants none of that: the rtl8192eu-generic arm and detection.
 #
 # NOT BOARD-VERIFIED. The wired ssc377d_raptor underneath has run on an SSC377D;
 # this build has not, and neither has rtl8192eu-openipc on any board in this
@@ -199,8 +203,8 @@ BR2_TARGET_UBOOT_PATCH="$(BR2_EXTERNAL)/package/sigmastar-boot/patches"
 BR2_PACKAGE_SIGMASTAR_BOOT=y
 BR2_PACKAGE_VTUND_OPENIPC=y
 
-# Wireless. The RTL8192EU over USB, found at boot by /etc/wireless/detect
-# through the rtl8192eu-generic arm. The driver is Mange's rtl8192eu-linux-driver
+# Wireless. The RTL8192EU over USB, powered by the arm the environment below
+# names. The driver is Mange's rtl8192eu-linux-driver
 # at the commit rtl8192eu-openipc.mk pins; its firmware is compiled into the
 # module, so nothing lands in /lib/firmware.
 #
@@ -224,3 +228,16 @@ BR2_PACKAGE_WPA_SUPPLICANT_CLI=y
 # -D nl80211 is the right driver for it. That it beacons has not been shown on
 # any board.
 BR2_PACKAGE_WPA_SUPPLICANT_AP_SUPPORT=y
+
+# The U-Boot environment, baked rather than left erased, for the reason in the
+# header: wlandev has to be set before S40network runs, and on a camera with no
+# login there is no moment at which anyone could set it. Same idiom as
+# ssc377_tapo_c120 and t31_raptor.
+#
+# The file is a full transcription of U-Boot's compiled-in defaults plus that
+# one line, because a stored environment with a good CRC replaces the default
+# rather than merging with it. See the header of ssc377d-raptorwifi.env.txt.
+# (openipc.fragment already sets BR2_PACKAGE_HOST_UBOOT_TOOLS.)
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE=y
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SOURCE="$(BR2_EXTERNAL)/../br-ext-chip-sigmastar/board/$(OPENIPC_SOC_FAMILY)/ssc377d-raptorwifi.env.txt"
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"

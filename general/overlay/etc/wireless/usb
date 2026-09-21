@@ -256,6 +256,22 @@ if [ "$1" = "rtl8188fu-ssc377-tapo-c120" ]; then
 	exit 0
 fi
 
+if [ "$1" = "rtl8192eu-ssc377d-refboard" ]; then
+	# One pin. GPIO 42 (PAD_FUART_RX) is WIFI_PWR_EN on SigmaStar's SSC37X
+	# reference design -- the IO mapping in the SDK's hardware checklist
+	# calls it "USB power control" -- and the SSC377D this was written on
+	# has its dongle enable on that pin too. Same pad as the Tapo C120
+	# above, with the same catch: the infinity6c padmux table muxes it to
+	# PWM0 at boot and the idle output holds it low, so the dongle is off
+	# the bus until the gpio export claims the pad back. That is also why
+	# /etc/wireless/detect cannot find this radio and the environment has
+	# to name the arm. No chip-enable pulse: nothing on this board was
+	# found that wants one.
+	set_gpio 42 1
+	modprobe 8192eu rtw_power_mgnt=0 rtw_ips_mode=0
+	exit 0
+fi
+
 # SSC333 Tapo C110
 if [ "$1" = "ssw101b-ssc333-tapo-c110" ]; then
 	set_gpio 16 1
