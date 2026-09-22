@@ -6,12 +6,19 @@
 MODULE=/lib/modules/4.9.84/sigmastar
 SENSOR=$(fw_printenv -n sensor)
 
-detect_sensor() {
-	insmod $MODULE/sensor_config.ko
+configure_pads() {
+	# Runs on every load, not only when detecting: on infinity6c a board
+	# whose env already named the sensor skipped this write and its first
+	# MI_SNR_Enable after mi.ko failed ("SENSOR pad 0 enable fail"), with
+	# only a second attempt succeeding. Same script shape here, same fix.
+	[ -e /sys/module/sensor_config ] || insmod $MODULE/sensor_config.ko
 	if [ -e /dev/srcfg ]; then
 		echo srcfg 0 1 0 0 0 0 > /dev/srcfg
 		rmmod sensor_config
 	fi
+}
+
+detect_sensor() {
 	SENSOR=$(ipcinfo -s)
 	fw_setenv sensor "$SENSOR"
 }
@@ -52,6 +59,8 @@ insert_ko() {
 if [ ! -e /sys/module/mi_common ]; then
 	insert_ko
 fi
+
+configure_pads
 
 if [ -z "$1" ] || [ -z "$SENSOR" ]; then
 	echo -e "\n\e[1;33mAutodetect sensor\e[0m\n" | logger -s -t OpenIPC
