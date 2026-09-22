@@ -64,6 +64,15 @@ jobs:
             general/overlay/usr/sbin/sysupgrade > /tmp/sysupgrade.stripped
           SRC=/tmp/sysupgrade.stripped bash .github/scripts/test_sysupgrade.sh
 
+      # The updater raptor images actually ship. Same two passes: the copy in
+      # git, then the comment-stripped form the camera runs.
+      - run: bash .github/scripts/test_sysupgrade_raptor.sh
+      - name: Re-run sysupgrade-raptor against its stripped form
+        run: |
+          awk -f general/scripts/strip-shell-comments.awk \
+            general/package/raptor-streaming/files/sysupgrade-raptor > /tmp/sysupgrade-raptor.stripped
+          SRC=/tmp/sysupgrade-raptor.stripped bash .github/scripts/test_sysupgrade_raptor.sh
+
   # Only sysupgrade was ever parse-checked; every other script in the image --
   # the init scripts, /etc/profile, /init on initramfs boards, the vendor load_*
   # scripts that insert the SoC drivers -- reached cameras without anything

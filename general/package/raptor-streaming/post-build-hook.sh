@@ -21,6 +21,20 @@
 set -eu
 
 TARGET_DIR="${1:?target dir required}"
+HERE="$(dirname "$0")"
+
+# The updater. Raptor images flash through sysupgrade-raptor (files/), a
+# single-case rewrite of OpenIPC's sysupgrade for NOR cameras with separate
+# kernel and rootfs partitions -- which every raptor board is. The upstream
+# script stays in git for the images that are not raptor's, but it is not
+# shipped here: /usr/sbin/sysupgrade becomes a symlink, so firstboot, rcd's
+# recovery advice and the operator's habits keep working, and the 25 KB the
+# upstream copy costs an 8 MB board comes back. Installed from this hook rather
+# than a late overlay so test_shell_parse.sh finds it under files/ like every
+# other shipped script.
+install -m 0755 "${HERE}/files/sysupgrade-raptor" "${TARGET_DIR}/usr/sbin/sysupgrade-raptor"
+ln -sfn sysupgrade-raptor "${TARGET_DIR}/usr/sbin/sysupgrade"
+echo "raptor-streaming: /usr/sbin/sysupgrade -> sysupgrade-raptor"
 
 if [ -f "${TARGET_DIR}/etc/init.d/S95majestic" ]; then
 	mv -f "${TARGET_DIR}/etc/init.d/S95majestic" \

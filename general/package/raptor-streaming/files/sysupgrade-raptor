@@ -1,0 +1,482 @@
+#!/bin/sh
+#
+# sysupgrade-raptor -- write a raptor image onto a NOR camera.
+#
+# Every raptor board is the same camera as far as flashing goes: NOR flash with
+# separate "kernel", "rootfs" and "rootfs_data" MTD partitions, a squashfs root
+# mounted from the flash, and an image archive holding uImage.<soc> and
+# rootfs.squashfs.<soc> with an .md5sum beside each. That is the one case this
+# script handles. Everything OpenIPC's sysupgrade carries for the other twelve
+# vendor trees -- manifests, channels, NAND, SD-card recovery, majestic and the
+# WebUI, self-update -- is left out on purpose; see PROPOSAL-sysupgrade-raptor.md
+# in the raptor tree for the accounting.
+#
+# Two rules shape the whole script, both learned on the hi3516cv608 (38 MB of
+# RAM, 19.5 MB of tmpfs, 13 MB free once raptor is stopped):
+#
+#   1. Every check runs before the first byte is written. The upstream script
+#      flashed the kernel, then verified the rootfs, and a rootfs that failed
+#      left a camera with a new kernel on an old root. Here the payload is
+#      staged, checksummed, magic-checked and size-checked, the RAM root is
+#      built and proven, and only then does anything touch the flash -- at which
+#      point nothing can refuse any more, and the run ends in a reboot.
+#
+#   2. The payload exists in tmpfs exactly once. The upstream --archive path kept
+#      the .tgz, the unpacked combined image and both split halves at the same
+#      time, about 22 MB, and the cv608's kernel stopped answering before the
+#      flash began. An archive is unpacked and then deleted; a combined image is
+#      not accepted at all (the build ships the halves); each file is deleted the
+#      moment it has been written.
+#
+# The flash itself runs from RAM: a tmpfs holding busybox, its libraries and a
+# copy of this script, entered with chroot. Erasing the partition the running
+# root lives on pulls the page cache out from under every dynamically linked
+# process, and flashcp on the cv608 segfaulted after writing when its libc pages
+# had to come back from the partition it had just erased. Inside the chroot the
+# kernel resolves the interpreter and libraries from the tmpfs, so nothing pages
+# from the flash. chroot rather than pivot_root because it needs no unwinding:
+# if the mini-root cannot be built or entered, nothing has been written and the
+# run simply stops. Verified on the musl cv608 and the uClibc T31.
+
+LOCK=/tmp/sysupgrade.lock
+ROOT=/tmp/sysupgrade.root
+# Where the payload is staged. A directory of its own so that whatever an
+# archive turns out to contain -- a combined firmware.bin from an older
+# build, say -- is removed with it when the run is refused.
+PKG=/tmp/sysupgrade.pkg
+OSREL=/etc/os-release
+
+# Services stopped for the run, in stop order. rvd holds the video buffers and
+# is the single largest thing to give back on the cv608; the rest write to the
+# overlay or the log and would keep the jffs2 busy under an erase.
+SERVICES="S95raptor S60crond S49ntpd S02klogd S02fakehwclock S01syslogd"
+
+say() { printf '%s\n' "$*"; }
+
+usage() {
+	cat <<EOF
+Usage: sysupgrade-raptor [options]
+
+Flash a raptor image. Every check runs before anything is written.
+
+      --url=URL         Fetch a .tgz image and flash kernel and rootfs from it.
+      --github=OWNER/REPO[@TAG]
+                        Fetch this board's -latest .tgz from that repository's
+                        release; TAG defaults to raptor-nightly.
+      --archive=FILE    Flash kernel and rootfs from a local .tgz image.
+      --kernel=FILE     Flash a kernel image (uImage or FIT).
+      --rootfs=FILE     Flash a squashfs rootfs.
+  -n, --wipe_overlay    Erase the overlay partition. This unclaims the camera:
+                        the root password and every setting go with it.
+  -d, --dev_wipe        Remove everything from the overlay except etc and var:
+                        binaries and scripts copied over the image during
+                        development go, configuration and the claim stay.
+  -f, --force           Skip the checksum, magic and size checks.
+  -x, --no_reboot       Do not reboot. Only allowed with -n or -d alone: a
+                        kernel or rootfs write is only applied by a reboot.
+  -h, --help            This text.
+
+The archive must hold uImage.<soc> and rootfs.squashfs.<soc> for this camera's
+SoC, as the build writes them; that is how an image for another board is
+refused. A combined firmware.bin is not accepted. --kernel and --rootfs are
+flashed as given, with no check that they were built for this camera.
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Failure before the flash: put the camera back the way it was found.
+services_stopped=
+lock_owned=
+
+cleanup() {
+	# Only what this run created. A --kernel or --rootfs the operator pointed
+	# at is theirs to keep.
+	rm -rf "$ROOT" "$PKG"
+	if [ -n "$services_stopped" ]; then
+		local s
+		for s in $(printf '%s\n' $SERVICES | sed '1!G;h;$!d'); do
+			[ -x "/etc/init.d/$s" ] && "/etc/init.d/$s" start >/dev/null 2>&1
+		done
+		services_stopped=
+	fi
+	[ -n "$lock_owned" ] && rmdir "$LOCK" 2>/dev/null
+	lock_owned=
+}
+
+die() {
+	say "sysupgrade-raptor: $*"
+	cleanup
+	exit 1
+}
+
+# ---------------------------------------------------------------------------
+# What this camera is. BUILD_PLATFORM is "<soc>_<variant>", stamped by
+# general/scripts/rootfs_script.sh; the SoC token is also the suffix the build
+# puts on every member of the archive, which is what makes an archive for
+# another board fail to unpack the expected names rather than flash.
+mtd_dev() {
+	sed -n "s/^\(mtd[0-9]*\):.*\"$1\"\$/\/dev\/\1/p" /proc/mtd
+}
+
+mtd_size() {
+	local hex
+	hex=$(awk -v n="\"$1\"" '$4 == n { print $2; exit }' /proc/mtd)
+	[ -n "$hex" ] && echo $((0x$hex))
+}
+
+# MemAvailable is what tmpfs writes actually consume. The 3.10 kernel on the
+# T31 predates it; MemFree plus the caches is the same estimate the kernel
+# makes, without the small reserve it keeps back.
+mem_available_kb() {
+	awk '
+		/^MemAvailable:/ { print $2; found = 1; exit }
+		/^MemFree:/ || /^Buffers:/ || /^Cached:/ { sum += $2 }
+		END { if (!found) print sum }
+	' /proc/meminfo
+}
+
+file_size() { stat -c %s "$1"; }
+
+magic() { od -An -tx1 -N4 "$1" | tr -d ' \n'; }
+
+get_system_info() {
+	model=$(sed -n 's/^BUILD_PLATFORM=//p' "$OSREL" | cut -d_ -f1)
+	[ -n "$model" ] || die "no BUILD_PLATFORM in $OSREL; cannot tell which SoC this is"
+	kernel_dev=$(mtd_dev kernel)
+	rootfs_dev=$(mtd_dev rootfs)
+	overlay_dev=$(mtd_dev rootfs_data)
+	[ -n "$kernel_dev" ] && [ -n "$rootfs_dev" ] ||
+		die "no kernel and rootfs partitions in /proc/mtd; this is not a raptor NOR layout"
+	say "SoC $model, kernel $kernel_dev, rootfs $rootfs_dev, overlay ${overlay_dev:-none}"
+}
+
+# The archive the build published for this camera: openipc.<soc>[_<sensor>]-nor-
+# <variant>-latest.tgz, the name REPACK_FIRMWARE in the Makefile gives it. The
+# variant and the pinned sensor are stamped into os-release for this purpose;
+# a camera flashed before the sensor was stamped composes the name without it,
+# which is right for every board that ships all its sensor blobs. Sets url,
+# because a die() inside a command substitution would print into the variable.
+github_url() {
+	local repo=${1%@*} tag=raptor-nightly variant sensor
+	case "$1" in *@*) tag=${1#*@} ;; esac
+	case "$repo" in
+		*/*/* | */ | /* | "") die "--github wants OWNER/REPO, got '$1'" ;;
+		*/*) ;;
+		*) die "--github wants OWNER/REPO, got '$1'" ;;
+	esac
+	variant=$(sed -n 's/^BUILD_OPTION=//p' "$OSREL")
+	[ -n "$variant" ] || die "no BUILD_OPTION in $OSREL; cannot name this board's archive"
+	sensor=$(sed -n 's/^BUILD_SENSOR=//p' "$OSREL")
+	url="https://github.com/$repo/releases/download/$tag/openipc.$model${sensor:+_$sensor}-nor-$variant-latest.tgz"
+}
+
+# ---------------------------------------------------------------------------
+free_resources() {
+	local s
+	for s in $SERVICES; do
+		[ -x "/etc/init.d/$s" ] && "/etc/init.d/$s" stop >/dev/null 2>&1
+	done
+	services_stopped=1
+	sync
+	echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
+	say "Services stopped, $(mem_available_kb) KB available"
+}
+
+need_ram_kb() {
+	local avail
+	avail=$(mem_available_kb)
+	[ "$avail" -ge "$1" ] ||
+		die "need $1 KB of RAM for $2 and only $avail KB is available"
+}
+
+# ---------------------------------------------------------------------------
+# Get the payload into $PKG, one copy of each file.
+#
+# The archive is unpacked straight into $PKG and then deleted when it lives in
+# /tmp too, so the .tgz and its contents never coexist for longer than the
+# extraction. A --url is streamed through gunzip and tar and is never stored.
+# A file the operator names outside /tmp is copied in, because /tmp is the one
+# path the RAM root can see (it is bind-mounted into the chroot).
+stage_archive() {
+	local src=$1 list need
+	[ -f "$src" ] || die "$src not found"
+	# What the members will occupy, from the listing: one more decompression
+	# pass, no RAM. Through gzip on a pipe both times, because the busybox tar
+	# on these images is built without -z.
+	list=$(gzip -dc "$src" 2>/dev/null | tar tv 2>/dev/null)
+	[ -n "$list" ] || die "cannot list $src as a .tgz"
+	need=$(printf '%s\n' "$list" | awk '{ s += $3 } END { printf "%d", s / 1024 }')
+	need_ram_kb $((need + 3072)) "unpacking $src"
+	mkdir -p "$PKG" || die "cannot create $PKG"
+	gzip -dc "$src" | tar xf - -C "$PKG" || die "cannot unpack $src"
+	case "$src" in
+		/tmp/*) rm -f "$src"; say "Unpacked and removed $src" ;;
+		*) say "Unpacked $src" ;;
+	esac
+	from_archive
+}
+
+stage_url() {
+	local url=$1
+	command -v curl >/dev/null 2>&1 || die "curl is not on this image"
+	say "Fetching $url"
+	mkdir -p "$PKG" || die "cannot create $PKG"
+	curl -f -s -S -L --connect-timeout 30 --speed-limit 1024 --speed-time 60 -m 1800 \
+		-o - "$url" | gunzip -c | tar xf - -C "$PKG" || die "cannot fetch and unpack $url"
+	from_archive
+}
+
+from_archive() {
+	kernel_file="$PKG/uImage.$model"
+	rootfs_file="$PKG/rootfs.squashfs.$model"
+	[ -f "$kernel_file" ] && [ -f "$rootfs_file" ] ||
+		die "the archive holds no uImage.$model and rootfs.squashfs.$model: built for another SoC, or a combined image this script does not split"
+	say "SoC OK: the archive is built for $model"
+	if [ -z "$force" ]; then
+		[ -f "$kernel_file.md5sum" ] && [ -f "$rootfs_file.md5sum" ] ||
+			die "the archive ships no .md5sum files (-f to flash it unverified)"
+		(cd "$PKG" && md5sum -c "uImage.$model.md5sum" "rootfs.squashfs.$model.md5sum" >/dev/null 2>&1) ||
+			die "checksum mismatch in the archive"
+		say "Checksums OK"
+	fi
+}
+
+# Sets staged_file rather than printing it: die() inside a command substitution
+# would only end the subshell.
+stage_file() {
+	local src=$1
+	[ -f "$src" ] || die "$src not found"
+	case "$src" in
+		/tmp/*) staged_file=$src; return 0 ;;
+	esac
+	staged_file="$PKG/${src##*/}"
+	need_ram_kb $(( $(file_size "$src") / 1024 + 3072 )) "copying $src into RAM"
+	mkdir -p "$PKG" && cp "$src" "$staged_file" || die "cannot copy $src to $staged_file"
+}
+
+# ---------------------------------------------------------------------------
+check_payload() {
+	local f=$1 dev=$2 what=$3 m size cap
+	[ -n "$force" ] && return 0
+	m=$(magic "$f")
+	case "$what:$m" in
+		kernel:27051956 | kernel:d00dfeed | rootfs:68737173) ;;
+		kernel:*) die "$f is neither a uImage nor a FIT image (magic $m)" ;;
+		rootfs:*) die "$f is not a squashfs (magic $m)" ;;
+	esac
+	size=$(file_size "$f")
+	cap=$(mtd_size "$what")
+	[ "$size" -le "$cap" ] ||
+		die "$f is $size bytes, larger than the $what partition ($cap bytes)"
+	say "$what: $((size / 1024)) KB for $dev ($((cap / 1024)) KB), OK"
+}
+
+# ---------------------------------------------------------------------------
+# The RAM root. busybox and whatever it links against, the handful of applets
+# the flash phase uses, and this script. /dev, /proc and /tmp are bind-mounted
+# in so the MTD nodes and the payload are reachable by their usual paths.
+build_ramroot() {
+	local lib
+	rm -rf "$ROOT"
+	mkdir -p "$ROOT/bin" "$ROOT/lib" "$ROOT/dev" "$ROOT/proc" "$ROOT/tmp" ||
+		die "cannot create $ROOT"
+	cp /bin/busybox "$ROOT/bin/busybox" || die "cannot copy busybox"
+	for lib in $(ldd /bin/busybox 2>/dev/null | grep -o '/[^ ]*\.so[^ ]*'); do
+		mkdir -p "$ROOT$(dirname "$lib")"
+		cp -L "$lib" "$ROOT$lib" 2>/dev/null
+	done
+	# ldd is itself a wrapper on some libcs; if it said nothing, take the
+	# loader and libc by name.
+	[ -n "$(ls "$ROOT/lib" 2>/dev/null)" ] ||
+		cp -L /lib/ld-* /lib/libc.so* "$ROOT/lib/" 2>/dev/null
+	for a in sh flashcp flash_eraseall rm sync sleep killall reboot; do
+		ln -sf busybox "$ROOT/bin/$a"
+	done
+	cp "$0" "$ROOT/sysupgrade-raptor" || die "cannot copy $0 into $ROOT"
+	mount -o bind /dev "$ROOT/dev" && mount -o bind /proc "$ROOT/proc" &&
+		mount -o bind /tmp "$ROOT/tmp" || die "cannot bind /dev, /proc and /tmp into $ROOT"
+	# Proof, before anything is written: the interpreter and libraries resolve
+	# inside the chroot, and the applet that does the writing is there.
+	chroot "$ROOT" /bin/sh -c ':' 2>/dev/null ||
+		die "a shell will not run inside $ROOT; refusing to flash from the live root"
+	[ -x "$ROOT/bin/flashcp" ] || die "no flashcp in busybox"
+	say "RAM root ready"
+}
+
+# The overlay is erased under a mounted jffs2. Its writers are stopped, but the
+# filesystem's own background thread is not, and a read-only remount is what
+# quiets it. From inside the chroot the mount point is not visible, so this is
+# done here, after every check has passed and just before the handover.
+quiesce_overlay() {
+	local blk mp
+	blk=$(echo "$overlay_dev" | sed 's|/dev/mtd|/dev/mtdblock|')
+	mp=$(awk -v d="$blk" '$1 == d { print $2; exit }' /proc/mounts)
+	[ -n "$mp" ] || return 0
+	sync
+	mount -o remount,ro "$mp" 2>/dev/null && say "Overlay $mp remounted read-only"
+}
+
+# Everything in the overlay's upper directory except etc and var. What a
+# development session leaves behind is a binary or a script copied over the
+# image's -- /usr/bin/rvd, an init script, a library -- and those shadow the
+# fresh image after the flash. etc holds the configuration and the claim, var
+# the random seed; both stay. The directory is taken from the mount rather than
+# assumed, and the removal happens under a live overlayfs, so the merged view
+# is only trustworthy again after the reboot.
+dev_wipe_overlay() {
+	local up e
+	up=$(awk '$2 == "/" && $3 == "overlay" {
+		n = split($4, o, ",")
+		for (i = 1; i <= n; i++) if (o[i] ~ /^upperdir=/) { sub(/^upperdir=/, "", o[i]); print o[i]; exit }
+	}' /proc/mounts)
+	[ -n "$up" ] && [ -d "$up" ] || die "cannot find the overlay upper directory in /proc/mounts"
+	say "Removing everything in $up except etc and var"
+	for e in "$up"/* "$up"/.[!.]*; do
+		[ -e "$e" ] || [ -L "$e" ] || continue
+		case "${e##*/}" in etc | var) continue ;; esac
+		rm -rf "$e"
+	done
+	sync
+}
+
+# ---------------------------------------------------------------------------
+# Phase 2: inside the chroot, PATH is the tmpfs and nothing here may fail
+# quietly. A write that fails leaves the flash half-written; the only useful
+# thing then is the reboot, so that U-Boot's boot-count recovery, where the
+# board has it, gets its chance.
+finish() {
+	say "$1"
+	sync
+	# dropbear's per-connection children hold the sessions this is being
+	# watched from. Killed here, the sessions end with EOF; left alone, they
+	# hang until the client's TCP timeout long after the camera is back.
+	killall dropbear 2>/dev/null
+	sleep 1
+	reboot -f
+	exit 0
+}
+
+flash() {
+	local f=$1 dev=$2 what=$3
+	say "Writing $what to $dev"
+	flashcp "$f" "$dev" || finish "flashcp failed writing the $what; rebooting anyway"
+	rm -f "$f"
+	say "$what written"
+}
+
+phase2() {
+	PATH=/bin
+	[ -n "$kernel_file" ] && flash "$kernel_file" "$kernel_dev" kernel
+	[ -n "$rootfs_file" ] && flash "$rootfs_file" "$rootfs_dev" rootfs
+	if [ -n "$wipe" ]; then
+		say "Erasing overlay $overlay_dev"
+		flash_eraseall -j "$overlay_dev" || finish "flash_eraseall failed on the overlay; rebooting anyway"
+	fi
+	finish "Done, rebooting"
+}
+
+[ "$SU_PHASE" = 2 ] && phase2
+
+# ---------------------------------------------------------------------------
+url= github= archive= kernel_arg= rootfs_arg= wipe= dev_wipe= force= no_reboot=
+for i in "$@"; do
+	case "$i" in
+		--url=*) url=${i#*=} ;;
+		--github=*) github=${i#*=} ;;
+		--archive=*) archive=${i#*=} ;;
+		--kernel=*) kernel_arg=${i#*=} ;;
+		--rootfs=*) rootfs_arg=${i#*=} ;;
+		-n | --wipe_overlay) wipe=1 ;;
+		-d | --dev_wipe) dev_wipe=1 ;;
+		-f | --force | --force_all) force=1 ;;
+		-x | --no_reboot) no_reboot=1 ;;
+		-h | --help) usage; exit 0 ;;
+		*) say "Unknown option: $i"; usage; exit 1 ;;
+	esac
+done
+
+n=0
+[ -n "$url" ] && n=$((n + 1))
+[ -n "$github" ] && n=$((n + 1))
+[ -n "$archive" ] && n=$((n + 1))
+[ -n "$kernel_arg$rootfs_arg" ] && n=$((n + 1))
+[ "$n" -le 1 ] || die "give one of --url, --github, --archive, or --kernel/--rootfs"
+[ "$n" -eq 1 ] || [ -n "$wipe$dev_wipe" ] || { usage; exit 1; }
+[ -z "$no_reboot" ] || [ "$n" -eq 0 ] ||
+	die "-x cannot be honoured: a kernel or rootfs write is only applied by a reboot"
+[ -z "$wipe" ] || [ -z "$dev_wipe" ] || die "-n erases the whole overlay; -d with it means nothing"
+
+[ "$(id -u)" = 0 ] || die "must run as root"
+get_system_info
+[ -z "$wipe" ] || [ -n "$overlay_dev" ] || die "no rootfs_data partition to erase"
+
+[ -z "$github" ] || github_url "$github"
+
+mkdir "$LOCK" 2>/dev/null || die "another sysupgrade is running (or remove $LOCK)"
+lock_owned=1
+trap 'die "interrupted"' HUP INT TERM
+
+free_resources
+
+kernel_file= rootfs_file=
+if [ -n "$url" ]; then
+	stage_url "$url"
+elif [ -n "$archive" ]; then
+	stage_archive "$archive"
+else
+	if [ -n "$kernel_arg" ]; then
+		stage_file "$kernel_arg"
+		kernel_file=$staged_file
+	fi
+	if [ -n "$rootfs_arg" ]; then
+		stage_file "$rootfs_arg"
+		rootfs_file=$staged_file
+	fi
+	say "Warning: SoC not verified; --kernel and --rootfs are flashed as given"
+fi
+
+[ -n "$kernel_file" ] && check_payload "$kernel_file" "$kernel_dev" kernel
+[ -n "$rootfs_file" ] && check_payload "$rootfs_file" "$rootfs_dev" rootfs
+
+# The overlay alone, erased or cleaned from the live root: the running
+# filesystem is not touched, so there is nothing to protect against, and -x
+# has to be able to hand the shell back.
+if [ -z "$kernel_file$rootfs_file" ]; then
+	trap '' HUP INT TERM PIPE
+	[ -n "$dev_wipe" ] && dev_wipe_overlay
+	if [ -n "$wipe" ]; then
+		quiesce_overlay
+		say "Erasing overlay $overlay_dev"
+		flash_eraseall -j "$overlay_dev" || die "flash_eraseall failed on the overlay"
+	fi
+	if [ -n "$no_reboot" ]; then
+		say "Overlay done; not rebooting as asked. Reboot before trusting it."
+		cleanup
+		exit 0
+	fi
+	finish "Overlay done, rebooting"
+fi
+
+need_ram_kb 4096 "the RAM root"
+build_ramroot
+
+# From here on nothing refuses and nothing is undone: a dropped terminal must
+# not stop a flash that is about to start.
+trap '' HUP INT TERM PIPE
+say "Checks passed; flashing continues even if this terminal disconnects"
+
+# S99bootok clears these once the new image reaches a healthy userspace; a
+# U-Boot with boot-count recovery reflashes if it never does.
+if command -v fw_setenv >/dev/null 2>&1; then
+	fw_setenv upgrade_available 1 2>/dev/null && fw_setenv bootcount 0 2>/dev/null ||
+		say "Warning: could not arm boot-count recovery in the U-Boot environment"
+fi
+
+[ -n "$dev_wipe" ] && dev_wipe_overlay
+[ -n "$wipe" ] && quiesce_overlay
+
+export SU_PHASE=2 kernel_file rootfs_file kernel_dev rootfs_dev overlay_dev wipe
+exec chroot "$ROOT" /bin/sh /sysupgrade-raptor
+say "sysupgrade-raptor: cannot enter $ROOT; nothing was written"
+cleanup
+exit 1

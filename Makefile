@@ -408,7 +408,15 @@ else
 endif
 else
 ifeq ($(BR2_OPENIPC_SOC_FAMILY),"hi3516cv6xx")
-	@$(call PREPARE_REPACK,firmware.bin,$(shell expr $(subst ",,$(BR2_OPENIPC_FLASH_SIZE)) \* 1024),,,nor)
+# The .tgz carries the FIT (as uImage.<soc>) and the squashfs separately, the
+# same two members every other NOR board ships, and not the combined
+# firmware.bin. Splitting the combined blob on the camera is what wedged the
+# hi3516cv608 twice: the archive, the blob and both halves in a 19.5 MB tmpfs
+# on a board with 13 MB free. The board's post-image.sh writes uImage as a
+# copy of fitImage for this rule. firmware.bin is still built and size-checked
+# for `make fullimage` and whole-image programming.
+	@$(call CHECK_SIZE,firmware.bin,$(shell expr $(subst ",,$(BR2_OPENIPC_FLASH_SIZE)) \* 1024))
+	@$(call PREPARE_REPACK,uImage,2048,rootfs.squashfs,$(ROOTFS_CAP_KB),nor)
 else ifeq ($(BR2_OPENIPC_SOC_FAMILY),"hi3519dv500")
 	@$(call PREPARE_REPACK,firmware.bin,$(shell expr $(subst ",,$(BR2_OPENIPC_FLASH_SIZE)) \* 1024),,,nor)
 else ifneq ($(wildcard $(TARGET)/images/firmware.bin),)
