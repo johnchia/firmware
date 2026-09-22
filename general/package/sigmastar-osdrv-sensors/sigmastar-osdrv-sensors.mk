@@ -33,14 +33,16 @@
 # The infinity6c imx335 driver (#3) and the sc450ai model ID fix (#4) were
 # carried here too and are upstream now, so the fork no longer adds them.
 #
-# The branch also carries the infinity6c sc5235 driver, taken unmodified from
-# the SSC377 SDK for an SSC377D board fitted with one. It inserts and registers
-# its modes there; streaming is not yet shown. It should go upstream as its own
-# pull request once it has, and until then this is the only place it exists.
+# The branch also carries two infinity6c drivers that exist nowhere else: the
+# sc5235 driver, taken unmodified from the SSC377 SDK, and an sc5239 driver
+# built from it that programs the part as SigmaStar's own sc5239 driver does
+# (the two answer the same sensor ID, so a board names the 5239 in its env).
+# Both stream on an SSC377D board. They should go upstream as their own pull
+# requests.
 # Naming a sha rather than HEAD is worth keeping even after the fork does go
 # away: the package used to build whatever upstream had on the day.
 SIGMASTAR_OSDRV_SENSORS_SITE = $(call github,johnchia,openipc-sensors,$(SIGMASTAR_OSDRV_SENSORS_VERSION))
-SIGMASTAR_OSDRV_SENSORS_VERSION = 2f6b0fa60aebc0d976d6039422386c663d64976f
+SIGMASTAR_OSDRV_SENSORS_VERSION = 22d725b461ff6251ea2376d1cd5b5c430170ed4c
 
 SIGMASTAR_OSDRV_SENSORS_MODULE_SUBDIRS = $(OPENIPC_SOC_VENDOR)/$(OPENIPC_SOC_FAMILY)
 SIGMASTAR_OSDRV_SENSORS_MODULE_MAKE_OPTS = \

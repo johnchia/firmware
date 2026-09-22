@@ -50,10 +50,13 @@ set_sensor() {
 			# Experimental sensors will be listed in a separate section. For contact: https://t.me/FlyRouter
 			insmod $MODULE/sensor_${SENSOR}_mipi.ko chmap=1
 			;;
-		sc5235)
-			# From the SSC377 SDK, carried on the sensors fork's integration
-			# branch. Inserts and registers its modes on an SSC377D; not yet
-			# seen streaming, which is why it sits apart from the list above.
+		sc5235|sc5239)
+			# Both from the SSC377 SDK, carried on the sensors fork's
+			# integration branch. An SC5239 answers the same ID as an
+			# SC5235 and ipcinfo cannot tell them apart, so a board with
+			# the 5239 has to say so in its U-Boot env (sensor=sc5239);
+			# the 5239 driver programs the sensor as SigmaStar's own
+			# sc5239 driver does, which is what its ISP tuning expects.
 			insmod $MODULE/sensor_${SENSOR}_mipi.ko chmap=1
 			;;
 		*)
