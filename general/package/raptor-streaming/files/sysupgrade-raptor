@@ -71,7 +71,8 @@ Flash a raptor image. Every check runs before anything is written.
   -d, --dev_wipe        Remove everything from the overlay except etc and var:
                         binaries and scripts copied over the image during
                         development go, configuration and the claim stay.
-  -f, --force           Skip the checksum, magic and size checks.
+  -f, --force           Skip the checksum, magic and size checks. A rootfs
+                        shorter than its superblock says is refused regardless.
   -x, --no_reboot       Do not reboot. Only allowed with -n or -d alone: a
                         kernel or rootfs write is only applied by a reboot.
   -h, --help            This text.
@@ -156,6 +157,18 @@ mem_available_kb() {
 file_size() { stat -c %s "$1"; }
 
 magic() { od -An -tx1 -N4 "$1" | tr -d ' \n'; }
+
+# How long a squashfs says it is: bytes_used in its superblock, a little-endian
+# u64 at offset 0x28. mksquashfs pads the file past it, so a whole image is
+# never shorter than this and a cut one always is.
+squashfs_bytes_used() {
+	local b n=0 i=0
+	for b in $(od -An -tx1 -j40 -N8 "$1"); do
+		n=$((n + (0x$b << (8 * i))))
+		i=$((i + 1))
+	done
+	echo "$n"
+}
 
 get_system_info() {
 	model=$(sed -n 's/^BUILD_PLATFORM=//p' "$OSREL" | cut -d_ -f1)
@@ -274,15 +287,28 @@ stage_file() {
 
 # ---------------------------------------------------------------------------
 check_payload() {
-	local f=$1 dev=$2 what=$3 m size cap
-	[ -n "$force" ] && return 0
+	local f=$1 dev=$2 what=$3 m size cap used
 	m=$(magic "$f")
+	size=$(file_size "$f")
+	# A rootfs shorter than its own superblock claims is refused even under
+	# -f: nothing can make it valid. The upstream case (OpenIPC/firmware#2444)
+	# was an unpack that ran out of room, left the image cut, and lost the
+	# .md5sum packed after it -- flashcp then verified the short file against
+	# the flash and reported success, and the camera came back unbootable.
+	# Here the archive path already requires every .md5sum, so this is for the
+	# raw --rootfs path and for a build that packed a short file in the first
+	# place. Checked before the magic and size gates that -f waives.
+	if [ "$what" = rootfs ] && [ "$m" = 68737173 ]; then
+		used=$(squashfs_bytes_used "$f")
+		[ "$used" -gt 0 ] && [ "$size" -ge "$used" ] ||
+			die "$f is $size bytes but its squashfs superblock says $used; the image is truncated"
+	fi
+	[ -n "$force" ] && return 0
 	case "$what:$m" in
 		kernel:27051956 | kernel:d00dfeed | rootfs:68737173) ;;
 		kernel:*) die "$f is neither a uImage nor a FIT image (magic $m)" ;;
 		rootfs:*) die "$f is not a squashfs (magic $m)" ;;
 	esac
-	size=$(file_size "$f")
 	cap=$(mtd_size "$what")
 	[ "$size" -le "$cap" ] ||
 		die "$f is $size bytes, larger than the $what partition ($cap bytes)"

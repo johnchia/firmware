@@ -133,7 +133,15 @@ export PATH="$SB/bin:$PATH"
 # --- fixtures --------------------------------------------------------------
 make_uimage() { { printf '\x27\x05\x19\x56'; head -c 60 /dev/zero; } > "$1"; }
 make_fit()    { { printf '\xd0\x0d\xfe\xed'; head -c 60 /dev/zero; } > "$1"; }
-make_rootfs() { { printf 'hsqs'; head -c "${2:-8188}" /dev/zero; } > "$1"; }
+# A squashfs superblock whose bytes_used (little-endian u64 at 0x28) is the
+# fixture's own size, as mksquashfs writes it; the file is 4 + $2 bytes.
+make_rootfs() {
+	local total=$((4 + ${2:-8188})) v=$((4 + ${2:-8188})) le= i
+	for i in 1 2 3 4 5 6 7 8; do
+		le="$le\\x$(printf '%02x' $((v & 255)))"; v=$((v >> 8))
+	done
+	{ printf 'hsqs'; head -c 36 /dev/zero; printf "$le"; head -c $((total - 48)) /dev/zero; } > "$1"
+}
 
 # Archive members named as the build names them, with an .md5sum beside each.
 make_archive() {
@@ -141,6 +149,11 @@ make_archive() {
 	rm -rf "$stage"; mkdir -p "$stage"
 	[ -n "${NO_KERNEL:-}" ] || make_uimage "$stage/uImage.ssc333"
 	[ -n "${NO_ROOTFS:-}" ] || make_rootfs "$stage/rootfs.squashfs.ssc333" "${ROOTFS_BYTES:-8188}"
+	# A build that packed a short rootfs: cut before the checksums are taken,
+	# so the .md5sum matches the short file and only the superblock tells.
+	if [ -n "${TRUNCATE_ROOTFS:-}" ]; then
+		head -c "$TRUNCATE_ROOTFS" "$stage/rootfs.squashfs.ssc333" > "$stage/short" && mv "$stage/short" "$stage/rootfs.squashfs.ssc333"
+	fi
 	(cd "$stage" && for f in uImage.ssc333 rootfs.squashfs.ssc333; do
 		[ -f "$f" ] && md5sum "$f" > "$f.md5sum"
 	done)
@@ -228,6 +241,13 @@ ROOTFS_BYTES=$((0x510000)) make_archive "$SB/big.tgz"
 run --archive="$SB/big.tgz"
 refused "rootfs larger than its partition is refused before any write" "larger than the rootfs partition"
 
+TRUNCATE_ROOTFS=4096 make_archive "$SB/short.tgz"
+run --archive="$SB/short.tgz"
+refused "rootfs shorter than its superblock says is refused before any write, checksums notwithstanding" "superblock says 8192"
+TRUNCATE_ROOTFS=4096 make_archive "$SB/short-f.tgz"
+run -f --archive="$SB/short-f.tgz"
+refused "...and -f does not waive it" "the image is truncated"
+
 set_mem 2000
 run --archive="$SB/fw.tgz"
 refused "too little RAM to unpack is refused before unpacking" "need .* KB of RAM"
@@ -259,6 +279,9 @@ run --kernel="$SB/src/junk.bin" --rootfs="$SB/src/r.bin"
 refused "kernel with the wrong magic is refused before any write" "neither a uImage nor a FIT"
 run --rootfs="$SB/src/junk.bin"
 refused "rootfs with the wrong magic is refused" "not a squashfs"
+head -c 4096 "$SB/src/r.bin" > "$SB/src/short.bin"
+run --kernel="$SB/src/k.bin" --rootfs="$SB/src/short.bin"
+refused "a raw rootfs cut short is refused, and the kernel beside it is not written" "the image is truncated"
 
 run --rootfs="$SB/src/r.bin" -x
 refused "-x with a rootfs write is refused" "cannot be honoured"
