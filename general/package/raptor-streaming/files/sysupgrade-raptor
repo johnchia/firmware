@@ -88,10 +88,28 @@ EOF
 services_stopped=
 lock_owned=
 
+# The RAM root has /dev, /proc and /tmp bind-mounted inside it once it is
+# built. They come down first, and the directory is only removed when nothing
+# is mounted under it any more: an rm -rf through a bound /dev unlinks the
+# device nodes of the running system, which is what happened on a t31 when a
+# later step refused. If a bind will not unmount, the directory stays.
+discard_ramroot() {
+	local d
+	for d in tmp proc dev; do
+		umount "$ROOT/$d" 2>/dev/null
+	done
+	if awk -v r="$ROOT/" 'index($2, r) == 1 { found = 1 } END { exit !found }' /proc/mounts 2>/dev/null; then
+		say "Warning: $ROOT still has mounts under it; left in place"
+		return 1
+	fi
+	rm -rf "$ROOT"
+}
+
 cleanup() {
 	# Only what this run created. A --kernel or --rootfs the operator pointed
 	# at is theirs to keep.
-	rm -rf "$ROOT" "$PKG"
+	discard_ramroot
+	rm -rf "$PKG"
 	if [ -n "$services_stopped" ]; then
 		local s
 		for s in $(printf '%s\n' $SERVICES | sed '1!G;h;$!d'); do
@@ -277,7 +295,7 @@ check_payload() {
 # in so the MTD nodes and the payload are reachable by their usual paths.
 build_ramroot() {
 	local lib
-	rm -rf "$ROOT"
+	discard_ramroot || die "a previous RAM root is still mounted at $ROOT"
 	mkdir -p "$ROOT/bin" "$ROOT/lib" "$ROOT/dev" "$ROOT/proc" "$ROOT/tmp" ||
 		die "cannot create $ROOT"
 	cp /bin/busybox "$ROOT/bin/busybox" || die "cannot copy busybox"
@@ -316,22 +334,30 @@ quiesce_overlay() {
 	mount -o remount,ro "$mp" 2>/dev/null && say "Overlay $mp remounted read-only"
 }
 
+# The overlay's upper directory, read from the root mount. general/overlay/init
+# mounts it one of two ways: "overlay" with upperdir=/overlay/root and a
+# workdir on kernels that have it, or the older "overlayfs" with the whole
+# partition as upperdir=/overlay (the 3.10 kernel on the t31). Resolved before
+# anything is stopped, so a camera this cannot be read on is refused up front
+# rather than after the RAM root is built.
+find_upperdir() {
+	upper=$(awk '$2 == "/" && ($3 == "overlay" || $3 == "overlayfs") {
+		n = split($4, o, ",")
+		for (i = 1; i <= n; i++) if (o[i] ~ /^upperdir=/) { sub(/^upperdir=/, "", o[i]); print o[i]; exit }
+	}' /proc/mounts)
+	[ -n "$upper" ] && [ -d "$upper" ] || die "cannot find the overlay upper directory in /proc/mounts"
+}
+
 # Everything in the overlay's upper directory except etc and var. What a
 # development session leaves behind is a binary or a script copied over the
 # image's -- /usr/bin/rvd, an init script, a library -- and those shadow the
 # fresh image after the flash. etc holds the configuration and the claim, var
-# the random seed; both stay. The directory is taken from the mount rather than
-# assumed, and the removal happens under a live overlayfs, so the merged view
-# is only trustworthy again after the reboot.
+# the random seed; both stay. The removal happens under a live overlay, so the
+# merged view is only trustworthy again after the reboot.
 dev_wipe_overlay() {
-	local up e
-	up=$(awk '$2 == "/" && $3 == "overlay" {
-		n = split($4, o, ",")
-		for (i = 1; i <= n; i++) if (o[i] ~ /^upperdir=/) { sub(/^upperdir=/, "", o[i]); print o[i]; exit }
-	}' /proc/mounts)
-	[ -n "$up" ] && [ -d "$up" ] || die "cannot find the overlay upper directory in /proc/mounts"
-	say "Removing everything in $up except etc and var"
-	for e in "$up"/* "$up"/.[!.]*; do
+	local e
+	say "Removing everything in $upper except etc and var"
+	for e in "$upper"/* "$upper"/.[!.]*; do
 		[ -e "$e" ] || [ -L "$e" ] || continue
 		case "${e##*/}" in etc | var) continue ;; esac
 		rm -rf "$e"
@@ -409,6 +435,7 @@ n=0
 [ "$(id -u)" = 0 ] || die "must run as root"
 get_system_info
 [ -z "$wipe" ] || [ -n "$overlay_dev" ] || die "no rootfs_data partition to erase"
+[ -z "$dev_wipe" ] || find_upperdir
 
 [ -z "$github" ] || github_url "$github"
 

@@ -73,9 +73,18 @@ EOF
 set_mem() { printf 'MemTotal: 39048 kB\nMemFree: 5000 kB\nBuffers: 0 kB\nCached: 8000 kB\nMemAvailable: %s kB\n' "$1" > "$SB/proc/meminfo"; }
 set_mem 20000
 # The overlay as general/overlay/init mounts it: the jffs2 partition, and the
-# overlayfs root whose upperdir the dev wipe reads back out of this line.
+# root overlay whose upperdir the dev wipe reads back out of this line. Two
+# flavours: "overlay" with a workdir (upperdir=/overlay/root), and the older
+# "overlayfs" of the 3.10 t31 kernel, where the whole partition is the upper.
 UP="$SB/overlay/root"
-printf '/dev/mtdblock4 /overlay jffs2 rw,relatime 0 0\noverlay / overlay rw,relatime,lowerdir=/,upperdir=%s,workdir=%s/overlay/work 0 0\n' "$UP" "$SB" > "$SB/proc/mounts"
+set_mounts() {
+	case "${1:-overlay}" in
+		overlay)   printf '/dev/mtdblock4 /overlay jffs2 rw,relatime 0 0\noverlay / overlay rw,relatime,lowerdir=/,upperdir=%s,workdir=%s/overlay/work 0 0\n' "$UP" "$SB" ;;
+		overlayfs) printf '/dev/mtdblock4 /overlay jffs2 rw,relatime 0 0\noverlayfs / overlayfs rw,relatime,lowerdir=/,upperdir=%s 0 0\n' "$UP" ;;
+		none)      printf '/dev/mtdblock4 /overlay jffs2 rw,relatime 0 0\n' ;;
+	esac > "$SB/proc/mounts"
+}
+set_mounts
 # What a development session leaves in the upper directory.
 set_upper() {
 	rm -rf "$UP"; mkdir -p "$UP/etc" "$UP/var/lib" "$UP/usr/bin" "$UP/root"
@@ -100,7 +109,8 @@ stub sleep   'exit 0'
 stub ldd     'echo "	libc.so => '"$SB"'/lib/libc.so (0x0)"'
 # bind mounts succeed silently; the read-only remount of the overlay is logged
 # so a test can assert it happened, and happened before the erase.
-stub mount   'case "$*" in *remount*) echo "remount $*" >> "$FLASH_LOG";; esac; exit 0'
+stub mount   'case "$*" in *remount*) echo "remount $*" >> "$FLASH_LOG";; *bind*) echo "bind ${@: -1}" >> "$FLASH_LOG";; esac; exit 0'
+log_stub umount
 # The handover. A preflight (`-c :`) answers STUB_CHROOT_RC; the real entry runs
 # the copy the script placed in its RAM root, with SU_PHASE=2 already exported.
 stub chroot  'root=$1; shift
@@ -297,6 +307,18 @@ upper_cleaned && log_order "^killall dropbear" "^reboot -f" && ! wrote \
 	|| { bad "-d alone"; echo "$OUT" | sed 's/^/     /'; sed 's/^/     log: /' "$FLASH_LOG"; }
 
 set_upper
+set_mounts overlayfs
+run -d -x
+[ "$RC" -eq 0 ] && upper_cleaned && ok "-d on the older overlayfs (t31) finds the upper directory" \
+	|| { bad "-d on overlayfs"; echo "$OUT" | sed 's/^/     /'; }
+set_mounts none
+set_upper
+run -d --archive="$SB/fw.tgz"
+refused "-d with no readable overlay mount is refused before anything is stopped" "cannot find the overlay upper"
+upper_intact && ! grep -q "^S95raptor stop\|^bind " "$FLASH_LOG" && ok "...and before services or the RAM root were touched" || bad "overlay refusal came too late"
+set_mounts
+
+set_upper
 run -d -n
 refused "-d with -n is refused" "means nothing"
 upper_intact && ok "refusing -d -n touched nothing" || bad "refusing -d -n removed files"
@@ -317,6 +339,17 @@ echo "# RAM root"
 
 STUB_CHROOT_RC=1 run --archive="$SB/fw.tgz"
 refused "a RAM root that will not run a shell refuses before any write" "will not run inside"
+# build_ramroot clears a stale RAM root first, so there are unmounts before the
+# binds too; the ones that matter are the last three, after the binds.
+last_line() { grep -n "$1" "$FLASH_LOG" | tail -1 | cut -d: -f1; }
+if [ "$(last_line "^bind .*/dev")" -lt "$(last_line "^umount .*/dev")" ] \
+	&& [ "$(last_line "^bind .*/proc")" -lt "$(last_line "^umount .*/proc")" ] \
+	&& [ "$(last_line "^bind .*/tmp")" -lt "$(last_line "^umount .*/tmp")" ] \
+	&& [ ! -e "$SB/tmp/sysupgrade.root" ]; then
+	ok "the RAM root's bind mounts come down before it is removed"
+else
+	bad "RAM root teardown order"; sed 's/^/     log: /' "$FLASH_LOG"
+fi
 
 echo "# url"
 
