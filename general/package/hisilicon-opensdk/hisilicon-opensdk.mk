@@ -4,8 +4,14 @@
 #
 ################################################################################
 
-HISILICON_OPENSDK_SITE = $(call github,openipc,openhisilicon,$(HISILICON_OPENSDK_VERSION))
-HISILICON_OPENSDK_VERSION = b922e1999dceb43c1a949d8d76a5110176d8c57a
+# johnchia/openhisilicon cv608-4m-encoder: upstream b922e19 plus one commit
+# that gives the CV608 die the CV610_10B's encoder limits in hi_venc.o and
+# hi_rc.o, as shipping CV608 firmware does, so a 2560x1440 sensor is encoded
+# whole instead of cropped to 2304x1296. Nothing outside the CV6xx blobs
+# differs from upstream. Offered upstream as OpenIPC/openhisilicon#228; move
+# back to the OpenIPC pin once that merges.
+HISILICON_OPENSDK_SITE = $(call github,johnchia,openhisilicon,$(HISILICON_OPENSDK_VERSION))
+HISILICON_OPENSDK_VERSION = 7184686ccf4ff301fb85295b43c7261b1b54727f
 
 HISILICON_OPENSDK_LICENSE = GPL-3.0
 HISILICON_OPENSDK_LICENSE_FILES = LICENSE

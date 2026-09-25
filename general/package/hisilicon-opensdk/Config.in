@@ -5,7 +5,8 @@ config BR2_PACKAGE_HISILICON_OPENSDK
 	help
 	  Opensource Hisilicon SoCs SDK
 
-	  https://github.com/OpenIPC/openhisilicon
+	  https://github.com/johnchia/openhisilicon (branch cv608-4m-encoder:
+	  https://github.com/OpenIPC/openhisilicon plus one CV608 encoder commit)
 
 comment "HISILICON_OPENSDK needs a Linux kernel to be built"
 	depends on !BR2_LINUX_KERNEL
