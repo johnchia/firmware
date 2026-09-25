@@ -55,7 +55,7 @@ rest ship a driver nobody here has run.
 
 | Family | Images | Sensors on the image |
 |---|---|---|
-| infinity6c | `ssc377qe_raptor`, `ssc377d_raptor`, `ssc377d_raptorwifi` | **imx335**, **sc450ai**, *sc5239*, gc4653, imx415, os04a10, sc401ai, sc4336p, sc501ai, sc830ai, sc850sl |
+| infinity6c | `ssc377qe_raptor`, `ssc377d_raptor`, `ssc377d_raptorwifi` | **imx335**, **sc450ai**, *sc5239*, gc4653, imx415, os04a10, sc401ai, sc4336p, sc501ai, sc5235, sc830ai, sc850sl |
 | infinity6e | `ssc30kq_raptor` | **gc4653**, gc2053, gc2093, imx307, imx335, imx347, imx415, os04a10, os04c10, sc501ai, sc8235 |
 | infinity6b0 | `ssc333_sc3336_raptor` | **sc3336** |
 | hi3516ev200 | `hi3516ev200_raptor`, `hi3516ev300_raptor` | **imx307**, **imx335**, gc2053, gc4653, jxf22, jxf23, jxf37, sc2231, sc2232h, sc2239, sc2315e, sc3235, sc3335, sc4236, sp2305, sp2308 |
