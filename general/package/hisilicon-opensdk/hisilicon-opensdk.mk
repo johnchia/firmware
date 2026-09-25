@@ -4,14 +4,15 @@
 #
 ################################################################################
 
-# johnchia/openhisilicon cv608-4m-encoder: upstream b922e19 plus one commit
-# that gives the CV608 die the CV610_10B's encoder limits in hi_venc.o and
-# hi_rc.o, as shipping CV608 firmware does, so a 2560x1440 sensor is encoded
-# whole instead of cropped to 2304x1296. Nothing outside the CV6xx blobs
-# differs from upstream. Offered upstream as OpenIPC/openhisilicon#228; move
-# back to the OpenIPC pin once that merges.
+# johnchia/openhisilicon cv608-4m-encoder: upstream main (through #226) plus
+# two commits of its own. One gives the CV608 die the CV610_10B's encoder
+# limits in hi_venc.o and hi_rc.o, as shipping CV608 firmware does, so a
+# 2560x1440 sensor is encoded whole instead of cropped to 2304x1296; it is
+# offered upstream as OpenIPC/openhisilicon#228. The other adds the SmartSens
+# CV2005 driver from the Hi3516CV610 SDK. Move back to the OpenIPC pin once
+# both are there.
 HISILICON_OPENSDK_SITE = $(call github,johnchia,openhisilicon,$(HISILICON_OPENSDK_VERSION))
-HISILICON_OPENSDK_VERSION = 7184686ccf4ff301fb85295b43c7261b1b54727f
+HISILICON_OPENSDK_VERSION = 0ec9aad011a3ceaa1ca90d5ce63ed46d93043e52
 
 HISILICON_OPENSDK_LICENSE = GPL-3.0
 HISILICON_OPENSDK_LICENSE_FILES = LICENSE
@@ -236,6 +237,7 @@ HISILICON_OPENSDK_SENSORS_hi3516cv200 = \
 HISILICON_OPENSDK_SENSORS_hi3516cv6xx = \
 	galaxycore_gc4023/libsns_gc4023 \
 	omnivision_os04d10/libsns_os04d10 \
+	smart_cv2005/libsns_cv2005 \
 	smart_sc431hai/libsns_sc431hai \
 	smart_sc4336p/libsns_sc4336p \
 	smart_sc450ai/libsns_sc450ai \

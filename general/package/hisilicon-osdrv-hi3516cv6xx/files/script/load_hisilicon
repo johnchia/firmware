@@ -9,7 +9,7 @@ SNS_TYPE1=sc4336p;
 # used both to validate the sensor the environment supplies and to print the
 # usage line, because a copy of it that drifts is how the wrong sensor gets
 # configured in the first place.
-SNS_SUPPORTED="sc4336p gc4023 sc450ai sc500ai sc431hai os04d10 imx307 os02m10 bt1120 bt656 bt601";
+SNS_SUPPORTED="sc4336p gc4023 sc450ai sc500ai sc431hai os04d10 cv2005 imx307 os02m10 bt1120 bt656 bt601";
 SYS_PROFILE=0
 IR_AUTO=0
 DEBUG=1

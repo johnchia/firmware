@@ -168,7 +168,7 @@ T no  "$(overlaps 0x42000000 '')"       "unreadable /proc/iomem does not fabrica
 echo
 echo "=== Part 5: SENSOR seeds SNS_TYPE0 ==="
 
-SNS_SUPPORTED="sc4336p gc4023 sc450ai sc500ai sc431hai os04d10 imx307 os02m10 bt1120 bt656 bt601"
+SNS_SUPPORTED="sc4336p gc4023 sc450ai sc500ai sc431hai os04d10 cv2005 imx307 os02m10 bt1120 bt656 bt601"
 sns_dir=$(mktemp -d)
 : > "$sns_dir/libsns_os04d10.so"
 : > "$sns_dir/libsns_imx307.so"
