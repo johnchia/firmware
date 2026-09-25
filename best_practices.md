@@ -125,6 +125,12 @@ Flag any `*_SITE` that names a user account rather than an OpenIPC-org repositor
 documented upstream project. The fix is to land the change in the upstream repo first
 and then bump the version here.
 
+The exception is a repository owned by the same account as the tree being built. A fork
+of this tree (johnchia/firmware, say) may pin its owner's own forks (johnchia/*): that
+owner already controls every file the build ships, so the pin hands control to no one
+new. The pin carries a comment saying why it is not the OpenIPC pin and when it goes
+back. Someone else's account is still a defect.
+
 ### 2.2 A version bump must not make the pin less specific
 
 The tree is not uniform here: most packages pin a full 40-character SHA
@@ -460,7 +466,8 @@ enforces them. Summarised here because they are the most common review findings:
   no vendor SDK or buildable source behind it.
 - New kernel patches under `general/package/all-patches/linux/` — those go to
   OpenIPC/linux.
-- A `*_SITE` pointing at a personal fork, or a `*_VERSION` that is an abbreviated SHA.
+- A `*_SITE` pointing at a personal fork not owned by this tree's owner (§2.1), or a
+  `*_VERSION` that is an abbreviated SHA.
 - A sensor, GPIO, I2C address, or other board-specific value written into
   `general/overlay/` or into a shared `load_<vendor>` default.
 - Single-board scripts and packages in the shared tree — those go to OpenIPC/builder.

@@ -44,11 +44,13 @@ pr_compliances:
     success_criteria: >
       Added or changed *_SITE values name an OpenIPC-org repository or a documented
       upstream project. Landing the change upstream first and bumping the version here
-      is the sanctioned route.
+      is the sanctioned route. A repository owned by the same account as the tree being
+      built also passes (a fork pinning its owner's own forks), provided the .mk says why
+      it is not the OpenIPC pin and when it goes back.
     failure_criteria: >
       The diff points a *_SITE at a personal user account, for example
-      $(call github,<username>,<repo>,...) where <username> is not openipc and is not the
-      package's established upstream.
+      $(call github,<username>,<repo>,...) where <username> is not openipc, is not the
+      package's established upstream, and does not own the tree being built.
 
   - title: "Version pins do not loosen, and help text agrees with SITE"
     compliance_label: true
