@@ -38,6 +38,20 @@ jobs:
       - run: sudo apt-get install -y busybox-static
       - run: bash .github/scripts/test_wireless_detect.sh
 
+  cameras:
+    name: camera directories keep their four rules
+    if: >-
+      github.repository == 'OpenIPC/firmware' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && !github.event.repository.private)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The fixture pass first: it proves each rule can still fire before the
+      # tree is judged by them.
+      - run: bash .github/scripts/test_cameras.sh --self-test
+      - run: bash .github/scripts/test_cameras.sh
+
   sysupgrade-verify:
     name: sysupgrade rootfs verification
     if: >-

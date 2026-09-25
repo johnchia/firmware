@@ -162,6 +162,12 @@ because that arm opens by power-cycling the radio on GPIO 57. Note where the two
 live: **the environment names the arm; the arm knows the pin.** Neither half is derivable
 from the other.
 
+A camera directory (`br-ext-chip-<vendor>/cameras/<camera>/`, see `general/cameras.mk`)
+keeps that split. Its `uboot.env.txt` is where a baked `wlandev` now lives, and it names
+an arm in these two shared helpers exactly as a defconfig's env did; the arm itself never
+moves into the camera's overlay, because `test_cameras.sh` refuses a camera overlay that
+shadows a shared file, and because the helper is where every arm is listed and tested.
+
 ## Cost
 
 `detect` is 461 bytes once `general/scripts/strip-shell-comments.awk` has run over it,

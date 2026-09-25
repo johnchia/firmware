@@ -11,6 +11,14 @@ export OPENIPC_MAJESTIC := $(call qstrip,$(BR2_OPENIPC_MAJESTIC))
 export WGET := wget --show-progress --passive-ftp -nd -t5 -T10
 
 EXTERNAL_VENDOR := $(BR2_EXTERNAL)/../br-ext-chip-$(OPENIPC_SOC_VENDOR)
+
+# The camera directory, for a camera target (see general/cameras.mk): what a
+# camera.conf names its env file by ($(OPENIPC_CAMERA_DIR)/uboot.env.txt), and
+# what the raptor post-build hook reads its raptor.conf partial from. Empty
+# on an SoC target, and exported because the hook runs with the environment
+# rather than the .config.
+export OPENIPC_CAMERA := $(call qstrip,$(BR2_OPENIPC_CAMERA))
+export OPENIPC_CAMERA_DIR := $(if $(OPENIPC_CAMERA),$(EXTERNAL_VENDOR)/cameras/$(OPENIPC_CAMERA))
 OPENIPC_KERNEL := $(OPENIPC_SOC_VENDOR)-$(OPENIPC_SOC_FAMILY)
 OPENIPC_TOOLCHAIN := toolchain/toolchain.$(OPENIPC_KERNEL)
 

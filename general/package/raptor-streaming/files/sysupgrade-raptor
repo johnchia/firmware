@@ -189,13 +189,14 @@ get_system_info() {
 }
 
 # The archive the build published for this camera: openipc.<soc>[_<sensor>]-nor-
-# <variant>-latest.tgz, the name REPACK_FIRMWARE in the Makefile gives it. The
-# variant and the pinned sensor are stamped into os-release for this purpose;
-# a camera flashed before the sensor was stamped composes the name without it,
-# which is right for every board that ships all its sensor blobs. Sets url,
+# <variant>-latest.tgz, the name REPACK_FIRMWARE in the Makefile gives it, or
+# openipc.<camera>-nor-<variant>-latest.tgz for a camera target. The variant,
+# the pinned sensor and the camera are stamped into os-release for this
+# purpose; a camera flashed before a stamp existed composes the name without
+# it, which is right for every image built before that stamp. Sets url,
 # because a die() inside a command substitution would print into the variable.
 github_url() {
-	local repo=${1%@*} tag=raptor-nightly variant sensor
+	local repo=${1%@*} tag=raptor-nightly variant sensor camera
 	case "$1" in *@*) tag=${1#*@} ;; esac
 	case "$repo" in
 		*/*/* | */ | /* | "") die "--github wants OWNER/REPO, got '$1'" ;;
@@ -205,7 +206,8 @@ github_url() {
 	variant=$(sed -n 's/^BUILD_OPTION=//p' "$OSREL")
 	[ -n "$variant" ] || die "no BUILD_OPTION in $OSREL; cannot name this board's archive"
 	sensor=$(sed -n 's/^BUILD_SENSOR=//p' "$OSREL")
-	url="https://github.com/$repo/releases/download/$tag/openipc.$model${sensor:+_$sensor}-nor-$variant-latest.tgz"
+	camera=$(sed -n 's/^BUILD_CAMERA=//p' "$OSREL")
+	url="https://github.com/$repo/releases/download/$tag/openipc.${camera:-$model${sensor:+_$sensor}}-nor-$variant-latest.tgz"
 }
 
 # ---------------------------------------------------------------------------

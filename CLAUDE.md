@@ -104,7 +104,7 @@ default serves every board in the family; changing it takes video away from all 
 Wiki: [firmware-sensors](https://github.com/OpenIPC/wiki/blob/master/en/firmware-sensors.md),
 [a worked example](https://github.com/OpenIPC/wiki/blob/master/en/firmware-sensor-install-sc223a.md).
 
-### Add a board or a variant
+### Add an SoC target or a variant
 
 1. `br-ext-chip-<vendor>/configs/<model>_<variant>_defconfig` is the entry point. The mainline
    variants are `lite`, `ultimate` and `neo`; a few vendor-specific ones exist.
@@ -116,6 +116,33 @@ Wiki: [firmware-sensors](https://github.com/OpenIPC/wiki/blob/master/en/firmware
 
 Anything that should apply to every board goes in `general/openipc.fragment`, which `make
 defconfig` concatenates with the board defconfig — not into a hundred separate files.
+
+### Add a camera
+
+A camera is what is soldered around an SoC: the sensor, the radio, the pins, the baked U-Boot
+environment. It is **never a copy of a defconfig**. It is a directory,
+`br-ext-chip-<vendor>/cameras/<identity>_<soc>_<sensor>_<radio>/`, and `make BOARD=<camera>`
+layers its `camera.conf` on the SoC target the fragment names as `BR2_OPENIPC_CAMERA_BASE`
+(`general/cameras.mk` does the composition; later lines win).
+
+1. `camera.conf`: `BR2_OPENIPC_CAMERA` (the directory's name), `BR2_OPENIPC_CAMERA_BASE`
+   (`<soc>_<variant>`, in the same vendor tree), `BR2_OPENIPC_SNS_MODEL`, the radio driver and
+   the supplicant group, the env-image trio if the camera bakes one, and nothing else. Sorted.
+   The allowlist is in `.github/scripts/test_cameras.sh`; a fragment that wants a symbol the
+   allowlist refuses is an SoC target in disguise, so add the target instead.
+2. `raptor.conf`: the pins the daemons read (IR-cut, backlight, speaker), merged into
+   `/etc/raptor.conf` at build time by raptor-streaming's post-build hook. Facts are data; a
+   camera never ships a first-boot script.
+3. `uboot.env.txt`, if the camera bakes an environment. `wlandev` names an arm in the shared
+   `/etc/wireless/usb` or `sdio`; the arm stays there (`docs/wireless-detect.md`).
+4. `overlay/`, only for files no shared overlay has. A path that also exists in
+   `general/overlay` or the family overlay is refused.
+5. `README.md`: where the pins came from, and what has and has not run on the unit.
+6. **Register its status** in `CAMERA_STATUS` in `.github/scripts/ci-matrix.py`. The camera
+   itself is registered from its directory and builds without an `ALL_BOARDS` entry.
+
+The image is named by the camera, `openipc.<camera>-nor-<variant>-latest.tgz`, and
+`BUILD_CAMERA` in os-release is how the updater composes that back.
 
 ### Make an image fit flash
 
@@ -180,6 +207,7 @@ bash .github/scripts/test_load_hisilicon.sh                   # os_mem_size deri
 bash .github/scripts/test_sysupgrade.sh                       # sysupgrade rootfs verification
 bash .github/scripts/test_sysupgrade_raptor.sh                # the updater raptor images ship
 bash .github/scripts/test_excludes_report.sh                  # excludes lists report stale entries
+bash .github/scripts/test_cameras.sh                          # camera directories keep their rules (--self-test for the fixtures)
 STRICT=1 bash .github/scripts/test_shell_parse.sh             # every shipped script parses
 STRICT=1 bash .github/scripts/test_strip_shell_comments.sh    # ...and still parses once stripped
 python3 .github/scripts/ci-matrix.py --self-test              # the selector agrees with the tree
@@ -305,8 +333,13 @@ the first time.
 - `general/` is the `BR2_EXTERNAL` tree — `external.desc` names it `GENERAL`, and
   `general/external.mk` exports the `OPENIPC_*` variables and includes every `package/*/*.mk`.
 - `make defconfig` concatenates the board defconfig with `general/openipc.fragment` (shared
-  toolchain, ccache, hardening and overlay settings) into `$(TARGET)/openipc_defconfig`.
-- `general/overlay/` is `BR2_ROOTFS_OVERLAY`, copied verbatim into every image.
+  toolchain, ccache, hardening and overlay settings) into `$(TARGET)/openipc_defconfig`. For a
+  camera target the camera's `camera.conf` goes between the two (`general/cameras.mk`).
+- `general/overlay/` is `BR2_ROOTFS_OVERLAY`, copied verbatim into every image. The family
+  overlay `br-ext-chip-<vendor>/board/<family>/overlay/` and a camera's `overlay/` are added to
+  the list when they exist; no defconfig re-states it.
+- `br-ext-chip-<vendor>/cameras/<camera>/` is a camera: a fragment on an SoC target, plus the
+  camera's own facts. See *Add a camera*.
 - `general/scripts/rootfs_script.sh` is the post-build hook. It stamps `/usr/lib/os-release`,
   prunes `libstdc++` unless a config symbol needs it, applies the excludes list, then applies
   late overlays and hooks keyed by config symbol from `general/scripts/late-overlays.list` and

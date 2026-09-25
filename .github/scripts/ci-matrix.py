@@ -210,6 +210,21 @@ UNBUILT_BOARDS = {
     "ssc30kq_divinus": "superseded on this board by ssc30kq_raptor",
 }
 
+# Cameras: br-ext-chip-<vendor>/cameras/<camera>/camera.conf, a fragment
+# layered on the SoC defconfig it names as BR2_OPENIPC_CAMERA_BASE (see
+# general/cameras.mk). They are registered from the tree, not listed in
+# ALL_BOARDS -- adding one is a directory, not an edit here -- and every one
+# builds unless UNBUILT_BOARDS names it with a reason. A change to a base
+# defconfig builds the base and every camera on it; a change under a camera
+# directory builds that camera alone.
+#
+# What IS listed here is the status: every camera directory needs an entry,
+# `verified` with the date and the build the unit ran, or `unverified` with
+# what is missing. That replaces a "NOT BOARD-VERIFIED" sentence in a README
+# that nothing reads, and --self-test fails on a camera with no entry.
+CAMERA_STATUS = {
+}
+
 # Workflows that cannot change what a firmware image contains. Matched on the
 # whole filename, never as a prefix: a workflow this list has never heard of is
 # unknown, and unknown widens. Skipping the matrix for something that does feed
@@ -223,7 +238,8 @@ NO_BUILD_WORKFLOWS = {
 # Same for .github/scripts/.
 NO_BUILD_SCRIPTS = {
     "build-summary.py", "enrich_manifest.py", "lint-workflow-shell.py",
-    "test_load_hisilicon.sh", "test_shell_parse.sh", "test_sysupgrade.sh",
+    "test_cameras.sh", "test_load_hisilicon.sh", "test_shell_parse.sh",
+    "test_sysupgrade.sh",
 }
 
 # CI plumbing: it decides how the build runs but cannot change a byte of what
@@ -380,6 +396,7 @@ WORKFLOW = re.compile(r"^\.github/workflows/([^/]+)$")
 GITHUB_SCRIPT = re.compile(r"^\.github/scripts/([^/]+)$")
 DEFCONFIG = re.compile(r"^br-ext-chip-[^/]+/configs/(.+)_defconfig$")
 BOARD_DIR = re.compile(r"^(br-ext-chip-[^/]+)/board/([^/]+)/")
+CAMERA_DIR = re.compile(r"^br-ext-chip-[^/]+/cameras/([^/]+)/")
 PACKAGE_DIR = re.compile(r"^general/package/([^/]+)/")
 
 # Label that forces the full matrix on a PR, for when you do not trust the
@@ -402,6 +419,7 @@ class Tree:
         self.root = root
         self._read_packages()
         self._read_defconfigs()
+        self._read_cameras()
         self._resolve()
 
     def _read_packages(self):
@@ -471,6 +489,38 @@ class Tree:
                 "family": family.group(1) if family else "",
                 "symbols": set(re.findall(r"^(BR2_PACKAGE_[A-Z0-9_]+)=y", body, re.M)),
                 "traits": self._traits(path, body),
+                "base": None,
+            }
+
+    def _read_cameras(self):
+        """A camera is its base plus its fragment.
+
+        The base's family, packages and traits carry over; the fragment can
+        only add packages (test_cameras.sh keeps it to camera facts). The one
+        trait a camera changes is that it IS one: SMOKE_BOARDS has to carry a
+        camera once any exists, because the composition in general/cameras.mk
+        is a build step no defconfig target exercises.
+        """
+        self.cameras = {}   # camera -> base named in camera.conf
+        for path in sorted(glob.glob(f"{self.root}/br-ext-chip-*/cameras/*/camera.conf")):
+            name = path.split(os.sep)[-2]
+            with open(path) as handle:
+                body = handle.read()
+            base = re.search(r'^BR2_OPENIPC_CAMERA_BASE="([^"]*)"', body, re.M)
+            base = base.group(1) if base else ""
+            self.cameras[name] = base
+            parent = self.boards.get(base)
+            if parent is None or parent["base"] is not None:
+                # No base, or a base that is itself a camera: --self-test
+                # reports it, classify() treats the directory as unknown.
+                continue
+            self.boards[name] = {
+                "vendor_dir": path[len(self.root) + 1:].split(os.sep)[0],
+                "family": parent["family"],
+                "symbols": parent["symbols"]
+                | set(re.findall(r"^(BR2_PACKAGE_[A-Z0-9_]+)=y", body, re.M)),
+                "traits": (parent["traits"] - {"target:defconfig"}) | {"target:camera"},
+                "base": base,
             }
 
     def _traits(self, path, body):
@@ -520,6 +570,9 @@ class Tree:
             "toolchain:" + toolchain,
             "rootfs:" + rootfs,
             "variant:" + string("BR2_OPENIPC_VARIANT"),
+            # A defconfig is built as it is; a camera is composed onto one
+            # (general/cameras.mk), which is a step of its own to prove.
+            "target:defconfig",
         }
 
     def _closure(self, seed):
@@ -549,10 +602,15 @@ class Tree:
         return packages
 
     def _resolve(self):
-        self.built = [b for b in ALL_BOARDS if b in self.boards]
+        self.built = [b for b in ALL_BOARDS if b in self.boards] + \
+            [c for c in sorted(self.cameras) if c in self.boards and c not in UNBUILT_BOARDS]
         self.smoke = [b for b in self.built if b in set(SMOKE_BOARDS)]
         for board in self.built:
             self.boards[board]["packages"] = self._closure(self.boards[board]["symbols"])
+
+    def cameras_on(self, base):
+        """The built cameras layered on a defconfig, whether or not it builds itself."""
+        return [c for c in self.built if self.boards[c]["base"] == base]
 
     def boards_for_package(self, package):
         return [b for b in self.built if package in self.boards[b]["packages"]]
@@ -610,9 +668,24 @@ def classify(tree, changed, labels=(), event="pull_request", draft=False):
         if defconfig:
             # A defconfig outside ALL_BOARDS is never built, so it contributes
             # nothing --- the matrix, not the tree, decides what CI covers.
+            # The cameras layered on it are built whether or not it is: a
+            # base that only exists to be layered on still reaches them.
             if defconfig.group(1) in tree.built:
                 boards.add(defconfig.group(1))
+            boards.update(tree.cameras_on(defconfig.group(1)))
             continue
+
+        camera_dir = CAMERA_DIR.match(path)
+        if camera_dir:
+            if camera_dir.group(1) in tree.built:
+                boards.add(camera_dir.group(1))
+                continue
+            if camera_dir.group(1) in UNBUILT_BOARDS:
+                continue
+            # A camera with no base, or a directory that is not a camera at
+            # all: --self-test is what says so; here it is unknown, and
+            # unknown widens.
+            return _decision(full, True, reason=f"{path} is not a registered camera")
 
         board_dir = BOARD_DIR.match(path)
         if board_dir:
@@ -735,6 +808,33 @@ def self_test():
     for board in ALL_BOARDS:
         if board not in tree.boards:
             problems.append(f"{board} is in ALL_BOARDS but has no defconfig")
+        elif tree.boards[board]["base"] is not None:
+            problems.append(
+                f"{board} is a camera; cameras are registered from their directory, "
+                f"not listed in ALL_BOARDS")
+
+    # 1b. Every camera directory is a camera: it has a camera.conf, names a
+    #     base that is a defconfig, and has a status entry. And every status
+    #     entry names a camera that exists, so the table cannot rot.
+    for path in sorted(glob.glob(f"{REPO_ROOT}/br-ext-chip-*/cameras/*")):
+        if not os.path.isdir(path):
+            continue
+        camera = path.split(os.sep)[-1]
+        if camera not in tree.cameras:
+            problems.append(f"{path[len(REPO_ROOT) + 1:]}/ has no camera.conf")
+            continue
+        base = tree.cameras[camera]
+        if base not in tree.boards:
+            problems.append(f"{camera} names base '{base}', which has no defconfig")
+        elif tree.boards[base]["base"] is not None:
+            problems.append(f"{camera} names base '{base}', which is itself a camera")
+        if not CAMERA_STATUS.get(camera, "").strip():
+            problems.append(
+                f"{camera} has no CAMERA_STATUS entry; say whether it is verified, and "
+                f"on what, or what is missing")
+    for camera in sorted(CAMERA_STATUS):
+        if camera not in tree.cameras:
+            problems.append(f"{camera} is in CAMERA_STATUS but has no camera directory; drop it")
 
     # 2. Every board directory must either back a board in the matrix or be
     #    named as one we knowingly do not build.
@@ -757,6 +857,8 @@ def self_test():
         if board in tree.built or board in UNBUILT_BOARDS:
             continue
         info = tree.boards[board]
+        if info["base"] is not None:
+            continue    # a camera builds unless UNBUILT_BOARDS says otherwise
         if (info["vendor_dir"], info["family"]) in UNBUILT_FAMILIES:
             continue
         problems.append(
@@ -877,6 +979,11 @@ def self_test():
         (["br-ext-chip-goke/configs/gk7205v200_lite_defconfig"], 1, "one defconfig"),
         (["br-ext-chip-hisilicon/board/hi3516ev200/hi3516ev300.generic.config"],
         10, "kernel config narrows to its family"),
+        # A camera directory nothing registered is unknown, and unknown
+        # widens. Registered cameras narrow to themselves, and their base
+        # defconfig reaches them; those cases arrive with the first camera.
+        (["br-ext-chip-hisilicon/cameras/no-such_soc_sns_radio/camera.conf"],
+         full, "an unregistered camera directory widens"),
         (["general/package/hisilicon-osdrv-hi3516cv200/files/script/load_hisilicon",
           "br-ext-chip-hisilicon/configs/hi3516cv200_lite_defconfig"],
          3, "union of two narrowing paths"),

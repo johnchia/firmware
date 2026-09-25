@@ -166,3 +166,63 @@ if [ -f "${CONF}" ] && grep -q '^BR2_OPENIPC_SOC_VENDOR="ingenic"' "${BR2_CONFIG
 		fi
 	fi
 fi
+
+# Camera facts, from the camera directory (general/cameras.mk).
+#
+# A camera target may carry a partial raptor.conf beside its camera.conf: the
+# pins that are facts about that circuit board and nothing else -- an IR-cut
+# filter's GPIOs, a backlight, a speaker enable. They cannot live in the
+# shared /etc/raptor.conf, which every image ships, and they must not live in
+# a first-boot script that edits the running config, which is the failure mode
+# OpenIPC/builder's customizer.sh has on 102 devices: state in the overlay that
+# outlives an upgrade, run on a camera nobody has claimed. So they are merged
+# here, at build time, into the copy of raptor.conf that ships in the
+# squashfs. thingino does the same with thingino.json.
+#
+# Each key in the partial goes to the top of its section and the first
+# commented-out or set line of the same name in that section is dropped, so
+# the value wins and the default it replaces does not linger as a second
+# setting. That is idempotent -- a second pass drops the line the first pass
+# put there and puts it back -- which the sensor pin above is not, and which
+# matters for the same reason it matters there. A section the file lacks is
+# appended. Anything in the partial that is not a comment, a [section] or a
+# key = value line fails the build here rather than shipping as a config the
+# daemons cannot parse.
+#
+# Two passes: the partial is first read into "section<TAB>key<TAB>value"
+# lines, so the checks run before anything is written, and then merged last
+# key first, so that inserting each at the top of its section leaves them in
+# the partial's own order.
+CAMERA_PART="${OPENIPC_CAMERA_DIR:+${OPENIPC_CAMERA_DIR}/raptor.conf}"
+if [ -f "${CONF}" ] && [ -n "${CAMERA_PART}" ] && [ -f "${CAMERA_PART}" ]; then
+	merge_key() {
+		awk -v sec="[$1]" -v key="$2" -v val="$3" '
+			/^\[/ { insec = ($0 == sec) }
+			$0 == sec { print; print key " = " val; found = 1; next }
+			insec && !dropped && $0 ~ ("^#?[[:space:]]*" key "[[:space:]]*=") { dropped = 1; next }
+			{ print }
+			END { if (!found) { print ""; print sec; print key " = " val } }
+		' "${CONF}" > "${CONF}.new" && mv -f "${CONF}.new" "${CONF}"
+	}
+	sec=; keys=
+	while IFS= read -r line || [ -n "${line}" ]; do
+		case "${line}" in
+			'' | '#'* | ' '* | '	'*) continue ;;
+			'['*']') sec=${line#\[}; sec=${sec%\]}; continue ;;
+			*=*) ;;
+			*) echo "raptor-streaming: ${CAMERA_PART}: cannot read '${line}' (want [section] or key = value)"; exit 1 ;;
+		esac
+		key=$(printf '%s' "${line%%=*}" | tr -d ' \t')
+		val=$(printf '%s' "${line#*=}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+		case "${key}" in
+			'' | *[!A-Za-z0-9_]*) echo "raptor-streaming: ${CAMERA_PART}: bad key in '${line}'"; exit 1 ;;
+		esac
+		[ -n "${sec}" ] || { echo "raptor-streaming: ${CAMERA_PART}: '${line}' comes before any [section]"; exit 1; }
+		keys=$(printf '%s\t%s\t%s\n%s' "${sec}" "${key}" "${val}" "${keys}")
+	done < "${CAMERA_PART}"
+	printf '%s\n' "${keys}" | while IFS='	' read -r sec key val; do
+		[ -n "${key}" ] || continue
+		merge_key "${sec}" "${key}" "${val}"
+		echo "raptor-streaming: raptor.conf [${sec}] ${key} = ${val} (from ${OPENIPC_CAMERA})"
+	done
+fi

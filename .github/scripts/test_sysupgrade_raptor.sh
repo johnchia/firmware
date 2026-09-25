@@ -60,7 +60,7 @@ for s in S95raptor S60crond S49ntpd S02klogd S02fakehwclock S01syslogd; do
 	chmod +x "$SB/etc/init.d/$s"
 done
 
-set_osrel() { printf 'BUILD_PLATFORM=ssc333_raptor\nBUILD_OPTION=raptor\nBUILD_SENSOR=%s\n' "${1:-}" > "$SB/etc/os-release"; }
+set_osrel() { printf 'BUILD_PLATFORM=ssc333_raptor\nBUILD_OPTION=raptor\nBUILD_SENSOR=%s\nBUILD_CAMERA=%s\n' "${1:-}" "${2:-}" > "$SB/etc/os-release"; }
 set_osrel
 
 set_mtd() { cat > "$SB/proc/mtd"; }
@@ -398,6 +398,21 @@ STUB_CURL_FILE="$SB/fw.tgz" run --github=johnchia/firmware@v2
 grep -q "^curl https://github.com/johnchia/firmware/releases/download/v2/openipc.ssc333_sc3336-nor-raptor-latest.tgz$" "$FLASH_LOG" \
 	&& ok "--github: the pinned sensor is part of the name, and @TAG picks the release" \
 	|| { bad "--github with sensor and tag"; sed 's/^/     log: /' "$FLASH_LOG"; }
+
+# A camera target's archive is named by the camera alone: the name already
+# carries the SoC and the sensor, so neither is spelled again.
+set_osrel sc3336 kd110_ssc333_sc3336_rtl8188fu
+STUB_CURL_FILE="$SB/fw.tgz" run --github=johnchia/firmware
+grep -q "^curl https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.kd110_ssc333_sc3336_rtl8188fu-nor-raptor-latest.tgz$" "$FLASH_LOG" \
+	&& ok "--github: a camera target composes openipc.<camera>-nor-<variant>, sensor and SoC not repeated" \
+	|| { bad "--github with a camera"; sed 's/^/     log: /' "$FLASH_LOG"; }
+
+# An image from before the stamp existed has no BUILD_CAMERA line at all.
+printf 'BUILD_PLATFORM=ssc333_raptor\nBUILD_OPTION=raptor\nBUILD_SENSOR=sc3336\n' > "$SB/etc/os-release"
+STUB_CURL_FILE="$SB/fw.tgz" run --github=johnchia/firmware
+grep -q "^curl https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc333_sc3336-nor-raptor-latest.tgz$" "$FLASH_LOG" \
+	&& ok "--github: no BUILD_CAMERA line composes the SoC-and-sensor name" \
+	|| { bad "--github without the camera stamp"; sed 's/^/     log: /' "$FLASH_LOG"; }
 set_osrel
 
 run --github=johnchia

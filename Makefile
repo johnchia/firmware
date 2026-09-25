@@ -71,8 +71,10 @@ BOARD := $(or $(shell whiptail --title "Available boards" --menu "Select a confi
 endif
 
 ifneq ($(BOARD),)
-CONFIG := $(shell find br-ext-*/configs/*_defconfig | grep -m1 $(BOARD))
-include $(CONFIG)
+# A camera directory first (general/cameras.mk), then the defconfig grep.
+include $(PWD)/general/cameras.mk
+CONFIG := $(or $(CAMERA_BASE_CONFIG),$(shell find br-ext-*/configs/*_defconfig | grep -m1 $(BOARD)))
+include $(CONFIG) $(CAMERA_CONF)
 endif
 
 ifneq ($(filter repack,$(MAKECMDGOALS)),)
@@ -146,16 +148,24 @@ uboot-local:
 
 defconfig: prepare
 	@echo --- $(or $(CONFIG),$(error variable BOARD not found))
-	@cat $(CONFIG) $(PWD)/general/openipc.fragment > $(BR_CONF)
+	@cat $(CONFIG) $(CAMERA_CONF) $(PWD)/general/openipc.fragment > $(BR_CONF)
 	@grep -s '^BR2_GLOBAL_PATCH_DIR=' $(CONFIG) >> $(BR_CONF) || true
 # The fragment is concatenated after the board config, so it wins every
 # conflict -- including BR2_ROOTFS_OVERLAY, which it hardcodes to the shared
-# overlay alone. A board that needs a file of its own (fw_env.config is the
-# case in hand: its offsets and sector size are per-SoC, and the shared
-# overlay cannot carry a value that is right for every vendor) re-states the
-# whole list, shared directory included, and it is appended back here. Same
-# idiom as BR2_GLOBAL_PATCH_DIR above, and inert for boards that set neither.
-	@grep -s '^BR2_ROOTFS_OVERLAY=' $(CONFIG) >> $(BR_CONF) || true
+# overlay alone. The list a board actually needs (a family overlay for a file
+# whose contents are per-SoC, fw_env.config being the case in hand; a camera's
+# own overlay) is composed in general/cameras.mk from the directories that
+# exist and appended here, after the fragment, so it wins. A defconfig that
+# still re-states the list is held to the composed one rather than trusted:
+# the two agreeing is what lets the re-statement be deleted.
+	@stated=$$(grep -s '^BR2_ROOTFS_OVERLAY=' $(CONFIG)); \
+	if [ -n "$$stated" ] && [ "$$stated" != '$(ROOTFS_OVERLAY_LINE)' ]; then \
+		echo "*** $(CONFIG) states $$stated"; \
+		echo "*** but the overlays that exist compose to $(ROOTFS_OVERLAY_LINE)"; \
+		echo "*** Drop the line from the defconfig, or move the overlay it names."; \
+		exit 1; \
+	fi
+	@echo '$(ROOTFS_OVERLAY_LINE)' >> $(BR_CONF)
 	@$(BR_MAKE) BR2_DEFCONFIG=$(BR_CONF) defconfig
 
 prepare:
@@ -222,6 +232,11 @@ help:
 
 list:
 	@ls -1 br-ext-chip-*/configs
+	@echo; echo "cameras (make BOARD=<camera>; each layers on the SoC target named):"
+	@for c in br-ext-chip-*/cameras/*/camera.conf; do \
+		test -f "$$c" || continue; d=$${c%/camera.conf}; \
+		echo "$${d##*/}  on $$(sed -n 's/^BR2_OPENIPC_CAMERA_BASE="\(.*\)"$$/\1/p' "$$c")"; \
+	done
 
 package:
 	@find $(PWD)/general/package/* -maxdepth 0 -type d -printf "br-%f\n" | grep -v patch
@@ -303,10 +318,10 @@ FULLIMAGE_ENV = $(strip $(if $(strip $(ENV_BIN)),$(abspath $(ENV_BIN)),\
 	$(if $(filter y,$(BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE)),\
 		$(TARGET)/images/uboot-env.bin)))
 
-# Named as the sysupgrade archive is, openipc-<soc>[_<sensor>]-nor-<variant>:
-# two targets on one SoC (the ssc377d and cv608 raptor/raptorwifi pairs) used
-# to produce one name between them, and the nightly's merged download kept
-# whichever landed last.
+# Named as the sysupgrade archive is, openipc-<soc>[_<sensor>]-nor-<variant>,
+# or openipc-<camera>-nor-<variant> for a camera target: two targets on one
+# SoC (the ssc377d and cv608 raptor/raptorwifi pairs) used to produce one name
+# between them, and the nightly's merged download kept whichever landed last.
 FULLIMAGE_OUT = $(TARGET)/images/openipc-$(IMAGE_SOC)-nor-$(subst ",,$(BR2_OPENIPC_VARIANT))-full.bin
 
 fullimage: defconfig
@@ -586,12 +601,19 @@ endef
 # tar and ln arguments below -- but $(if ...) would see "" as a value, so the
 # sensor has to be unquoted here rather than left to the shell.
 #
+# A camera target is named by the camera instead. Its name already spells the
+# SoC, the sensor and the radio (h4cx-a0_hi3516cv608_os04d10_rtl8733bu), so
+# openipc.<camera>-nor-<variant> says everything the SoC-and-sensor form did
+# and which camera the image was built for besides. BUILD_CAMERA in os-release
+# is what lets the camera-side updater compose it back.
+#
 # Only the archive is renamed. The members inside it keep the plain SoC suffix
 # -- uImage.ssc333, rootfs.squashfs.ssc333 -- because that is the name
 # sysupgrade looks for on the camera, derived from BUILD_PLATFORM's first
 # token. Renaming those would make an image that no board can unpack.
 IMAGE_SNS = $(strip $(subst ",,$(BR2_OPENIPC_SNS_MODEL)))
-IMAGE_SOC = $(BR2_OPENIPC_SOC_MODEL)$(if $(IMAGE_SNS),_$(IMAGE_SNS))
+IMAGE_CAMERA = $(strip $(subst ",,$(BR2_OPENIPC_CAMERA)))
+IMAGE_SOC = $(or $(IMAGE_CAMERA),$(BR2_OPENIPC_SOC_MODEL)$(if $(IMAGE_SNS),_$(IMAGE_SNS)))
 
 define REPACK_FIRMWARE
 	$(eval OPENIPC_BUILD_ID ?= $(or $(shell cat $(TARGET)/target/etc/openipc-build-id 2>/dev/null),unknown-$(shell date -u +%Y%m%dT%H%M%SZ)))

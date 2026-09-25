@@ -20,6 +20,24 @@ config BR2_OPENIPC_SOC_FAMILY
 config BR2_OPENIPC_SNS_MODEL
 	string "Sensor model"
 
+config BR2_OPENIPC_CAMERA
+	string "Camera"
+	help
+	  Set only by a camera fragment, br-ext-chip-<vendor>/cameras/<camera>/
+	  camera.conf, to the directory's own name: <identity>_<soc>_<sensor>_
+	  <radio>. Names the image archive (openipc.<camera>-nor-<variant>) and
+	  is stamped into os-release as BUILD_CAMERA so the camera-side updater
+	  can compose that name back. Empty on an SoC target.
+
+config BR2_OPENIPC_CAMERA_BASE
+	string "Camera base target"
+	help
+	  The SoC target a camera fragment layers on, as <soc>_<variant>; the
+	  Makefile reads it out of camera.conf to find the defconfig. A camera
+	  may set only camera facts over its base (the allowlist is in
+	  .github/scripts/test_cameras.sh); a fragment that wants more is an
+	  SoC target in disguise.
+
 config BR2_OPENIPC_VARIANT
 	string "OpenIPC variant"
 

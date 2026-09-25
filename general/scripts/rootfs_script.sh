@@ -44,6 +44,10 @@ echo BUILD_PLATFORM=${BUILD_PLATFORM:-${OPENIPC_SOC_MODEL}_${OPENIPC_VARIANT}} >
 # Makefile) and the camera-side updater has to reproduce that name to fetch
 # its own -latest archive. Empty on boards that ship every sensor blob.
 echo BUILD_SENSOR=${OPENIPC_SNS_MODEL} >> ${FILE}
+# The camera, when this is a camera target (general/cameras.mk), for the same
+# reason: its archive is named openipc.<camera>-nor-<variant>-... instead, and
+# the updater composes that from this line. Empty on an SoC target.
+echo BUILD_CAMERA=${OPENIPC_CAMERA} >> ${FILE}
 date +TIME_STAMP=%s >> ${FILE}
 
 CONF="USES_GLIBC=y|OSDRV_T30=y|OSDRV_V85X=y|LIBV4L=y|MAVLINK_ROUTER=y|RUBYFPV=y|ONYXFPV=y|WIFIBROADCAST=y|WIFIBROADCAST_NG=y|AUDIO_PROCESSING_OPENIPC=y"
