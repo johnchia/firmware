@@ -60,7 +60,14 @@ dump of the bench unit was taken before its first flash.
   observed and the unit back within a minute.
 - Earlier, on `t31_raptor` after the move to uClibc: eight daemons, zero
   faults, H.264 1920x1080 and 640x360 over RTSP, JPEG snapshots, 16 kHz audio.
-- Not yet run on this unit: the camera-named image from this directory. It
-  composes to the same configuration as the old `t31_raptor` plus the two
-  camera symbols; the base without the fragment is now an SoC target with no
-  radio, every sensor's yaml, and no baked environment.
+- 2026-09-25: the camera-named image from this directory, built in a fresh
+  tree at 2e36b6b0, flashed with `sysupgrade-raptor` over WiFi. The link
+  dropped during the rootfs write as above and the unit was back in about
+  10 s of the reboot. Verified on the unit: `BUILD_CAMERA` in os-release names
+  this directory, the sensor is pinned (gc2053 at 0x37, 1920x1080), seven
+  daemons up, wlan0 associated, and the rootfs partition's md5 equals the
+  built squashfs. The updater composes
+  `openipc.wyze-cam3_t31_gc2053_atbm6031-nor-raptor-latest.tgz` for its next
+  fetch. The base without the fragment is now an SoC target with no radio,
+  every sensor's yaml, and no baked environment; it has not been flashed on
+  its own.

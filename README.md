@@ -51,7 +51,7 @@ build with `make BOARD=<name>`.
 | `h4cx-a0_hi3516cv608_os04d10_rtl8733bu` | `hi3516cv608_raptor` | OS04D10 · RTL8733BU (USB) | verified 2026-09-25 | [sysupgrade][t-h4] · [whole-flash][f-h4] |
 | `tapo-d130_ssc377d_sc5239_rtl8192eu` | `ssc377d_raptor` | SC5239 · RTL8192EU (USB) | verified 2026-09-25 | [sysupgrade][t-d130] · [whole-flash][f-d130] |
 | `kd110_ssc333_sc3336_rtl8188fu` | `ssc333_raptor` | SC3336 · RTL8188FU (USB) | verified as `ssc333_sc3336_raptor`; camera image not yet run | [sysupgrade][t-kd110] |
-| `wyze-cam3_t31_gc2053_atbm6031` | `t31_raptor` | GC2053 · ATBM6031 (SDIO) | verified as `t31_raptor`; camera image not yet run | [sysupgrade][t-wyze] · [whole-flash][f-wyze] |
+| `wyze-cam3_t31_gc2053_atbm6031` | `t31_raptor` | GC2053 · ATBM6031 (SDIO) | verified 2026-09-25 | [sysupgrade][t-wyze] · [whole-flash][f-wyze] |
 
 Status is what has run on the unit, kept in `CAMERA_STATUS` in
 `.github/scripts/ci-matrix.py`; the camera's own README says what was
