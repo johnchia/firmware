@@ -166,15 +166,26 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # WHAT THE NUMBER BELOW ASSUMES. The OEM stacking is not the shape
 # post-image.sh builds -- FIT first, squashfs after -- and its trailer is not
 # something this tree writes, so this target re-cuts the region into a plain
-# kernel/rootfs pair, plus the overlay this tree needs, leaving devinfo (which
-# holds the device identity) alone:
+# kernel/rootfs pair plus the overlay this tree needs:
 #
-#   sfc:192K(uboot),64K(env),2048K(kernel),5184K(rootfs),640K(rootfs_data),64K(devinfo)
+#   sfc:192K(uboot),64K(env),2048K(kernel),5120K(rootfs),768K(rootfs_data)
 #   root=/dev/mtdblock3
 #
-# 0x40000 + 2048K = 0x240000, + 5184K = 0x750000, + 640K = 0x7F0000, which is
-# where devinfo begins. The OEM's 512K data partition is absorbed: it is a
-# JFFS2 volume for OEM software that is not in this image.
+# 0x40000 + 2048K = 0x240000, + 5120K = 0x740000, + 768K = 0x800000, the end
+# of the chip. The OEM's 512K data partition is absorbed: it is a JFFS2
+# volume for OEM software that is not in this image.
+#
+# THERE IS NO devinfo, unlike raptorwifi, which keeps the OEM's 64K identity
+# partition at 0x7F0000. It holds the vendor's encrypted device identity for
+# its own cloud software, which this image does not run, and the overlay now
+# covers it: a board that takes this table loses its OEM identity the first
+# time rootfs_data is formatted. Dump the last 64K first if it matters. The
+# rootfs is 5120K, as on the other 8 MB targets, and the block that devinfo
+# and the 64K below 5184K freed goes to the overlay.
+#
+# Moving a board from raptorwifi's table to this one moves the overlay's start
+# from 0x750000 to 0x740000, so its contents do not survive the change; the
+# kernel and rootfs starts do not move.
 #
 # rootfs_data IS THE OVERLAY AND THE NAME IS LOAD-BEARING. general/overlay/init
 # greps /proc/mtd for exactly that string, mounts it jffs2, formats it with
@@ -192,24 +203,16 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # build-time complaint at all -- check the FIT by hand after any kernel bump, or
 # widen this slot and take the 64k back off the rootfs.
 #
-# 5184 IS THE ROOTFS SPENDING EVERY BLOCK IT CAN REACH. The squashfs is 5144k
-# with the wifi stack and the vendor modules in it, so this leaves one 64K
-# erase block spare and rootfs_data keeps ten. Everything above the OEM's own
-# split has already been taken: the kernel slot is cut to one spare block, the
-# OEM's 512K data partition is absorbed, and hisilicon-osdrv-hi3516cv6xx's
-# 4.0 MB of ot_*.ko in files/kmod was never going to fit an 8 MB part whole, so
-# a subset is chosen in hisilicon-opensdk.mk and the sensor blobs are cut to
-# the one this board has. What is left cannot be found by moving the boundary
-# again -- rootfs_data below 640k stops being an overlay worth having -- so the
-# next package that does not fit has to displace one that is already here.
-BR2_OPENIPC_ROOTFS_PART_KB="5184"
+# 5120 matches the other 8 MB targets. This image carries no radio stack, so
+# it sits well inside it; raptorwifi, which does, needs its 5184.
+BR2_OPENIPC_ROOTFS_PART_KB="5120"
 
 # The environment is data in mtd1, not compiled into the OEM bootloader, so the
 # layout and the boot verbs live in a text file that is readable back off the
 # chip. Same idiom as t31_raptor. mkenvimage turns it into images/uboot-env.bin.
 # (openipc.fragment already sets BR2_PACKAGE_HOST_UBOOT_TOOLS.)
 BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE=y
-BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SOURCE="$(BR2_EXTERNAL)/../br-ext-chip-hisilicon/board/$(OPENIPC_SOC_FAMILY)/hi3516cv608.env.txt"
+BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SOURCE="$(BR2_EXTERNAL)/../br-ext-chip-hisilicon/board/$(OPENIPC_SOC_FAMILY)/hi3516cv608.raptor.env.txt"
 BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 
 # Packages
@@ -242,9 +245,9 @@ BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
 #
 # No radio. There is no standard part on a cv608 -- whatever is on the USB
 # port is whatever someone plugged in -- and a driver that matches one dongle
-# cost 1150 KB of a 5184 KB rootfs here, a fifth of the image, to serve two USB
-# ids. hi3516cv608_os04d10_raptorwifi is that build; this one is the wired
-# camera and spends the space on the picture instead.
+# costs raptorwifi 1150 KB of its 5184 KB rootfs, a fifth of that image, to
+# serve two USB ids. hi3516cv608_os04d10_raptorwifi is that build; this one is
+# the wired camera and spends the space on the picture instead.
 #
 # The kernel config is shared with it and still has CONFIG_CFG80211=m, so this
 # image carries a 109 KB cfg80211.ko it cannot use. Splitting that off means a

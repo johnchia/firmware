@@ -37,7 +37,7 @@ a driver is often 1.5 MB, which is why the column is here and why
 | `t31_raptor` | T31X · ingenic | 16 MB NOR | 4608 of 8192 KB | 3584 KB | [sysupgrade][t-t31] · [whole-flash][f-t31] |
 | `hi3516ev300_raptor` | Hi3516EV300 · hi3516ev200 | 16 MB NOR | 4684 of 10240 KB | 5556 KB | [sysupgrade][t-ev300] |
 | `hi3516ev200_raptor` | Hi3516EV200 · hi3516ev200 | 8 MB NOR | 4588 of 5120 KB | 532 KB | [sysupgrade][t-ev200] |
-| `hi3516cv608_os04d10_raptor` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 3996 of 5184 KB | 1188 KB | [sysupgrade][t-cv608] |
+| `hi3516cv608_os04d10_raptor` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 3952 of 5120 KB | 1168 KB | [sysupgrade][t-cv608] |
 | `hi3516cv608_os04d10_raptorwifi` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 5156 of 5184 KB | 28 KB | [sysupgrade][t-cv608w] |
 
 ## Sensors
