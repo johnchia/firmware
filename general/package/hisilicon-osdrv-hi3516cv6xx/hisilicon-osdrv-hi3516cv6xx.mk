@@ -135,12 +135,20 @@ endif
 # trades framerate away to keep a still image bright stops being much use as
 # a camera.
 #
-# 171 KB raw and 13 KB in the squashfs -- it is repetitive numeric text.
+# cv2005 is the vendor's day tuning from a P23H CV608 and is otherwise
+# untouched. Its firmware stores it XORed with a 16-byte key, recorded in the
+# file's header. Two of its sections do not load here, and both are
+# harmless: [static_3dnr] carries two of its eight blocks and is ignored,
+# and the file itself turns 3DNR off; [dynamic_fps] has no exp_ltoh_thresh.
+# Without it a P23H renders everything yellow.
+#
+# os04d10 is 171 KB raw and 13 KB in the squashfs -- it is repetitive
+# numeric text, and cv2005 is the same kind of file.
 # Additive: hal_isp reads /etc/sensors/iq/<sensor>.ini and, finding none,
 # simply runs untuned with one WARN, so this only ever applies to a board
 # actually using this sensor. /usr/share/raptor/iq stays the per-unit override
 # that wins over it.
-HISILICON_OSDRV_HI3516CV6XX_SENSOR_IQ = os04d10
+HISILICON_OSDRV_HI3516CV6XX_SENSOR_IQ = cv2005 os04d10
 
 define HISILICON_OSDRV_HI3516CV6XX_INSTALL_TARGET_CMDS
 
