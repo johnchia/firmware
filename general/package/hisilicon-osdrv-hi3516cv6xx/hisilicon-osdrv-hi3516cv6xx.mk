@@ -91,11 +91,11 @@ HISILICON_OSDRV_HI3516CV6XX_SENSOR_BLOBS = \
 # an 8 MB NOR that also has to hold a wifi driver, cfg80211 and a supplicant in
 # AP mode. A published cv6xx image keeps them.
 #
-# Both raptor variants. The wifi driver this is making room for is on
-# raptorwifi, so a guard that named only `raptor` was trimming the build that
-# had the room and not the one that needed it -- see the same note in
-# hisilicon-opensdk.mk, where it cost 400 KB.
-ifneq ($(filter $(OPENIPC_VARIANT),raptor raptorwifi),)
+# The raptor variant, which since the H4 became a camera fragment on it is
+# both the wired build and the one with the wifi driver this makes room for
+# -- see the note in hisilicon-opensdk.mk on what naming only one of them
+# cost.
+ifeq ($(OPENIPC_VARIANT),raptor)
 HISILICON_OSDRV_HI3516CV6XX_SENSOR_BLOBS =
 endif
 
@@ -112,7 +112,7 @@ endif
 HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = \
 	cv2005 gc4023 imx307 os02m10 os04d10 sc431hai sc4336p sc450ai sc500ai
 
-ifneq ($(filter $(OPENIPC_VARIANT),raptor raptorwifi),)
+ifeq ($(OPENIPC_VARIANT),raptor)
 HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = cv2005 os04d10
 endif
 

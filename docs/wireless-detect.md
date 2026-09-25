@@ -152,7 +152,7 @@ build a U-Boot environment into the image (`grep -l ENVIMAGE_SOURCE br-ext-chip-
 | --- | --- | --- |
 | `t31_raptor` | `board/t31/wyze-v3.env.txt` | `atbm603x-t31-wyze-v3` |
 | `hi3516cv608_raptor` | `board/hi3516cv6xx/hi3516cv608.raptor.env.txt` | no `wlandev` line (wired build) |
-| `hi3516cv608_os04d10_raptorwifi` | same | no `wlandev` line — detection finds it |
+| `h4cx-a0_hi3516cv608_os04d10_rtl8733bu` (camera on it) | same | no `wlandev` line — detection finds it |
 | `ssc377_tapo_c120` | `board/infinity6c/tapo-c120.env.txt` | `rtl8188fu-ssc377-tapo-c120` |
 | `ssc377d_raptorwifi` | `board/infinity6c/ssc377d-raptorwifi.env.txt` | `rtl8192eu-ssc377d-refboard` |
 
@@ -185,7 +185,7 @@ Measured, not estimated:
 
 | board | cold `detect` | boot with `wlandev` empty |
 | --- | --- | --- |
-| cv608 (`hi3516cv608_os04d10_raptorwifi`, RTL8733BU/USB) | 0.76 s | wlan0 addressed at 19.56 s uptime |
+| cv608 (the H4, now `h4cx-a0_hi3516cv608_os04d10_rtl8733bu`, RTL8733BU/USB) | 0.76 s | wlan0 addressed at 19.56 s uptime |
 | ssc333 (`ssc333_sc3336_raptor`, RTL8188FU/USB) | 0.62 s | DHCP lease at 13.17 s uptime |
 
 On the cv608 the `dmesg` order confirms the mechanism: the USB device enumerates, *then*

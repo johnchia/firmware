@@ -167,8 +167,9 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # The vendor bootloader goes (the U-Boot block below), and its table with it:
 # the H4-52POX-S OEM U-Boot keeps a 64K env at 0x30000, the P23H's a 4K one at
 # 0x2f000. Moving a board onto this layout is a full flash, bootloader
-# included, and its overlay does not survive it. raptorwifi is on this
-# layout too, since its sensor was pinned and its rootfs fit 5120K.
+# included, and its overlay does not survive it. The H4 camera on this
+# target is on this layout too, since its sensor is pinned and its rootfs
+# fits 5120K.
 #
 # rootfs_data IS THE OVERLAY AND THE NAME IS LOAD-BEARING. general/overlay/init
 # greps /proc/mtd for exactly that string, mounts it jffs2, formats it with
@@ -253,9 +254,10 @@ BR2_PACKAGE_HISILICON_CV6XX_BOOT=y
 #
 # No radio. There is no standard part on a cv608 -- whatever is on the USB
 # port is whatever someone plugged in -- and a driver that matches one dongle
-# costs raptorwifi 1150 KB of its 5184 KB rootfs, a fifth of that image, to
-# serve two USB ids. hi3516cv608_os04d10_raptorwifi is that build; this one is
-# the wired camera and spends the space on the picture instead.
+# costs the H4 camera 1150 KB of its rootfs, a fifth of that image, to serve
+# two USB ids. cameras/h4cx-a0_hi3516cv608_os04d10_rtl8733bu is that build,
+# layered on this one; this is the wired target and spends the space on the
+# picture instead.
 #
 # The kernel config is shared with it and still has CONFIG_CFG80211=m, so this
 # image carries a 109 KB cfg80211.ko it cannot use. Splitting that off means a

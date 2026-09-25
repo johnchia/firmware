@@ -24,9 +24,15 @@ A fork of [OpenIPC/firmware][upstream] that builds camera images running
 ## Boards
 
 Rootfs is the partition the image has to fit, and what a Wi-Fi driver or an
-IQ tuning has to find room in. A driver is often 1.5 MB, which is why the
-`raptorwifi` targets are images of their own and why the 8 MB boards carry
+IQ tuning has to find room in. A driver is often 1.5 MB, which is why a
+camera with a radio is an image of its own and why the 8 MB boards carry
 one sensor's tuning rather than the family's.
+
+An SoC target (`<soc>_<variant>`) is the chip, its flash layout and the
+software stack. A camera (`<identity>_<soc>_<sensor>_<radio>`) is what is
+soldered around one: a small directory under `br-ext-chip-<vendor>/cameras/`
+that layers the sensor, the radio and the board's pins on an SoC target. Both
+build with `make BOARD=<name>`.
 
 | Board | SoC · family | Flash | Rootfs | Download |
 |---|---|---|---|---|
@@ -39,10 +45,17 @@ one sensor's tuning rather than the family's.
 | `hi3516ev300_raptor` | Hi3516EV300 · hi3516ev200 | 16 MB NOR | 10240 KB | [sysupgrade][t-ev300] |
 | `hi3516ev200_raptor` | Hi3516EV200 · hi3516ev200 | 8 MB NOR | 5120 KB | [sysupgrade][t-ev200] |
 | `hi3516cv608_raptor` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 5120 KB | [sysupgrade][t-cv608] · [whole-flash][f-cv608] |
-| `hi3516cv608_os04d10_raptorwifi` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 5120 KB | [sysupgrade][t-cv608w] · [whole-flash][f-cv608w] |
+
+| Camera | On | Sensor · radio | Status | Download |
+|---|---|---|---|---|
+| `h4cx-a0_hi3516cv608_os04d10_rtl8733bu` | `hi3516cv608_raptor` | OS04D10 · RTL8733BU (USB) | verified 2026-09-25 | [sysupgrade][t-h4] · [whole-flash][f-h4] |
+
+Status is what has run on the unit, kept in `CAMERA_STATUS` in
+`.github/scripts/ci-matrix.py`; the camera's own README says what was
+verified and what was not.
 
 A whole-flash image carries the bootloader and a fresh U-Boot environment.
-On a `raptorwifi` camera the environment is where the Wi-Fi network is kept,
+On a camera with a radio the environment is where the Wi-Fi network is kept,
 so after one the camera comes up with no network and raises its own access
 point for setup, exactly as a new one does.
 
@@ -59,7 +72,7 @@ rest ship a driver nobody here has run.
 | infinity6e | `ssc30kq_raptor` | **gc4653**, gc2053, gc2093, imx307, imx335, imx347, imx415, os04a10, os04c10, sc501ai, sc8235 |
 | infinity6b0 | `ssc333_sc3336_raptor` | **sc3336** |
 | hi3516ev200 | `hi3516ev200_raptor`, `hi3516ev300_raptor` | **imx307**, **imx335**, gc2053, gc4653, jxf22, jxf23, jxf37, sc2231, sc2232h, sc2239, sc2315e, sc3235, sc3335, sc4236, sp2305, sp2308 |
-| hi3516cv6xx | `hi3516cv608_raptor`, `hi3516cv608_os04d10_raptorwifi` | **os04d10**, *cv2005* (`hi3516cv608_raptor` only) |
+| hi3516cv6xx | `hi3516cv608_raptor`, `h4cx-a0_hi3516cv608_os04d10_rtl8733bu` | **os04d10**, *cv2005* (`hi3516cv608_raptor` only) |
 | ingenic t31 | `t31_raptor` | *gc2053* |
 
 ## Before you flash
@@ -125,14 +138,14 @@ packaging and the Buildroot tree are theirs. See the [project][project], the
 [t-ev200]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516ev200-nor-raptor-latest.tgz
 [t-ev300]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516ev300-nor-raptor-latest.tgz
 [t-cv608]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516cv608-nor-raptor-latest.tgz
-[t-cv608w]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516cv608_os04d10-nor-raptorwifi-latest.tgz
+[t-h4]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.h4cx-a0_hi3516cv608_os04d10_rtl8733bu-nor-raptor-latest.tgz
 [f-377]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377qe-nor-raptor-full.bin
 [f-377d]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377d-nor-raptor-full.bin
 [f-377dw]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377d-nor-raptorwifi-full.bin
 [f-30k]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc30kq-nor-raptor-full.bin
 [f-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-t31_gc2053-nor-raptor-full.bin
 [f-cv608]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-hi3516cv608-nor-raptor-full.bin
-[f-cv608w]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-hi3516cv608_os04d10-nor-raptorwifi-full.bin
+[f-h4]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-h4cx-a0_hi3516cv608_os04d10_rtl8733bu-nor-raptor-full.bin
 [opencollective]: https://opencollective.com/openipc
 [project]: https://github.com/openipc
 [wiki-flash]: https://github.com/OpenIPC/wiki/blob/master/en/equipment-flashing.md

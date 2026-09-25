@@ -155,9 +155,11 @@ defconfig: prepare
 # overlay alone. The list a board actually needs (a family overlay for a file
 # whose contents are per-SoC, fw_env.config being the case in hand; a camera's
 # own overlay) is composed in general/cameras.mk from the directories that
-# exist and appended here, after the fragment, so it wins. A defconfig that
-# still re-states the list is held to the composed one rather than trusted:
-# the two agreeing is what lets the re-statement be deleted.
+# exist and appended here, after the fragment, so it wins -- when it differs
+# from the fragment's line at all, so the common case does not print a
+# reassignment warning. A defconfig that still re-states the list is held to
+# the composed one rather than trusted: the two agreeing is what lets the
+# re-statement be deleted.
 	@stated=$$(grep -s '^BR2_ROOTFS_OVERLAY=' $(CONFIG)); \
 	if [ -n "$$stated" ] && [ "$$stated" != '$(ROOTFS_OVERLAY_LINE)' ]; then \
 		echo "*** $(CONFIG) states $$stated"; \
@@ -165,7 +167,8 @@ defconfig: prepare
 		echo "*** Drop the line from the defconfig, or move the overlay it names."; \
 		exit 1; \
 	fi
-	@echo '$(ROOTFS_OVERLAY_LINE)' >> $(BR_CONF)
+	@[ '$(ROOTFS_OVERLAY_LINE)' = "$$(grep '^BR2_ROOTFS_OVERLAY=' $(PWD)/general/openipc.fragment)" ] || \
+		echo '$(ROOTFS_OVERLAY_LINE)' >> $(BR_CONF)
 	@$(BR_MAKE) BR2_DEFCONFIG=$(BR_CONF) defconfig
 
 prepare:
@@ -329,8 +332,8 @@ ifeq ($(BR2_OPENIPC_SOC_FAMILY),"hi3516cv6xx")
 # cv6xx keeps its environment in a text file the board defconfig names, so the
 # partition table is settled before this runs and the script reads it back out
 # rather than restating it. The bootloader is the one hisilicon-cv6xx-boot
-# built, on a board that builds one; a board on its OEM bootloader (raptorwifi)
-# has none here, and UBOOT_BIN is then the container taken off the part.
+# built, on a board that builds one; a board still on its OEM bootloader has
+# none here, and UBOOT_BIN is then the container taken off the part.
 	@test -f "$(FULLIMAGE_UBOOT)" || { \
 		echo "no boot container at $(FULLIMAGE_UBOOT)."; \
 		echo "A board on OpenIPC's U-Boot builds one (BR2_TARGET_UBOOT and"; \

@@ -63,10 +63,10 @@ ALL_BOARDS = [
     # it -- a pin number is board knowledge and cannot be probed for, so the board
     # gets a target rather than the driver getting a symbol.
     "ssc377_raptor", "ssc377_tapo_c120",
-    # ssc377d_raptor plus an RTL8192EU, the way hi3516cv608_os04d10_raptorwifi
-    # sits on its wired board. Like the C120 it bakes an environment naming the
-    # arm that powers the dongle on GPIO 42. It is the only user of
-    # rtl8192eu-openipc, which sat in NOT_BUILT until it.
+    # ssc377d_raptor plus an RTL8192EU. Like the C120 it bakes an environment
+    # naming the arm that powers the dongle on GPIO 42. It is the only user of
+    # rtl8192eu-openipc, which sat in NOT_BUILT until it. The D130 camera
+    # directory replaces it next; the H4 has already gone that way.
     "ssc377d_raptorwifi",
     # Ingenic. t31_raptor is a Raptor board and belongs with the three above by
     # kind; it sits here because the vendor groupings are what a reader scans
@@ -86,16 +86,17 @@ ALL_BOARDS = [
     "hi3516av300_lite", "hi3516av300_neo", "hi3516cv500_lite", "hi3516dv300_lite",
     # Hisilicon [HI3516CV6XX]
     #
-    # The two hi3516cv608 targets are this fork's on the same family, pinned to
-    # one die and 8 MB NOR. They differ in the radio and in what that costs:
-    # raptorwifi carries the RTL8733BU stack and raptor does not, which is a
-    # fifth of the rootfs, and the cv608 has no standard part to justify
-    # putting it in both. Both build raptor-streaming against the HAL's hisi_v5
-    # backend, so a pin bump does reach them, and both are now in
-    # raptor-nightly.yml's matrix -- they were not, and raptorwifi spent that
-    # time 400 KB over its partition with nothing building it to say so.
+    # hi3516cv608_raptor is this fork's target on the family, pinned to one die
+    # and 8 MB NOR, and the base of the H4 camera (br-ext-chip-hisilicon/
+    # cameras/h4cx-a0_hi3516cv608_os04d10_rtl8733bu, registered from its
+    # directory rather than here). The camera carries the RTL8733BU stack and
+    # the base does not, which is a fifth of the rootfs, and the cv608 has no
+    # standard part to justify putting it in the base. Both build
+    # raptor-streaming against the HAL's hisi_v5 backend, so a pin bump reaches
+    # them, and both are in raptor-nightly.yml's matrix -- the radio build
+    # once spent weeks 400 KB over its partition with nothing building it to
+    # say so.
     "hi3516cv6xx_ultimate", "hi3516cv608_raptor",
-    "hi3516cv608_os04d10_raptorwifi",
     # Hisilicon [HI3519DV500]
     "hi3519dv500_ultimate",
     # Hisilicon [HI3516EV200]
@@ -223,6 +224,11 @@ UNBUILT_BOARDS = {
 # what is missing. That replaces a "NOT BOARD-VERIFIED" sentence in a README
 # that nothing reads, and --self-test fails on a camera with no entry.
 CAMERA_STATUS = {
+    # The H4 on the bench, WiFi only, on OpenIPC's layout and the source-built
+    # U-Boot since 2026-09-25. Its IR-cut pins are what the unit's overlay
+    # carried, not yet watched switching; see the camera's README.
+    "h4cx-a0_hi3516cv608_os04d10_rtl8733bu":
+        "verified 2026-09-25 on bd0a6d0c-dirty: boots, joins WiFi, streams 2560x1440 H.265 at 25 fps",
 }
 
 # Workflows that cannot change what a firmware image contains. Matched on the
@@ -289,13 +295,15 @@ SMOKE_BOARDS = [
     "fh8852v200_lite",        # Fullhan
     "v851s_lite",             # Allwinner
     "ssc377qe_raptor",        # the raptor variant, and SigmaStar's Raptor image
-    # The raptorwifi variant exists only so the two cv608 images do not
-    # land on the same openipc.<soc>-<layout>-<variant> filename, and it
-    # is here because every variant has to be provable. It is the cheaper
-    # of the pair to carry: identical to hi3516cv608_raptor in
-    # every build-step trait, so what it proves is the wireless packages
-    # still resolve, not a new shape.
-    "hi3516cv608_os04d10_raptorwifi",
+    # The first camera target: a fragment composed onto hi3516cv608_raptor by
+    # general/cameras.mk, which is a build step no defconfig exercises, and
+    # the one that proves the wireless packages still resolve on a camera. It
+    # is the cheapest camera to carry, identical to its base in every other
+    # build-step trait.
+    "h4cx-a0_hi3516cv608_os04d10_rtl8733bu",
+    # The raptorwifi variant, which has to be provable while it exists. It is
+    # down to this one board and goes with it when the D130 becomes a camera.
+    "ssc377d_raptorwifi",
     # The only SigmaStar board that bakes a U-Boot environment, and the only
     # user of the tapo_c120 variant. Both are why it is here: the variant has to
     # be provable like every other, and the environment is new plumbing --
@@ -944,6 +952,7 @@ def self_test():
         # Vendor packages narrow to the families that enable them.
         (["general/package/hisilicon-osdrv-hi3516ev200/files/script/load_hisilicon"],
         10, "osdrv narrows to its family"),
+        # 46 defconfigs plus the H4 camera, which builds opensdk through its base.
         (["general/package/hisilicon-opensdk/hisilicon-opensdk.mk"],
         47, "opensdk spans HiSilicon and Goke"),
         (["general/package/goke-osdrv-gk7205v200/Config.in"], 7, "goke osdrv"),
@@ -980,10 +989,14 @@ def self_test():
         (["br-ext-chip-hisilicon/board/hi3516ev200/hi3516ev300.generic.config"],
         10, "kernel config narrows to its family"),
         # A camera directory nothing registered is unknown, and unknown
-        # widens. Registered cameras narrow to themselves, and their base
-        # defconfig reaches them; those cases arrive with the first camera.
+        # widens. A registered camera narrows to itself, and its base
+        # defconfig reaches the base and every camera on it.
         (["br-ext-chip-hisilicon/cameras/no-such_soc_sns_radio/camera.conf"],
          full, "an unregistered camera directory widens"),
+        (["br-ext-chip-hisilicon/cameras/h4cx-a0_hi3516cv608_os04d10_rtl8733bu/raptor.conf"],
+         1, "a camera directory narrows to that camera"),
+        (["br-ext-chip-hisilicon/configs/hi3516cv608_raptor_defconfig"],
+         2, "a base defconfig builds the base and its cameras"),
         (["general/package/hisilicon-osdrv-hi3516cv200/files/script/load_hisilicon",
           "br-ext-chip-hisilicon/configs/hi3516cv200_lite_defconfig"],
          3, "union of two narrowing paths"),

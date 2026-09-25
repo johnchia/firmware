@@ -189,7 +189,7 @@ RAPTOR_STREAMING_DEPENDENCIES = compy libschrift majestic-fonts \
 # the one omission here that is a decision about the product and not about the
 # backend. It was the only consumer of libmosquitto and libmdnsd on an image,
 # with mosquitto it came to 76 KB of squashfs -- measured by building
-# hi3516cv608_os04d10_raptorwifi both ways, where it was the difference between
+# the H4's cv608 image both ways, where it was the difference between
 # 20 KB and 96 KB spare in a 5184 KB slot -- with mdnsd worth a further 20 KB
 # or so on the boards that carried it. Putting the bridge back on a board is
 # two edits: name mosquitto in that defconfig, and add rmq to the list below.

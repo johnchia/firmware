@@ -292,14 +292,14 @@ endif
 # Which of the two a camera has is load_hisilicon's probe to find, not the
 # image's.
 #
-# Both variants, and the plural is the whole of why this is a filter rather
-# than the comparison it was. There was one cv608 raptor target when this trim
-# was written and it carried the radio -- that is what "shares its 8 MB NOR
-# with a wifi driver" above is describing. Splitting it into raptor and
-# raptorwifi left this guard naming only the wired half, so the variant with
-# 1.5 MB less room was the one keeping 1.49 MB of sensors and modules the
-# wired one drops, and it overflowed its partition by 400 KB. The trim was
-# always meant for the radio build; nothing about it is specific to either.
+# The raptor variant, wired or with a radio: the radio is a camera fragment
+# on the same variant now (cameras/h4cx-a0_hi3516cv608_os04d10_rtl8733bu),
+# so one guard covers both. It was briefly a two-variant filter, and the
+# lesson is worth keeping: when the radio build was split off as its own
+# variant, this guard named only the wired half, so the image with 1.5 MB
+# less room was the one keeping 1.49 MB of sensors and modules the wired one
+# drops, and it overflowed its partition by 400 KB. The trim was always meant
+# for the radio build; nothing about it is specific to either.
 #
 # Note what this gives up. sc4336p is load_hisilicon's SNS_TYPE0 default, so a
 # board that reaches that fallback -- no sensor key in the environment and no
@@ -308,8 +308,7 @@ endif
 # probed value back, and the wrong one for a published image.
 #
 # hi3516cv6xx_ultimate is the published cv6xx image and keeps all six.
-ifneq ($(filter $(OPENIPC_VARIANT),raptor raptorwifi),)
-ifeq ($(OPENIPC_SOC_FAMILY),hi3516cv6xx)
+ifeq ($(OPENIPC_VARIANT)-$(OPENIPC_SOC_FAMILY),raptor-hi3516cv6xx)
 HISILICON_OPENSDK_SENSORS = \
 	omnivision_os04d10/libsns_os04d10 \
 	smart_cv2005/libsns_cv2005
@@ -358,7 +357,6 @@ HISILICON_OPENSDK_KMOD_SKIP = open_ive.ko open_svac3e.ko open_svp_npu.ko \
 	open_uvc.ko open_aiisp.ko \
 	open_adc.ko open_devstat.ko open_spi_dma_transfer.ko \
 	open_user.ko open_user_proc.ko
-endif
 endif
 
 # One sensor, when the board pins one. BR2_OPENIPC_SNS_MODEL names the part a
