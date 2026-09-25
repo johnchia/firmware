@@ -49,8 +49,19 @@ what is soldered around the chip.
 - 2026-09-09: radio detection verified here: cold `detect` finds the
   RTL8188FU in 0.62 s, and a boot with `wlandev` empty reaches a DHCP lease
   at 13.17 s of uptime.
-- Not yet run on this unit: the camera-named image from this directory. It
-  composes to the same configuration as `ssc333_sc3336_raptor` plus the two
-  camera symbols. The unit is at a bench address whose credentials were not
-  on hand when the directory was written; the flash and the verification
-  follow when they are.
+- 2026-09-25: the camera-named image from this directory, built in a fresh
+  tree at 2e36b6b0, flashed on this unit with `sysupgrade-raptor
+  --kernel --rootfs`. Two things the flash taught: the unit has 27.7 MB of
+  RAM and the updater refused `--archive` (it needs 9683 KB free to unpack
+  the archive beside itself and had 7432 KB once raptor was stopped), so the
+  kernel and rootfs went over as two files; and the WiFi link dropped during
+  the rootfs write as it does on the Wyze, with the unit back 15 s after the
+  reboot. Verified on the unit: `BUILD_CAMERA` in os-release names this
+  directory, the kernel and rootfs partitions' md5s equal the built files,
+  `/etc/sensors` holds `sc3336.bin` alone, the SC3336 is bound to sensor pad
+  0, seven daemons up, wlan0 addressed through `detect` and the 8188fu
+  module, and `/stream0` serves HEVC 2304x1296 at 15 fps (150 frames in
+  10 s). The updater composes
+  `openipc.kd110_ssc333_sc3336_rtl8188fu-nor-raptor-latest.tgz` for its next
+  fetch. The pinned `ssc333_sc3336_raptor` target this replaced was deleted
+  the same day.

@@ -29,7 +29,7 @@ standing between a working dongle and a working camera was knowing it.
 
 Getting it wrong is not a soft failure. `S40network` read an unset `wlandev` as "this
 board has no radio" and fell through to `ifup eth0`. On a board whose EMAC has no socket
-wired to it — `ssc333_sc3336_raptor` is one, the Wyze v3 has no PHY at all — that is a
+wired to it — the KD110 (`kd110_ssc333_sc3336_rtl8188fu`) is one, the Wyze v3 has no PHY at all — that is a
 camera with no network and no way to reach it.
 
 ## What detection does
@@ -186,7 +186,7 @@ Measured, not estimated:
 | board | cold `detect` | boot with `wlandev` empty |
 | --- | --- | --- |
 | cv608 (the H4, now `h4cx-a0_hi3516cv608_os04d10_rtl8733bu`, RTL8733BU/USB) | 0.76 s | wlan0 addressed at 19.56 s uptime |
-| ssc333 (`ssc333_sc3336_raptor`, RTL8188FU/USB) | 0.62 s | DHCP lease at 13.17 s uptime |
+| ssc333 (the KD110, now `kd110_ssc333_sc3336_rtl8188fu`, RTL8188FU/USB) | 0.62 s | DHCP lease at 13.17 s uptime |
 
 On the cv608 the `dmesg` order confirms the mechanism: the USB device enumerates, *then*
 `detect` loads `8733bu` onto it and `usbcore` registers the interface driver. The 3 s

@@ -117,7 +117,7 @@ HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = cv2005 os04d10
 endif
 
 # One sensor, when the board pins one (BR2_OPENIPC_SNS_MODEL, the convention
-# ssc333_sc3336_raptor set): the mode INI of that part alone, as
+# the KD110 camera on ssc333 set): the mode INI of that part alone, as
 # hisilicon-opensdk ships its driver alone. A pin with no INI here fails the
 # install rather than shipping a driver nothing can bring up.
 ifneq ($(OPENIPC_SNS_MODEL),)

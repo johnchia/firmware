@@ -222,8 +222,8 @@ BR2_PACKAGE_SIGMASTAR_BOOT=y
 BR2_PACKAGE_VTUND_OPENIPC=y
 
 # Wireless. The RTL8188FU over USB, powered by the arm the environment below
-# names. Copied from ssc333_sc3336_raptor, which is where this driver has run
-# on hardware.
+# names. Copied from the KD110 camera (cameras/kd110_ssc333_sc3336_rtl8188fu),
+# which is where this driver has run on hardware.
 #
 # cfg80211 is a module in this kernel config, not built in, so the driver pulls
 # it in at modprobe time rather than costing kernel-slot space -- which matters

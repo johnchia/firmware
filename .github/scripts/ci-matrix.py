@@ -57,10 +57,12 @@ ALL_BOARDS = [
     # reason general/package/raptor-streaming and its five dependencies are
     # built by anything at all -- left out, the package checks below report each
     # of them as reaching no board.
-    "ssc377qe_raptor", "ssc377d_raptor", "ssc30kq_raptor", "ssc333_sc3336_raptor",
+    "ssc377qe_raptor", "ssc377d_raptor", "ssc30kq_raptor",
     # ssc333_raptor is the unpinned SoC target the KD110 camera layers on
     # (br-ext-chip-sigmastar/cameras/kd110_ssc333_sc3336_rtl8188fu). It ships
-    # the family's fifteen IQ blobs and measures 3828K of its 5120K cap.
+    # the family's fifteen IQ blobs and measures 3828K of its 5120K cap. The
+    # pinned ssc333_sc3336_raptor it grew out of is gone: the camera is that
+    # pin, and the KD110 runs the camera image.
     "ssc333_raptor",
     # ssc377_raptor is ssc377d_raptor on the suffixless part. ssc377_tapo_c120 is
     # that plus an RTL8188FU and the baked environment naming the arm that powers
@@ -237,10 +239,9 @@ CAMERA_STATUS = {
     # blob instead of eight).
     "tapo-d130_ssc377d_sc5239_rtl8192eu":
         "verified 2026-09-22 on 2923b643 (as ssc377d_raptorwifi): cold boot streams the SC5239 at 2592x1944",
-    # The KD110v2 on the bench over WiFi. Verified on the ssc333_sc3336_raptor
-    # target it replaces; the camera-named image has not run on the unit yet.
+    # The KD110v2 on the bench over WiFi, running this camera's image.
     "kd110_ssc333_sc3336_rtl8188fu":
-        "verified 2026-09-09 on ssc333_sc3336_raptor: streams the SC3336, detect finds the RTL8188FU in 0.62 s",
+        "verified 2026-09-25 on 2e36b6b0: streams the SC3336 at 2304x1296, wlan0 up through detect and the RTL8188FU",
     # The Wyze Cam v3 on the bench over WiFi. Verified on t31_raptor when that
     # target still carried the Wyze's env and radio; the camera-named image
     # has not run on the unit yet.
@@ -995,9 +996,10 @@ def self_test():
         # recorded rather than the guard taught. Narrowing it means giving those
         # two lines a BR2_ symbol to hang on, in divinus.mk.
         # The raptor set includes the D130 and KD110 cameras, which reach it
-        # through their bases, and the unpinned ssc333_raptor base.
+        # through their bases, and the unpinned ssc333_raptor base; the pinned
+        # ssc333_sc3336_raptor left with the KD110 camera taking its place.
         (["general/package/sigmastar-osdrv-sensors/Config.in"],
-         42, "reached via Config.in select"),
+         41, "reached via Config.in select"),
         # Shared packages narrow too, just barely.
         (["general/package/majestic/majestic.mk"], 87, "majestic is nearly everywhere"),
         # Board configs and kernel configs.

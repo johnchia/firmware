@@ -597,7 +597,8 @@ endef
 # other -- on ssc333 that is 1387KB of a 5120KB partition, which is why it is
 # set there at all. Flashed onto the same SoC carrying a different part, such an
 # image streams and gets the colour wrong, which is the kind of failure nobody
-# traces back to the filename. So the filename says it: ssc333_sc3336, t31_gc2053.
+# traces back to the filename. So the filename says it: <soc>_<sensor>, unless a
+# camera names the image (IMAGE_CAMERA below), whose name carries the sensor.
 #
 # Boards that ship every blob are named as before. The quotes come from the
 # defconfig being included as a makefile, and the shell strips them out of the

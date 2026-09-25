@@ -360,7 +360,7 @@ HISILICON_OPENSDK_KMOD_SKIP = open_ive.ko open_svac3e.ko open_svp_npu.ko \
 endif
 
 # One sensor, when the board pins one. BR2_OPENIPC_SNS_MODEL names the part a
-# single-board target carries -- ssc333_sc3336_raptor set the convention, and
+# camera carries -- the KD110 camera on ssc333 set the convention, and
 # the image is named for it (IMAGE_SOC in the Makefile) -- and whatever list
 # the family and variant arrived at above is narrowed to that driver, with its
 # 2-lane build where the family has one. A pin this package builds no driver

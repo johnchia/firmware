@@ -40,7 +40,8 @@ echo BUILD_ID=${OPENIPC_BUILD_ID} >> ${FILE}
 echo BUILD_SHA=${BUILD_SHA:-${OPENIPC_BUILD_SHA}} >> ${FILE}
 echo BUILD_PLATFORM=${BUILD_PLATFORM:-${OPENIPC_SOC_MODEL}_${OPENIPC_VARIANT}} >> ${FILE}
 # The pinned sensor, when the board has one, because it is part of the image
-# archive's name (openipc.ssc333_sc3336-nor-raptor-...; see IMAGE_SOC in the
+# archive's name (openipc.<soc>_<sensor>-nor-raptor-... when no camera names
+# the image; see IMAGE_SOC in the
 # Makefile) and the camera-side updater has to reproduce that name to fetch
 # its own -latest archive. Empty on boards that ship every sensor blob.
 echo BUILD_SENSOR=${OPENIPC_SNS_MODEL} >> ${FILE}
