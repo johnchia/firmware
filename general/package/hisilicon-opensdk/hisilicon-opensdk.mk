@@ -5,14 +5,18 @@
 ################################################################################
 
 # johnchia/openhisilicon cv608-4m-encoder: upstream main (through #226) plus
-# two commits of its own. One gives the CV608 die the CV610_10B's encoder
-# limits in hi_venc.o and hi_rc.o, as shipping CV608 firmware does, so a
-# 2560x1440 sensor is encoded whole instead of cropped to 2304x1296; it is
-# offered upstream as OpenIPC/openhisilicon#228. The other adds the SmartSens
-# CV2005 driver from the Hi3516CV610 SDK. Move back to the OpenIPC pin once
-# both are there.
+# commits of its own, all cv6xx:
+#   - the CV610_10B's encoder limits for the CV608 die in hi_venc.o and
+#     hi_rc.o, as shipping CV608 firmware does, so a 2560x1440 sensor is
+#     encoded whole instead of cropped to 2304x1296 (offered upstream as
+#     OpenIPC/openhisilicon#228);
+#   - the SmartSens CV2005 driver from the Hi3516CV610 SDK, and its 24 MHz
+#     clock in open_sys_config;
+#   - open_sys_config's sensors parameter reading back whole instead of
+#     "sns0", which is where raptor learns the probed sensor.
+# Move back to the OpenIPC pin once they are all there.
 HISILICON_OPENSDK_SITE = $(call github,johnchia,openhisilicon,$(HISILICON_OPENSDK_VERSION))
-HISILICON_OPENSDK_VERSION = b07a569af5fdf11cba433c4e729b3bdb11a16da9
+HISILICON_OPENSDK_VERSION = 7feac6e9098eeb1bb03d8443f49740d56c8864ae
 
 HISILICON_OPENSDK_LICENSE = GPL-3.0
 HISILICON_OPENSDK_LICENSE_FILES = LICENSE
