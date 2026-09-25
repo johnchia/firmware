@@ -145,19 +145,19 @@ nine SDIO board-specific arms differ from the generic one only by driver paramet
 cards — but with the generic arm, and therefore without those parameters. Prefer the
 configured arm; detection is the fallback for boards that configure nothing.
 
-**Boards that bake their environment never reach detection at all.** Only five defconfigs
-build a U-Boot environment into the image (`grep -l ENVIMAGE_SOURCE br-ext-chip-*/configs/*`):
+**Boards that bake their environment never reach detection at all.** Only five targets
+build a U-Boot environment into the image (`grep -l ENVIMAGE_SOURCE br-ext-chip-*/configs/* br-ext-chip-*/cameras/*/camera.conf`):
 
 | defconfig | env source | `wlandev` |
 | --- | --- | --- |
-| `t31_raptor` | `board/t31/wyze-v3.env.txt` | `atbm603x-t31-wyze-v3` |
+| `wyze-cam3_t31_gc2053_atbm6031` (camera on `t31_raptor`) | `cameras/wyze-cam3_t31_gc2053_atbm6031/uboot.env.txt` | `atbm603x-t31-wyze-v3` |
 | `hi3516cv608_raptor` | `board/hi3516cv6xx/hi3516cv608.raptor.env.txt` | no `wlandev` line (wired build) |
 | `h4cx-a0_hi3516cv608_os04d10_rtl8733bu` (camera on it) | same | no `wlandev` line — detection finds it |
 | `ssc377_tapo_c120` | `board/infinity6c/tapo-c120.env.txt` | `rtl8188fu-ssc377-tapo-c120` |
-| `ssc377d_raptorwifi` | `board/infinity6c/ssc377d-raptorwifi.env.txt` | `rtl8192eu-ssc377d-refboard` |
+| `tapo-d130_ssc377d_sc5239_rtl8192eu` (camera) | `cameras/tapo-d130_ssc377d_sc5239_rtl8192eu/uboot.env.txt` | `rtl8192eu-ssc377d-refboard` |
 
 Every other board's `wlandev` is set by hand, which is what detection removes. On
-`t31_raptor` it is baked, so `detect` never runs — and could not substitute if it did,
+the Wyze camera it is baked, so `detect` never runs — and could not substitute if it did,
 because that arm opens by power-cycling the radio on GPIO 57. Note where the two halves
 live: **the environment names the arm; the arm knows the pin.** Neither half is derivable
 from the other.

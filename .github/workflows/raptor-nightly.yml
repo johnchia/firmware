@@ -111,8 +111,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        board: [ssc377qe_raptor, ssc377d_raptor, ssc377d_raptorwifi, ssc30kq_raptor,
-                ssc333_sc3336_raptor, t31_raptor, hi3516ev300_raptor, hi3516ev200_raptor,
+        board: [ssc377qe_raptor, ssc377d_raptor, tapo-d130_ssc377d_sc5239_rtl8192eu,
+                ssc30kq_raptor,
+                ssc333_sc3336_raptor, kd110_ssc333_sc3336_rtl8188fu, t31_raptor,
+                wyze-cam3_t31_gc2053_atbm6031, hi3516ev300_raptor, hi3516ev200_raptor,
                 hi3516cv608_raptor, h4cx-a0_hi3516cv608_os04d10_rtl8733bu]
     env:
       BUILD_ID:  ${{ needs.gate.outputs.build_id }}
@@ -153,8 +155,8 @@ jobs:
       # package pinned to a moving ref keeps a constant download filename, and
       # the cache key is the month while actions/cache only saves on a miss, so
       # such a tarball would be frozen for weeks and the nightly would quietly
-      # ship old vendor drivers. t31_raptor's ingenic-opensdk and atbm60xx are
-      # two; the SigmaStar sensors package was a third until it was pinned.
+      # ship old vendor drivers. t31_raptor's ingenic-opensdk and the Wyze
+      # camera's atbm60xx are two; the SigmaStar sensors package was a third until it was pinned.
       #
       # It runs unguarded on purpose. The `2>/dev/null || true` this used to
       # carry is what let the wrong directory go unnoticed: find printed
@@ -245,15 +247,17 @@ jobs:
       # unit flashed with it comes up unprovisioned and wants its keys back
       # through the setup portal or serial.
       #
-      # t31_raptor has the same shape and not the same consequence, which is
-      # why it builds one. Its environment is erased by a full write too and it
-      # is equally radio-only, but an unprovisioned Wyze v3 raises its own
-      # access point and serves the setup portal (S41setup), and the pinned
-      # bootloader can be driven from an SD card. A blanked unit there talks
-      # its way back; a blanked ssc333 has to be opened.
+      # The Wyze Cam v3 camera (wyze-cam3_t31_gc2053_atbm6031) has the same
+      # shape and not the same consequence, which is why it builds one. Its
+      # environment is erased by a full write too and it is equally
+      # radio-only, but an unprovisioned Wyze v3 raises its own access point
+      # and serves the setup portal (S41setup), and the pinned bootloader can
+      # be driven from an SD card. A blanked unit there talks its way back; a
+      # blanked ssc333 has to be opened. Its base, t31_raptor, builds the
+      # bootloader but bakes no environment, so it publishes the .tgz alone.
       #
-      # The condition reads the defconfig instead of naming boards, so a target
-      # that gains a bootloader gains the image with it.
+      # The condition reads the configuration instead of naming boards, so a
+      # target that gains a bootloader gains the image with it.
       - name: Full NOR image
         run: |
           set -eu
@@ -266,10 +270,16 @@ jobs:
             board=$(sed -n 's/^BR2_OPENIPC_CAMERA_BASE="\(.*\)"$/\1/p' "$camera/camera.conf")
           fi
           cfg=$(ls br-ext-chip-*/configs/${board}_defconfig)
-          if grep -qE '^BR2_TARGET_UBOOT=y' "$cfg"; then
+          files="$cfg${camera:+ $camera/camera.conf}"
+          # An Ingenic image also needs the environment: the whole-flash script
+          # places it at a fixed offset and refuses to run without one, and on
+          # that vendor only a camera bakes it (t31_raptor alone has none).
+          if grep -qE '^BR2_TARGET_UBOOT=y' $files \
+             && { ! grep -q '^BR2_OPENIPC_SOC_VENDOR="ingenic"' "$cfg" \
+                  || grep -qE '^BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE=y' $files; }; then
             make BOARD=${{ matrix.board }} fullimage
           else
-            echo "no bootloader package in $cfg -- publishing the sysupgrade tarball only"
+            echo "no bootloader (or, on Ingenic, no environment) for ${{ matrix.board }} -- publishing the sysupgrade tarball only"
           fi
 
       - name: Checksums

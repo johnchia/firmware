@@ -38,10 +38,10 @@ build with `make BOARD=<name>`.
 |---|---|---|---|---|
 | `ssc377qe_raptor` | SSC377QE · infinity6c | 16 MB NOR | 8192 KB | [sysupgrade][t-377] · [whole-flash][f-377] |
 | `ssc377d_raptor` | SSC377D · infinity6c | 16 MB NOR | 8192 KB | [sysupgrade][t-377d] · [whole-flash][f-377d] |
-| `ssc377d_raptorwifi` | SSC377D · infinity6c | 16 MB NOR | 8192 KB | [sysupgrade][t-377dw] · [whole-flash][f-377dw] |
 | `ssc30kq_raptor` | SSC30KQ · infinity6e | 16 MB NOR | 8192 KB | [sysupgrade][t-30k] · [whole-flash][f-30k] |
-| `ssc333_sc3336_raptor` | SSC333 · infinity6b0 | 8 MB NOR | 5120 KB | [sysupgrade][t-333] |
-| `t31_raptor` | T31X · ingenic | 16 MB NOR | 8192 KB | [sysupgrade][t-t31] · [whole-flash][f-t31] |
+| `ssc333_raptor` | SSC333 · infinity6b0 | 8 MB NOR | 5120 KB | [sysupgrade][t-333] |
+| `ssc333_sc3336_raptor` | SSC333 · infinity6b0, sc3336 pinned; being replaced by the KD110 camera | 8 MB NOR | 5120 KB | [sysupgrade][t-333s] |
+| `t31_raptor` | T31X · ingenic | 16 MB NOR | 8192 KB | [sysupgrade][t-t31] |
 | `hi3516ev300_raptor` | Hi3516EV300 · hi3516ev200 | 16 MB NOR | 10240 KB | [sysupgrade][t-ev300] |
 | `hi3516ev200_raptor` | Hi3516EV200 · hi3516ev200 | 8 MB NOR | 5120 KB | [sysupgrade][t-ev200] |
 | `hi3516cv608_raptor` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 5120 KB | [sysupgrade][t-cv608] · [whole-flash][f-cv608] |
@@ -49,6 +49,9 @@ build with `make BOARD=<name>`.
 | Camera | On | Sensor · radio | Status | Download |
 |---|---|---|---|---|
 | `h4cx-a0_hi3516cv608_os04d10_rtl8733bu` | `hi3516cv608_raptor` | OS04D10 · RTL8733BU (USB) | verified 2026-09-25 | [sysupgrade][t-h4] · [whole-flash][f-h4] |
+| `tapo-d130_ssc377d_sc5239_rtl8192eu` | `ssc377d_raptor` | SC5239 · RTL8192EU (USB) | verified 2026-09-25 | [sysupgrade][t-d130] · [whole-flash][f-d130] |
+| `kd110_ssc333_sc3336_rtl8188fu` | `ssc333_raptor` | SC3336 · RTL8188FU (USB) | verified as `ssc333_sc3336_raptor`; camera image not yet run | [sysupgrade][t-kd110] |
+| `wyze-cam3_t31_gc2053_atbm6031` | `t31_raptor` | GC2053 · ATBM6031 (SDIO) | verified as `t31_raptor`; camera image not yet run | [sysupgrade][t-wyze] · [whole-flash][f-wyze] |
 
 Status is what has run on the unit, kept in `CAMERA_STATUS` in
 `.github/scripts/ci-matrix.py`; the camera's own README says what was
@@ -68,12 +71,12 @@ rest ship a driver nobody here has run.
 
 | Family | Images | Sensors on the image |
 |---|---|---|
-| infinity6c | `ssc377qe_raptor`, `ssc377d_raptor`, `ssc377d_raptorwifi` | **imx335**, **sc450ai**, *sc5239*, gc4653, imx415, os04a10, sc401ai, sc4336p, sc501ai, sc5235, sc830ai, sc850sl |
+| infinity6c | `ssc377qe_raptor`, `ssc377d_raptor` (`tapo-d130_ssc377d_sc5239_rtl8192eu` pins sc5239 alone) | **imx335**, **sc450ai**, *sc5239*, gc4653, imx415, os04a10, sc401ai, sc4336p, sc501ai, sc5235, sc830ai, sc850sl |
 | infinity6e | `ssc30kq_raptor` | **gc4653**, gc2053, gc2093, imx307, imx335, imx347, imx415, os04a10, os04c10, sc501ai, sc8235 |
-| infinity6b0 | `ssc333_sc3336_raptor` | **sc3336** |
+| infinity6b0 | `ssc333_raptor` (`kd110_ssc333_sc3336_rtl8188fu` and `ssc333_sc3336_raptor` pin sc3336 alone) | **sc3336**, gc2053, gc4023, gc4653, imx307, imx335, jxf37, jxq03, os02g10, sc200ai, sc223a, sc2335, sc2336, sc3338, sc401ai |
 | hi3516ev200 | `hi3516ev200_raptor`, `hi3516ev300_raptor` | **imx307**, **imx335**, gc2053, gc4653, jxf22, jxf23, jxf37, sc2231, sc2232h, sc2239, sc2315e, sc3235, sc3335, sc4236, sp2305, sp2308 |
 | hi3516cv6xx | `hi3516cv608_raptor`, `h4cx-a0_hi3516cv608_os04d10_rtl8733bu` | **os04d10**, *cv2005* (`hi3516cv608_raptor` only) |
-| ingenic t31 | `t31_raptor` | *gc2053* |
+| ingenic t31 | `t31_raptor` (`wyze-cam3_t31_gc2053_atbm6031` pins gc2053 alone) | *gc2053*, and on the base every sensor the T31 driver package carries |
 
 ## Before you flash
 
@@ -131,19 +134,22 @@ packaging and the Buildroot tree are theirs. See the [project][project], the
 
 [t-377]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc377qe-nor-raptor-latest.tgz
 [t-377d]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc377d-nor-raptor-latest.tgz
-[t-377dw]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc377d-nor-raptorwifi-latest.tgz
+[t-d130]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.tapo-d130_ssc377d_sc5239_rtl8192eu-nor-raptor-latest.tgz
 [t-30k]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc30kq-nor-raptor-latest.tgz
-[t-333]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc333_sc3336-nor-raptor-latest.tgz
-[t-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.t31_gc2053-nor-raptor-latest.tgz
+[t-333]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc333-nor-raptor-latest.tgz
+[t-333s]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc333_sc3336-nor-raptor-latest.tgz
+[t-kd110]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.kd110_ssc333_sc3336_rtl8188fu-nor-raptor-latest.tgz
+[t-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.t31-nor-raptor-latest.tgz
+[t-wyze]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.wyze-cam3_t31_gc2053_atbm6031-nor-raptor-latest.tgz
 [t-ev200]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516ev200-nor-raptor-latest.tgz
 [t-ev300]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516ev300-nor-raptor-latest.tgz
 [t-cv608]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516cv608-nor-raptor-latest.tgz
 [t-h4]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.h4cx-a0_hi3516cv608_os04d10_rtl8733bu-nor-raptor-latest.tgz
 [f-377]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377qe-nor-raptor-full.bin
 [f-377d]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377d-nor-raptor-full.bin
-[f-377dw]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377d-nor-raptorwifi-full.bin
+[f-d130]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-tapo-d130_ssc377d_sc5239_rtl8192eu-nor-raptor-full.bin
 [f-30k]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc30kq-nor-raptor-full.bin
-[f-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-t31_gc2053-nor-raptor-full.bin
+[f-wyze]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-wyze-cam3_t31_gc2053_atbm6031-nor-raptor-full.bin
 [f-cv608]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-hi3516cv608-nor-raptor-full.bin
 [f-h4]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-h4cx-a0_hi3516cv608_os04d10_rtl8733bu-nor-raptor-full.bin
 [opencollective]: https://opencollective.com/openipc

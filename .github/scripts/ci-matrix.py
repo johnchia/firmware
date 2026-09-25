@@ -58,16 +58,18 @@ ALL_BOARDS = [
     # built by anything at all -- left out, the package checks below report each
     # of them as reaching no board.
     "ssc377qe_raptor", "ssc377d_raptor", "ssc30kq_raptor", "ssc333_sc3336_raptor",
+    # ssc333_raptor is the unpinned SoC target the KD110 camera layers on
+    # (br-ext-chip-sigmastar/cameras/kd110_ssc333_sc3336_rtl8188fu). It ships
+    # the family's fifteen IQ blobs and measures 3828K of its 5120K cap.
+    "ssc333_raptor",
     # ssc377_raptor is ssc377d_raptor on the suffixless part. ssc377_tapo_c120 is
     # that plus an RTL8188FU and the baked environment naming the arm that powers
     # it -- a pin number is board knowledge and cannot be probed for, so the board
     # gets a target rather than the driver getting a symbol.
     "ssc377_raptor", "ssc377_tapo_c120",
-    # ssc377d_raptor plus an RTL8192EU. Like the C120 it bakes an environment
-    # naming the arm that powers the dongle on GPIO 42. It is the only user of
-    # rtl8192eu-openipc, which sat in NOT_BUILT until it. The D130 camera
-    # directory replaces it next; the H4 has already gone that way.
-    "ssc377d_raptorwifi",
+    # The D130 camera on ssc377d_raptor (br-ext-chip-sigmastar/cameras/
+    # tapo-d130_ssc377d_sc5239_rtl8192eu, registered from its directory) is
+    # the only user of rtl8192eu-openipc, which sat in NOT_BUILT until it.
     # Ingenic. t31_raptor is a Raptor board and belongs with the three above by
     # kind; it sits here because the vendor groupings are what a reader scans
     # for, and it is the only Ingenic board that carries ingenic-uboot --
@@ -229,6 +231,21 @@ CAMERA_STATUS = {
     # carried, not yet watched switching; see the camera's README.
     "h4cx-a0_hi3516cv608_os04d10_rtl8733bu":
         "verified 2026-09-25 on bd0a6d0c-dirty: boots, joins WiFi, streams 2560x1440 H.265 at 25 fps",
+    # The Tapo D130 board, NOR-converted, on the bench over WiFi. Verified on
+    # the ssc377d_raptorwifi target it replaces; the camera-named image itself
+    # has not run on the unit yet, and the README says what differs (one IQ
+    # blob instead of eight).
+    "tapo-d130_ssc377d_sc5239_rtl8192eu":
+        "verified 2026-09-22 on 2923b643 (as ssc377d_raptorwifi): cold boot streams the SC5239 at 2592x1944",
+    # The KD110v2 on the bench over WiFi. Verified on the ssc333_sc3336_raptor
+    # target it replaces; the camera-named image has not run on the unit yet.
+    "kd110_ssc333_sc3336_rtl8188fu":
+        "verified 2026-09-09 on ssc333_sc3336_raptor: streams the SC3336, detect finds the RTL8188FU in 0.62 s",
+    # The Wyze Cam v3 on the bench over WiFi. Verified on t31_raptor when that
+    # target still carried the Wyze's env and radio; the camera-named image
+    # has not run on the unit yet.
+    "wyze-cam3_t31_gc2053_atbm6031":
+        "verified 2026-09-22 on nightly-20260922-95a2ca2 (as t31_raptor): eight daemons, H.264 1080p and 640x360 over RTSP, snapshots, audio",
 }
 
 # Workflows that cannot change what a firmware image contains. Matched on the
@@ -301,9 +318,6 @@ SMOKE_BOARDS = [
     # is the cheapest camera to carry, identical to its base in every other
     # build-step trait.
     "h4cx-a0_hi3516cv608_os04d10_rtl8733bu",
-    # The raptorwifi variant, which has to be provable while it exists. It is
-    # down to this one board and goes with it when the D130 becomes a camera.
-    "ssc377d_raptorwifi",
     # The only SigmaStar board that bakes a U-Boot environment, and the only
     # user of the tapo_c120 variant. Both are why it is here: the variant has to
     # be provable like every other, and the environment is new plumbing --
@@ -980,8 +994,10 @@ def self_test():
         # cost is runner time and never coverage -- which is why the number is
         # recorded rather than the guard taught. Narrowing it means giving those
         # two lines a BR2_ symbol to hang on, in divinus.mk.
+        # The raptor set includes the D130 and KD110 cameras, which reach it
+        # through their bases, and the unpinned ssc333_raptor base.
         (["general/package/sigmastar-osdrv-sensors/Config.in"],
-         40, "reached via Config.in select"),
+         42, "reached via Config.in select"),
         # Shared packages narrow too, just barely.
         (["general/package/majestic/majestic.mk"], 87, "majestic is nearly everywhere"),
         # Board configs and kernel configs.

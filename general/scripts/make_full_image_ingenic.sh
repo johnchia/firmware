@@ -39,7 +39,7 @@
 # The bootloader comes from BR2_TARGET_UBOOT pinned to a commit of the fork
 # above (see br-ext-chip-ingenic/configs/t31_raptor_defconfig), and the
 # environment from host-uboot-tools running mkenvimage over
-# br-ext-chip-ingenic/board/t31/wyze-v3.env.txt. Nothing is spliced out of a
+# br-ext-chip-ingenic/cameras/wyze-cam3_t31_gc2053_atbm6031/uboot.env.txt. Nothing is spliced out of a
 # vendor image.
 #
 # The environment is the half that is easy to underrate. It is data in mtd1,
