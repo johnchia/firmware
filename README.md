@@ -23,22 +23,28 @@ A fork of [OpenIPC/firmware][upstream] that builds camera images running
 
 ## Boards
 
-Sizes are the squashfs from the latest nightly, so they move with every
-build. Free is the headroom a Wi-Fi driver or an IQ tuning has to fit into --
-a driver is often 1.5 MB, which is why the column is here and why
-`hi3516cv608_os04d10_raptorwifi`, at 28 KB, already carries one.
+Rootfs is the partition the image has to fit, and what a Wi-Fi driver or an
+IQ tuning has to find room in. A driver is often 1.5 MB, which is why the
+`raptorwifi` targets are images of their own and why the 8 MB boards carry
+one sensor's tuning rather than the family's.
 
-| Board | SoC · family | Flash | Rootfs | Free | Download |
-|---|---|---|---|---|---|
-| `ssc377qe_raptor` | SSC377QE · infinity6c | 16 MB NOR | 4580 of 8192 KB | 3612 KB | [sysupgrade][t-377] · [whole-flash][f-377] |
-| `ssc377d_raptor` | SSC377D · infinity6c | 16 MB NOR | 4264 of 8192 KB | 3928 KB | [sysupgrade][t-377d] · [whole-flash][f-377d] |
-| `ssc30kq_raptor` | SSC30KQ · infinity6e | 16 MB NOR | 5068 of 8192 KB | 3124 KB | [sysupgrade][t-30k] · [whole-flash][f-30k] |
-| `ssc333_sc3336_raptor` | SSC333 · infinity6b0 | 8 MB NOR | 4796 of 5120 KB | 324 KB | [sysupgrade][t-333] |
-| `t31_raptor` | T31X · ingenic | 16 MB NOR | 4608 of 8192 KB | 3584 KB | [sysupgrade][t-t31] · [whole-flash][f-t31] |
-| `hi3516ev300_raptor` | Hi3516EV300 · hi3516ev200 | 16 MB NOR | 4684 of 10240 KB | 5556 KB | [sysupgrade][t-ev300] |
-| `hi3516ev200_raptor` | Hi3516EV200 · hi3516ev200 | 8 MB NOR | 4588 of 5120 KB | 532 KB | [sysupgrade][t-ev200] |
-| `hi3516cv608_os04d10_raptor` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 3952 of 5120 KB | 1168 KB | [sysupgrade][t-cv608] |
-| `hi3516cv608_os04d10_raptorwifi` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 5156 of 5184 KB | 28 KB | [sysupgrade][t-cv608w] |
+| Board | SoC · family | Flash | Rootfs | Download |
+|---|---|---|---|---|
+| `ssc377qe_raptor` | SSC377QE · infinity6c | 16 MB NOR | 8192 KB | [sysupgrade][t-377] · [whole-flash][f-377] |
+| `ssc377d_raptor` | SSC377D · infinity6c | 16 MB NOR | 8192 KB | [sysupgrade][t-377d] · [whole-flash][f-377d] |
+| `ssc377d_raptorwifi` | SSC377D · infinity6c | 16 MB NOR | 8192 KB | [sysupgrade][t-377dw] · [whole-flash][f-377dw] |
+| `ssc30kq_raptor` | SSC30KQ · infinity6e | 16 MB NOR | 8192 KB | [sysupgrade][t-30k] · [whole-flash][f-30k] |
+| `ssc333_sc3336_raptor` | SSC333 · infinity6b0 | 8 MB NOR | 5120 KB | [sysupgrade][t-333] |
+| `t31_raptor` | T31X · ingenic | 16 MB NOR | 8192 KB | [sysupgrade][t-t31] · [whole-flash][f-t31] |
+| `hi3516ev300_raptor` | Hi3516EV300 · hi3516ev200 | 16 MB NOR | 10240 KB | [sysupgrade][t-ev300] |
+| `hi3516ev200_raptor` | Hi3516EV200 · hi3516ev200 | 8 MB NOR | 5120 KB | [sysupgrade][t-ev200] |
+| `hi3516cv608_raptor` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 5120 KB | [sysupgrade][t-cv608] · [whole-flash][f-cv608] |
+| `hi3516cv608_os04d10_raptorwifi` | Hi3516CV608 · hi3516cv6xx | 8 MB NOR | 5120 KB | [sysupgrade][t-cv608w] · [whole-flash][f-cv608w] |
+
+A whole-flash image carries the bootloader and a fresh U-Boot environment.
+On a `raptorwifi` camera the environment is where the Wi-Fi network is kept,
+so after one the camera comes up with no network and raises its own access
+point for setup, exactly as a new one does.
 
 ## Sensors
 
@@ -49,11 +55,11 @@ rest ship a driver nobody here has run.
 
 | Family | Images | Sensors on the image |
 |---|---|---|
-| infinity6c | `ssc377qe_raptor`, `ssc377d_raptor` | **imx335**, **sc450ai**, gc4653, imx415, os04a10, sc401ai, sc4336p, sc501ai, sc830ai, sc850sl |
+| infinity6c | `ssc377qe_raptor`, `ssc377d_raptor`, `ssc377d_raptorwifi` | **imx335**, **sc450ai**, *sc5239*, gc4653, imx415, os04a10, sc401ai, sc4336p, sc501ai, sc830ai, sc850sl |
 | infinity6e | `ssc30kq_raptor` | **gc4653**, gc2053, gc2093, imx307, imx335, imx347, imx415, os04a10, os04c10, sc501ai, sc8235 |
 | infinity6b0 | `ssc333_sc3336_raptor` | **sc3336** |
 | hi3516ev200 | `hi3516ev200_raptor`, `hi3516ev300_raptor` | **imx307**, **imx335**, gc2053, gc4653, jxf22, jxf23, jxf37, sc2231, sc2232h, sc2239, sc2315e, sc3235, sc3335, sc4236, sp2305, sp2308 |
-| hi3516cv6xx | both `hi3516cv608_os04d10` variants | **os04d10** |
+| hi3516cv6xx | `hi3516cv608_raptor`, `hi3516cv608_os04d10_raptorwifi` | **os04d10**, *cv2005* (`hi3516cv608_raptor` only) |
 | ingenic t31 | `t31_raptor` | *gc2053* |
 
 ## Before you flash
@@ -112,17 +118,21 @@ packaging and the Buildroot tree are theirs. See the [project][project], the
 
 [t-377]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc377qe-nor-raptor-latest.tgz
 [t-377d]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc377d-nor-raptor-latest.tgz
+[t-377dw]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc377d-nor-raptorwifi-latest.tgz
 [t-30k]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc30kq-nor-raptor-latest.tgz
 [t-333]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.ssc333_sc3336-nor-raptor-latest.tgz
 [t-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.t31_gc2053-nor-raptor-latest.tgz
 [t-ev200]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516ev200-nor-raptor-latest.tgz
 [t-ev300]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516ev300-nor-raptor-latest.tgz
 [t-cv608]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516cv608-nor-raptor-latest.tgz
-[t-cv608w]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516cv608-nor-raptorwifi-latest.tgz
-[f-377]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377qe-nor-full.bin
-[f-377d]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377d-nor-full.bin
-[f-30k]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc30kq-nor-full.bin
-[f-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-t31-nor-full.bin
+[t-cv608w]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc.hi3516cv608_os04d10-nor-raptorwifi-latest.tgz
+[f-377]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377qe-nor-raptor-full.bin
+[f-377d]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377d-nor-raptor-full.bin
+[f-377dw]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc377d-nor-raptorwifi-full.bin
+[f-30k]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-ssc30kq-nor-raptor-full.bin
+[f-t31]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-t31_gc2053-nor-raptor-full.bin
+[f-cv608]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-hi3516cv608-nor-raptor-full.bin
+[f-cv608w]: https://github.com/johnchia/firmware/releases/download/raptor-nightly/openipc-hi3516cv608_os04d10-nor-raptorwifi-full.bin
 [opencollective]: https://opencollective.com/openipc
 [project]: https://github.com/openipc
 [wiki-flash]: https://github.com/OpenIPC/wiki/blob/master/en/equipment-flashing.md
