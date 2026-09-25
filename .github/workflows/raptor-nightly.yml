@@ -113,7 +113,7 @@ jobs:
       matrix:
         board: [ssc377qe_raptor, ssc377d_raptor, ssc377d_raptorwifi, ssc30kq_raptor,
                 ssc333_sc3336_raptor, t31_raptor, hi3516ev300_raptor, hi3516ev200_raptor,
-                hi3516cv608_os04d10_raptor, hi3516cv608_os04d10_raptorwifi]
+                hi3516cv608_raptor, hi3516cv608_os04d10_raptorwifi]
     env:
       BUILD_ID:  ${{ needs.gate.outputs.build_id }}
       BUILD_SHA: ${{ needs.gate.outputs.head_sha }}

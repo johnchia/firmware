@@ -155,7 +155,7 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # from 0x750000 to the end of the chip, 704K. firmware overlaps kernel and
 # rootfs: it is the whole-image slot U-Boot's fwupd writes. Matching OpenIPC is
 # the point -- its sysupgrade, its recovery steps and its U-Boot work on this
-# board as on any OpenIPC camera -- and hi3516cv608_os04d10_raptor made the
+# board as on any OpenIPC camera -- and hi3516cv608_raptor made the
 # move first; the two targets differ in the radio, not the chip.
 #
 # This target used to keep the H4-52POX-S's OEM bootloader and a re-cut of its
@@ -268,7 +268,7 @@ BR2_PACKAGE_HISILICON_CV6XX_BOOT=y
 # THIS IS WHY THE VARIANT EXISTS, and it is a fifth of the rootfs: 543 KB of
 # driver, 109 KB of cfg80211, 455 KB of supplicant and 57 KB of tools, 1150 KB
 # compressed against a 5184 KB slot. The only other difference from
-# hi3516cv608_os04d10_raptor is what had to leave to pay for it: mosquitto,
+# hi3516cv608_raptor is what had to leave to pay for it: mosquitto,
 # below.
 # The cv608 has no standard radio, so the wired build is the one that does not
 # assume this dongle, and a board with a different one needs its own arm in

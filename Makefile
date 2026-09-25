@@ -303,6 +303,12 @@ FULLIMAGE_ENV = $(strip $(if $(strip $(ENV_BIN)),$(abspath $(ENV_BIN)),\
 	$(if $(filter y,$(BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE)),\
 		$(TARGET)/images/uboot-env.bin)))
 
+# Named as the sysupgrade archive is, openipc-<soc>[_<sensor>]-nor-<variant>:
+# two targets on one SoC (the ssc377d and cv608 raptor/raptorwifi pairs) used
+# to produce one name between them, and the nightly's merged download kept
+# whichever landed last.
+FULLIMAGE_OUT = $(TARGET)/images/openipc-$(IMAGE_SOC)-nor-$(subst ",,$(BR2_OPENIPC_VARIANT))-full.bin
+
 fullimage: defconfig
 ifeq ($(BR2_OPENIPC_SOC_FAMILY),"hi3516cv6xx")
 # cv6xx keeps its environment in a text file the board defconfig names, so the
@@ -322,7 +328,7 @@ ifeq ($(BR2_OPENIPC_SOC_FAMILY),"hi3516cv6xx")
 	$(SHELL) $(PWD)/general/scripts/make_full_image_cv6xx.sh \
 		"$(FULLIMAGE_UBOOT)" \
 		"$(TARGET)/images" \
-		"$(TARGET)/images/openipc-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor-full.bin"
+		"$(FULLIMAGE_OUT)"
 else ifeq ($(BR2_OPENIPC_SOC_VENDOR),"hisilicon")
 	@test -n "$(strip $(UBOOT_BIN))" || { \
 		echo "point UBOOT_BIN at a HiSilicon boot container."; \
@@ -339,7 +345,7 @@ else ifeq ($(BR2_OPENIPC_SOC_VENDOR),"hisilicon")
 		"$(abspath $(UBOOT_BIN))" \
 		"$(TARGET)/images" \
 		"$(subst ",,$(BR2_OPENIPC_SOC_MODEL))" \
-		"$(TARGET)/images/openipc-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor-full.bin" \
+		"$(FULLIMAGE_OUT)" \
 		$(if $(strip $(UBOOT_ENV_EXTRA)),"$(abspath $(UBOOT_ENV_EXTRA))")
 else ifeq ($(BR2_OPENIPC_SOC_VENDOR),"ingenic")
 	@test -n "$(strip $(UBOOT_BIN))" -o -f "$(TARGET)/images/u-boot-with-tpl-lzma.bin" || { \
@@ -359,7 +365,7 @@ else ifeq ($(BR2_OPENIPC_SOC_VENDOR),"ingenic")
 	@$(SHELL) $(PWD)/general/scripts/make_full_image_ingenic.sh \
 		"$(TARGET)/images" \
 		"$(subst ",,$(BR2_OPENIPC_SOC_MODEL))" \
-		"$(TARGET)/images/openipc-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor-full.bin"
+		"$(FULLIMAGE_OUT)"
 else
 	@test -f "$(FULLIMAGE_UBOOT)" || { \
 		echo "no boot container at $(FULLIMAGE_UBOOT)"; \
@@ -375,7 +381,7 @@ else
 		"$(FULLIMAGE_UBOOT)" \
 		"$(TARGET)/images" \
 		"$(subst ",,$(BR2_OPENIPC_SOC_MODEL))" \
-		"$(TARGET)/images/openipc-$(subst ",,$(BR2_OPENIPC_SOC_MODEL))-nor-full.bin" \
+		"$(FULLIMAGE_OUT)" \
 		$(if $(strip $(SNI_REF)),"$(abspath $(SNI_REF))")
 endif
 

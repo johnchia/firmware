@@ -87,14 +87,14 @@ ALL_BOARDS = [
     # Hisilicon [HI3516CV6XX]
     #
     # The two hi3516cv608 targets are this fork's on the same family, pinned to
-    # one die, one sensor and 8 MB NOR. They differ only in the radio:
+    # one die and 8 MB NOR. They differ in the radio and in what that costs:
     # raptorwifi carries the RTL8733BU stack and raptor does not, which is a
     # fifth of the rootfs, and the cv608 has no standard part to justify
     # putting it in both. Both build raptor-streaming against the HAL's hisi_v5
     # backend, so a pin bump does reach them, and both are now in
     # raptor-nightly.yml's matrix -- they were not, and raptorwifi spent that
     # time 400 KB over its partition with nothing building it to say so.
-    "hi3516cv6xx_ultimate", "hi3516cv608_os04d10_raptor",
+    "hi3516cv6xx_ultimate", "hi3516cv608_raptor",
     "hi3516cv608_os04d10_raptorwifi",
     # Hisilicon [HI3519DV500]
     "hi3519dv500_ultimate",
@@ -276,7 +276,7 @@ SMOKE_BOARDS = [
     # The raptorwifi variant exists only so the two cv608 images do not
     # land on the same openipc.<soc>-<layout>-<variant> filename, and it
     # is here because every variant has to be provable. It is the cheaper
-    # of the pair to carry: identical to hi3516cv608_os04d10_raptor in
+    # of the pair to carry: identical to hi3516cv608_raptor in
     # every build-step trait, so what it proves is the wireless packages
     # still resolve, not a new shape.
     "hi3516cv608_os04d10_raptorwifi",

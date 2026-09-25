@@ -1,6 +1,6 @@
 # SSC377D with a USB RTL8192EU. This is ssc377d_raptor plus the driver, the
 # supplicant and the tools -- the same shape hi3516cv608_os04d10_raptorwifi has
-# over hi3516cv608_os04d10_raptor, and named the same way so the two images do
+# over hi3516cv608_raptor, and named the same way so the two images do
 # not land on one openipc.<soc>-<layout>-<variant> filename.
 #
 # THE DONGLE IS POWER-GATED, SO THE ENVIRONMENT NAMES THE ARM. The board this

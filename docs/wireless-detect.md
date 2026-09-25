@@ -151,7 +151,7 @@ build a U-Boot environment into the image (`grep -l ENVIMAGE_SOURCE br-ext-chip-
 | defconfig | env source | `wlandev` |
 | --- | --- | --- |
 | `t31_raptor` | `board/t31/wyze-v3.env.txt` | `atbm603x-t31-wyze-v3` |
-| `hi3516cv608_os04d10_raptor` | `board/hi3516cv6xx/hi3516cv608.raptor.env.txt` | no `wlandev` line (wired build) |
+| `hi3516cv608_raptor` | `board/hi3516cv6xx/hi3516cv608.raptor.env.txt` | no `wlandev` line (wired build) |
 | `hi3516cv608_os04d10_raptorwifi` | same | no `wlandev` line — detection finds it |
 | `ssc377_tapo_c120` | `board/infinity6c/tapo-c120.env.txt` | `rtl8188fu-ssc377-tapo-c120` |
 | `ssc377d_raptorwifi` | `board/infinity6c/ssc377d-raptorwifi.env.txt` | `rtl8192eu-ssc377d-refboard` |
