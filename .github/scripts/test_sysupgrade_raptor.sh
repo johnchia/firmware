@@ -34,6 +34,8 @@ sed -e 's|/tmp\b|@SB@/tmp|g' \
     -e 's|/etc/os-release|@SB@/etc/os-release|g' \
     -e 's|/etc/init.d/|@SB@/etc/init.d/|g' \
     -e 's|/proc/mtd|@SB@/proc/mtd|g' \
+    -e 's|/sys/class/mtd/|@SB@/sys/class/mtd/|g' \
+    -e 's|/proc/cmdline|@SB@/proc/cmdline|g' \
     -e 's|/proc/meminfo|@SB@/proc/meminfo|g' \
     -e 's|/proc/mounts|@SB@/proc/mounts|g' \
     -e 's|/proc/sys/vm/drop_caches|@SB@/proc/sys/vm/drop_caches|g' \
@@ -403,6 +405,98 @@ run --github=johnchia
 	&& ok "--github without a slash is refused before anything is touched" || bad "--github form check"
 run --github=johnchia/firmware --url=http://x/y.tgz
 refused "--github with --url is refused" "give one of"
+
+echo "# full image"
+
+# A whole-flash image is laid down by absolute offset, so the fixtures are
+# random bytes with the image's own mtdparts= planted where the env sits, and
+# the assertion is that each partition received exactly the image's bytes at
+# its offset: the flashcp stub logs the md5 of what it was handed.
+TABLE='256k(boot),64k(env),2048k(kernel),5184k(rootfs),640k(rootfs_data)'
+MOVED='192k(boot),64k(env),2560k(kernel),4992k(rootfs),384k(rootfs_data)'
+set_cmdline() { printf 'mem=36M console=ttyAMA0,115200 root=/dev/mtdblock3 mtdparts=sfc:%s mmz_allocator=ot\n' "$1" > "$SB/proc/cmdline"; }
+set_cmdline "$TABLE"
+set_offsets() {
+	local n=0 off
+	for off in "$@"; do
+		mkdir -p "$SB/sys/class/mtd/mtd$n"; echo "$off" > "$SB/sys/class/mtd/mtd$n/offset"; n=$((n + 1))
+	done
+}
+set_offsets 0 262144 327680 2424832 7733248
+make_full() {
+	# $1 file, $2 size in KB, $3 the table its env names.
+	head -c $(($2 * 1024)) /dev/urandom > "$1"
+	printf '\0\0\0\0mtdparts=sfc:%s\0' "$3" | dd of="$1" bs=1024 seek=256 conv=notrunc status=none
+}
+slice_md5() { dd if="$1" bs=1024 skip="$2" count="$3" status=none | md5sum | cut -c1-32; }
+stub flashcp 'echo "flashcp $* $(md5sum < "$1" | cut -c1-32)" >> "$FLASH_LOG"; exit ${STUB_FLASHCP_RC:-0}'
+
+make_full "$SB/src/full.bin" 7552 "$TABLE"
+FULL="$SB/src/full.bin"; SLICE="$SB/tmp/sysupgrade.pkg/slice"
+run --full="$FULL"
+if log_order "^S95raptor stop" "^chroot " \
+		"^flashcp $SLICE /dev/mtd0 $(slice_md5 "$FULL" 0 256)$" \
+		"^flashcp $SLICE /dev/mtd1 $(slice_md5 "$FULL" 256 64)$" \
+		"^flashcp $SLICE /dev/mtd2 $(slice_md5 "$FULL" 320 2048)$" \
+		"^flashcp $SLICE /dev/mtd3 $(slice_md5 "$FULL" 2368 5184)$" \
+		"^killall dropbear" "^reboot -f" \
+	&& ! grep -q "^fw_setenv\|^flash_eraseall\|mtd4" "$FLASH_LOG" \
+	&& [ ! -f "$SB/tmp/sysupgrade.pkg/full.bin" ] && [ ! -f "$SLICE" ] && [ -f "$FULL" ]; then
+	ok "--full: every partition gets the image's bytes at its offset, in order; no env arming, overlay untouched, reboot"
+	echo "$OUT" | grep -q "^Warning: a whole-flash image is written as given" && ok "--full warns that nothing checks the image is for this camera" || bad "no --full warning"
+else
+	bad "--full same table"; echo "$OUT" | sed 's/^/     /'; sed 's/^/     log: /' "$FLASH_LOG"
+fi
+
+make_full "$SB/src/moved.bin" 7552 "$MOVED"
+run --full="$SB/src/moved.bin"
+refused "an image with another partition table is refused without -n" "the overlay moves with it; -n is required"
+echo "$OUT" | grep -q "^  image:  $MOVED" && echo "$OUT" | grep -q "^  camera: $TABLE" && ok "...and both tables are shown" || bad "tables not shown"
+
+make_full "$SB/src/moved-over.bin" 7808 "$MOVED"
+run -n --full="$SB/src/moved-over.bin"
+if log_order "^remount .*ro" "^chroot " "^flashcp $SLICE /dev/mtd3 " "^flash_eraseall /dev/mtd4$" \
+		"^flashcp $SLICE /dev/mtd4 $(slice_md5 "$SB/src/moved-over.bin" 7552 256)$" "^reboot -f" \
+	&& ! grep -q "^flash_eraseall -j" "$FLASH_LOG"; then
+	ok "-n --full reaching into the overlay: overlay erased whole, then the covered part written; no second erase"
+else
+	bad "-n --full into the overlay"; echo "$OUT" | sed 's/^/     /'; sed 's/^/     log: /' "$FLASH_LOG"
+fi
+
+make_full "$SB/src/over.bin" 7808 "$TABLE"
+run --full="$SB/src/over.bin"
+refused "an image reaching into the overlay is refused without -n" "reaches into the overlay partition; -n is required"
+
+make_full "$SB/src/long.bin" 8256 "$TABLE"
+run --full="$SB/src/long.bin"
+refused "an image longer than the flash table is refused" "the flash table ends at 8388608"
+
+head -c 1000 /dev/urandom > "$SB/src/odd.bin"
+run --full="$SB/src/odd.bin"
+refused "an image that is not whole kilobytes is refused" "not whole kilobytes"
+
+set_offsets 0 262144 327680 2490368 7733248
+run --full="$FULL"
+refused "a partition table that does not lay out end to end is refused" "does not lay out end to end"
+set_offsets 0 262144 327680 2424832 7733248
+
+STUB_FLASHCP_RC=1 run --full="$FULL"
+if [ "$RC" -ne 0 ] && echo "$OUT" | grep -q "^Stopping WITHOUT a reboot: /dev/mtd0 (boot)" \
+	&& [ "$(grep -c '^flashcp' "$FLASH_LOG")" -eq 1 ] && ! grep -q "^reboot" "$FLASH_LOG"; then
+	ok "a slice flashcp cannot verify stops the run without a reboot, and nothing after it is written"
+else
+	bad "flashcp failure under --full"; echo "$OUT" | sed 's/^/     /'; sed 's/^/     log: /' "$FLASH_LOG"
+fi
+
+set_mem 5000
+PLACE="$FULL" run --full="$SB/tmp/full.bin"
+refused "too little RAM for the largest slice beside the image is refused" "need .* KB of RAM for the largest slice"
+set_mem 20000
+
+run --full="$FULL" --archive="$SB/fw.tgz"
+refused "--full with another source is refused" "give one of"
+
+log_stub flashcp
 
 echo "# usage"
 

@@ -66,6 +66,11 @@ Flash a raptor image. Every check runs before anything is written.
       --archive=FILE    Flash kernel and rootfs from a local .tgz image.
       --kernel=FILE     Flash a kernel image (uImage or FIT).
       --rootfs=FILE     Flash a squashfs rootfs.
+      --full=FILE       Write a whole-flash image (make fullimage) from offset
+                        0, by absolute offset, bootloader and env included,
+                        whatever this camera's partitions are called. The one
+                        way to move a camera onto a different table; then -n
+                        is required, because the overlay moves too.
   -n, --wipe_overlay    Erase the overlay partition. This unclaims the camera:
                         the root password and every setting go with it.
   -d, --dev_wipe        Remove everything from the overlay except etc and var:
@@ -80,7 +85,9 @@ Flash a raptor image. Every check runs before anything is written.
 The archive must hold uImage.<soc> and rootfs.squashfs.<soc> for this camera's
 SoC, as the build writes them; that is how an image for another board is
 refused. A combined firmware.bin is not accepted. --kernel and --rootfs are
-flashed as given, with no check that they were built for this camera.
+flashed as given, with no check that they were built for this camera, and so
+is --full: its env replaces this camera's, so settings kept there (a WiFi
+network, say) go with it.
 EOF
 }
 
@@ -316,6 +323,75 @@ check_payload() {
 }
 
 # ---------------------------------------------------------------------------
+# A whole-flash image, planned against this camera's table. The image is laid
+# down by absolute offset: each partition the image reaches is written with the
+# image's bytes at its own offset, and whatever the partitions are named, the
+# chip ends up holding the image. That is what makes it the tool for moving a
+# camera onto a different table, where the new kernel starts in the old env
+# and the old rootfs.
+#
+# The table is walked from /proc/mtd and each offset checked against sysfs: a
+# partition that overlaps another (an "all" spanning the chip, OpenIPC's
+# "firmware") would throw the running sum off, and the check refuses rather
+# than guess. Every byte of the image lands in some partition, or the run is
+# refused. A partition the image only reaches into is still written, the part
+# it covers; the rest of it keeps what it held, unless it is the overlay, which
+# is erased whole so no jffs2 nodes survive past the slice.
+full_covers_overlay() {
+	[ -n "$overlay_dev" ] || return 1
+	printf '%s\n' "$full_plan" | grep -q "^${overlay_dev#/dev/} "
+}
+
+plan_full() {
+	local dev size name want len off=0 img largest=0
+	img=$(file_size "$full_file")
+	[ $((img % 1024)) -eq 0 ] || die "$full_file is $img bytes, not whole kilobytes: not a fullimage"
+	full_plan=
+	while read -r dev size _ name; do
+		case "$dev" in mtd[0-9]*:) dev=${dev%:} ;; *) continue ;; esac
+		size=$((0x$size))
+		name=${name#\"}; name=${name%\"}
+		want=$(cat "/sys/class/mtd/$dev/offset" 2>/dev/null)
+		[ -z "$want" ] || [ "$want" -eq "$off" ] ||
+			die "$dev ($name) sits at $want, not $off: the table does not lay out end to end"
+		if [ "$off" -lt "$img" ]; then
+			len=$((img - off))
+			[ "$len" -le "$size" ] || len=$size
+			[ "$len" -le "$largest" ] || largest=$len
+			full_plan="$full_plan$dev $name $off $len $size
+"
+			say "$name: $((len / 1024)) of $((size / 1024)) KB at $off for /dev/$dev"
+		fi
+		off=$((off + size))
+	done < /proc/mtd
+	[ "$img" -le "$off" ] || die "$full_file is $img bytes and the flash table ends at $off"
+	# write_full cuts each slice out beside the image before flashcp takes it,
+	# so the largest one has to fit in RAM next to the whole image.
+	need_ram_kb $((largest / 1024 + 3072)) "the largest slice ($((largest / 1024)) KB) beside the image"
+	# The overlay moves with the table, and a jffs2 found at the new offset
+	# would be mounted: the old one's blocks at whatever offsets they fall on.
+	# The image's table is the first mtdparts= in its first megabyte, where
+	# every NOR layout keeps its env.
+	img_table=$(head -c 1048576 "$full_file" | tr '\000' '\n' |
+		sed -n 's/^mtdparts=[^:]*:\([^ ]*\).*/\1/p' | head -1)
+	[ -n "$img_table" ] || img_table=$(head -c 1048576 "$full_file" | tr '\000' '\n' |
+		sed -n 's/.*mtdparts=[^:]*:\([^ ]*\).*/\1/p' | head -1)
+	cam_table=$(sed -n 's/.*mtdparts=[^:]*:\([^ ]*\).*/\1/p' /proc/cmdline)
+	if [ -z "$img_table" ]; then
+		say "Warning: no mtdparts= in the image's first megabyte; its table is not compared"
+	elif [ "$(echo "$img_table" | tr A-Z a-z)" != "$(echo "$cam_table" | tr A-Z a-z)" ]; then
+		say "The image moves the partition table:"
+		say "  image:  $img_table"
+		say "  camera: ${cam_table:-(none on the command line)}"
+		[ -n "$wipe" ] || die "the overlay moves with it; -n is required"
+	fi
+	# An overlay the image reaches into is erased with the part it covers.
+	if full_covers_overlay; then
+		[ -n "$wipe" ] || die "the image reaches into the overlay partition; -n is required"
+	fi
+}
+
+# ---------------------------------------------------------------------------
 # The RAM root. busybox and whatever it links against, the handful of applets
 # the flash phase uses, and this script. /dev, /proc and /tmp are bind-mounted
 # in so the MTD nodes and the payload are reachable by their usual paths.
@@ -333,7 +409,7 @@ build_ramroot() {
 	# loader and libc by name.
 	[ -n "$(ls "$ROOT/lib" 2>/dev/null)" ] ||
 		cp -L /lib/ld-* /lib/libc.so* "$ROOT/lib/" 2>/dev/null
-	for a in sh flashcp flash_eraseall rm sync sleep killall reboot; do
+	for a in sh flashcp flash_eraseall rm sync sleep killall reboot dd stat grep; do
 		ln -sf busybox "$ROOT/bin/$a"
 	done
 	cp "$0" "$ROOT/sysupgrade-raptor" || die "cannot copy $0 into $ROOT"
@@ -416,8 +492,53 @@ flash() {
 	say "$what written"
 }
 
+# The whole image, partition by partition: each slice is cut out of the staged
+# file with dd and handed to flashcp, the same writer as every other path here.
+# flashcp refuses a slice longer than its partition, erases only the blocks the
+# slice covers, and reads every 4 KB back against the file before it moves on,
+# so what it reports written is what the flash holds. The one partition it is
+# not enough for is an overlay the image only reaches into: the blocks past the
+# slice would keep their jffs2 nodes, so the whole partition is erased first
+# (without -j, since the slice lands where the cleanmarker would go).
+#
+# A slice flashcp cannot verify stops the run WITHOUT a reboot. These
+# bootloaders have no boot-count recovery, so a reboot cannot help, and the
+# shell this is watched from may still answer; the partitions are written in
+# order, so an early failure (the bootloader) leaves everything after it
+# untouched.
+write_full() {
+	local dev name off len size slice=$PKG/slice
+	while read -r dev name off len size; do
+		[ -n "$dev" ] || continue
+		dd if="$full_file" of="$slice" bs=1024 skip=$((off / 1024)) count=$((len / 1024)) 2>/dev/null &&
+			[ "$(file_size "$slice")" -eq "$len" ] ||
+			{ say "Stopping WITHOUT a reboot: cannot cut $name out of the image; nothing written to /dev/$dev"; sync; exit 1; }
+		if [ "/dev/$dev" = "$overlay_dev" ] && [ "$len" -lt "$size" ]; then
+			say "Erasing overlay /dev/$dev"
+			flash_eraseall "/dev/$dev" >/dev/null 2>&1 ||
+				{ say "Stopping WITHOUT a reboot: cannot erase /dev/$dev ($name)"; sync; exit 1; }
+		fi
+		say "Writing $name to /dev/$dev ($((len / 1024)) KB)"
+		flashcp "$slice" "/dev/$dev" ||
+			{ say "Stopping WITHOUT a reboot: /dev/$dev ($name) is not what the image holds"; sync; exit 1; }
+		rm -f "$slice"
+		say "$name written and verified"
+	done <<EOF
+$full_plan
+EOF
+	rm -f "$full_file"
+	# An overlay the image did not reach is erased as -n always does.
+	if [ -n "$wipe" ] && [ -n "$overlay_dev" ] && ! full_covers_overlay; then
+		say "Erasing overlay $overlay_dev"
+		flash_eraseall -j "$overlay_dev" >/dev/null 2>&1 ||
+			finish "flash_eraseall failed on the overlay; rebooting anyway"
+	fi
+	finish "Done, rebooting"
+}
+
 phase2() {
 	PATH=/bin
+	[ -n "$full_file" ] && write_full
 	[ -n "$kernel_file" ] && flash "$kernel_file" "$kernel_dev" kernel
 	[ -n "$rootfs_file" ] && flash "$rootfs_file" "$rootfs_dev" rootfs
 	if [ -n "$wipe" ]; then
@@ -430,7 +551,7 @@ phase2() {
 [ "$SU_PHASE" = 2 ] && phase2
 
 # ---------------------------------------------------------------------------
-url= github= archive= kernel_arg= rootfs_arg= wipe= dev_wipe= force= no_reboot=
+url= github= archive= kernel_arg= rootfs_arg= full_arg= wipe= dev_wipe= force= no_reboot=
 for i in "$@"; do
 	case "$i" in
 		--url=*) url=${i#*=} ;;
@@ -438,6 +559,7 @@ for i in "$@"; do
 		--archive=*) archive=${i#*=} ;;
 		--kernel=*) kernel_arg=${i#*=} ;;
 		--rootfs=*) rootfs_arg=${i#*=} ;;
+		--full=*) full_arg=${i#*=} ;;
 		-n | --wipe_overlay) wipe=1 ;;
 		-d | --dev_wipe) dev_wipe=1 ;;
 		-f | --force | --force_all) force=1 ;;
@@ -452,7 +574,8 @@ n=0
 [ -n "$github" ] && n=$((n + 1))
 [ -n "$archive" ] && n=$((n + 1))
 [ -n "$kernel_arg$rootfs_arg" ] && n=$((n + 1))
-[ "$n" -le 1 ] || die "give one of --url, --github, --archive, or --kernel/--rootfs"
+[ -n "$full_arg" ] && n=$((n + 1))
+[ "$n" -le 1 ] || die "give one of --url, --github, --archive, --full, or --kernel/--rootfs"
 [ "$n" -eq 1 ] || [ -n "$wipe$dev_wipe" ] || { usage; exit 1; }
 [ -z "$no_reboot" ] || [ "$n" -eq 0 ] ||
 	die "-x cannot be honoured: a kernel or rootfs write is only applied by a reboot"
@@ -471,8 +594,13 @@ trap 'die "interrupted"' HUP INT TERM
 
 free_resources
 
-kernel_file= rootfs_file=
-if [ -n "$url" ]; then
+kernel_file= rootfs_file= full_file=
+if [ -n "$full_arg" ]; then
+	stage_file "$full_arg"
+	full_file=$staged_file
+	plan_full
+	say "Warning: a whole-flash image is written as given; nothing checks it was built for this camera"
+elif [ -n "$url" ]; then
 	stage_url "$url"
 elif [ -n "$archive" ]; then
 	stage_archive "$archive"
@@ -494,7 +622,7 @@ fi
 # The overlay alone, erased or cleaned from the live root: the running
 # filesystem is not touched, so there is nothing to protect against, and -x
 # has to be able to hand the shell back.
-if [ -z "$kernel_file$rootfs_file" ]; then
+if [ -z "$kernel_file$rootfs_file$full_file" ]; then
 	trap '' HUP INT TERM PIPE
 	[ -n "$dev_wipe" ] && dev_wipe_overlay
 	if [ -n "$wipe" ]; then
@@ -520,7 +648,12 @@ say "Checks passed; flashing continues even if this terminal disconnects"
 
 # S99bootok clears these once the new image reaches a healthy userspace; a
 # U-Boot with boot-count recovery reflashes if it never does.
-if command -v fw_setenv >/dev/null 2>&1; then
+#
+# Not for --full. The image carries its own env, and under a new table this
+# camera's fw_env.config points at bytes the image is about to own: on a P23H
+# moving to the OpenIPC table, this write landed at 0x30000, inside the new
+# U-Boot, and the board stopped at "Uncompress Fail!".
+if [ -z "$full_file" ] && command -v fw_setenv >/dev/null 2>&1; then
 	fw_setenv upgrade_available 1 2>/dev/null && fw_setenv bootcount 0 2>/dev/null ||
 		say "Warning: could not arm boot-count recovery in the U-Boot environment"
 fi
@@ -528,7 +661,7 @@ fi
 [ -n "$dev_wipe" ] && dev_wipe_overlay
 [ -n "$wipe" ] && quiesce_overlay
 
-export SU_PHASE=2 kernel_file rootfs_file kernel_dev rootfs_dev overlay_dev wipe
+export SU_PHASE=2 kernel_file rootfs_file kernel_dev rootfs_dev overlay_dev wipe full_file full_plan
 exec chroot "$ROOT" /bin/sh /sysupgrade-raptor
 say "sysupgrade-raptor: cannot enter $ROOT; nothing was written"
 cleanup
