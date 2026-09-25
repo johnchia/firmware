@@ -107,13 +107,13 @@ endif
 #
 # A mode INI for a sensor whose libsns_<name>.so is not on the image is dead
 # weight: sns_usable in load_hisilicon tests for the library, so the config
-# alone can never be reached. The raptor target therefore ships the one that
-# matches the one driver it carries, exactly as the blobs above do.
+# alone can never be reached. The raptor target therefore ships the ones that
+# match the drivers it carries, exactly as the blobs above do.
 HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = \
 	cv2005 gc4023 imx307 os02m10 os04d10 sc431hai sc4336p sc450ai sc500ai
 
 ifneq ($(filter $(OPENIPC_VARIANT),raptor raptorwifi),)
-HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = os04d10
+HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = cv2005 os04d10
 endif
 
 # IQ tuning, which is a different thing from the mode INI above: not how to

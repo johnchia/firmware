@@ -281,10 +281,12 @@ endif
 endif
 
 # Same reasoning for the V5 raptor variants, one of which shares its 8 MB NOR
-# with a wifi driver and the cfg80211 module. A raptor target is built for one
-# board rather than published for a family, so the sensor it carries is known:
-# the H4-52POX-S is an os04d10 and the other five are ~727 KB of rootfs for
-# parts this image will never meet.
+# with a wifi driver and the cfg80211 module. A raptor target serves the few
+# CV608 boards it has been run on rather than the family, so the sensors it
+# carries are known: the H4-52POX-S is an os04d10 and the P23H a cv2005, and
+# the other five are ~727 KB of rootfs for parts these boards never carry.
+# Which of the two a camera has is load_hisilicon's probe to find, not the
+# image's.
 #
 # Both variants, and the plural is the whole of why this is a filter rather
 # than the comparison it was. There was one cv608 raptor target when this trim
@@ -298,14 +300,15 @@ endif
 # Note what this gives up. sc4336p is load_hisilicon's SNS_TYPE0 default, so a
 # board that reaches that fallback -- no sensor key in the environment and no
 # successful probe -- now finds no driver behind it. That is the right trade
-# for a single-board target whose environment carries sensor=os04d10 and whose
-# script writes the probed value back, and the wrong one for a published image.
+# for a target whose boards the probe identifies and whose script writes the
+# probed value back, and the wrong one for a published image.
 #
 # hi3516cv6xx_ultimate is the published cv6xx image and keeps all six.
 ifneq ($(filter $(OPENIPC_VARIANT),raptor raptorwifi),)
 ifeq ($(OPENIPC_SOC_FAMILY),hi3516cv6xx)
 HISILICON_OPENSDK_SENSORS = \
-	omnivision_os04d10/libsns_os04d10
+	omnivision_os04d10/libsns_os04d10 \
+	smart_cv2005/libsns_cv2005
 
 # Blocks the CV608 has no use for. The part is encode-only -- see the
 # DISABLE_VO/DISABLE_TDE note above -- and raptor reaches none of these: IVE
