@@ -377,9 +377,13 @@ plan_full() {
 	[ -n "$img_table" ] || img_table=$(head -c 1048576 "$full_file" | tr '\000' '\n' |
 		sed -n 's/.*mtdparts=[^:]*:\([^ ]*\).*/\1/p' | head -1)
 	cam_table=$(sed -n 's/.*mtdparts=[^:]*:\([^ ]*\).*/\1/p' /proc/cmdline)
+	# Sizes and offsets only: OpenIPC's U-Boot rebuilds mtdparts at boot from
+	# what it finds on the flash (common/openipc.c, firmware_scan) and names the
+	# first partition u-boot where its own env says boot, so the names on the
+	# command line are not the image's even when the layout is.
 	if [ -z "$img_table" ]; then
 		say "Warning: no mtdparts= in the image's first megabyte; its table is not compared"
-	elif [ "$(echo "$img_table" | tr A-Z a-z)" != "$(echo "$cam_table" | tr A-Z a-z)" ]; then
+	elif [ "$(echo "$img_table" | tr A-Z a-z | sed 's/([^)]*)//g')" != "$(echo "$cam_table" | tr A-Z a-z | sed 's/([^)]*)//g')" ]; then
 		say "The image moves the partition table:"
 		say "  image:  $img_table"
 		say "  camera: ${cam_table:-(none on the command line)}"
@@ -507,7 +511,10 @@ flash() {
 # order, so an early failure (the bootloader) leaves everything after it
 # untouched.
 write_full() {
-	local dev name off len size slice=$PKG/slice
+	# The slice sits beside the image, not in $PKG: an image already in /tmp is
+	# used where it is and $PKG was never created for it, and the RAM root has
+	# no mkdir.
+	local dev name off len size slice=${full_file%/*}/sysupgrade.slice
 	while read -r dev name off len size; do
 		[ -n "$dev" ] || continue
 		dd if="$full_file" of="$slice" bs=1024 skip=$((off / 1024)) count=$((len / 1024)) 2>/dev/null &&

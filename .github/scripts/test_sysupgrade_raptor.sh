@@ -432,7 +432,7 @@ slice_md5() { dd if="$1" bs=1024 skip="$2" count="$3" status=none | md5sum | cut
 stub flashcp 'echo "flashcp $* $(md5sum < "$1" | cut -c1-32)" >> "$FLASH_LOG"; exit ${STUB_FLASHCP_RC:-0}'
 
 make_full "$SB/src/full.bin" 7552 "$TABLE"
-FULL="$SB/src/full.bin"; SLICE="$SB/tmp/sysupgrade.pkg/slice"
+FULL="$SB/src/full.bin"; SLICE="$SB/tmp/sysupgrade.pkg/sysupgrade.slice"
 run --full="$FULL"
 if log_order "^S95raptor stop" "^chroot " \
 		"^flashcp $SLICE /dev/mtd0 $(slice_md5 "$FULL" 0 256)$" \
@@ -447,6 +447,25 @@ if log_order "^S95raptor stop" "^chroot " \
 else
 	bad "--full same table"; echo "$OUT" | sed 's/^/     /'; sed 's/^/     log: /' "$FLASH_LOG"
 fi
+
+# The common case: the image was copied straight into /tmp, so nothing staged
+# it and $PKG does not exist. The first H4 run stopped here.
+PLACE="$FULL" run --full="$SB/tmp/full.bin"
+SLICE_TMP="$SB/tmp/sysupgrade.slice"
+if log_order "^flashcp $SLICE_TMP /dev/mtd0 $(slice_md5 "$FULL" 0 256)$" "^flashcp $SLICE_TMP /dev/mtd3 " "^reboot -f" \
+	&& [ ! -f "$SB/tmp/full.bin" ] && [ ! -f "$SLICE_TMP" ]; then
+	ok "--full on an image already in /tmp: used in place, slices cut beside it, both deleted"
+else
+	bad "--full from /tmp"; echo "$OUT" | sed 's/^/     /'; sed 's/^/     log: /' "$FLASH_LOG"
+fi
+
+# OpenIPC's U-Boot puts u-boot on the command line where the env says boot:
+# a table that differs only in names is the same table.
+make_full "$SB/src/renamed.bin" 7552 "${TABLE/(boot)/(u-boot)}"
+run --full="$SB/src/renamed.bin"
+log_order "^flashcp $SLICE /dev/mtd0 " "^flashcp $SLICE /dev/mtd3 " "^reboot -f" && ! echo "$OUT" | grep -q "moves the partition table" \
+	&& ok "a table that differs from the camera's only in partition names is not a move" \
+	|| { bad "renamed table"; echo "$OUT" | sed 's/^/     /'; sed 's/^/     log: /' "$FLASH_LOG"; }
 
 make_full "$SB/src/moved.bin" 7552 "$MOVED"
 run --full="$SB/src/moved.bin"
