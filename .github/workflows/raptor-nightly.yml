@@ -267,7 +267,7 @@ jobs:
       - name: Checksums
         run: |
           cd output/images
-          for f in openipc-*-nor-full.bin; do
+          for f in openipc-*-nor-*-full.bin; do
             [ -e "$f" ] || continue
             md5sum "$f" > "$f.md5sum"
           done
@@ -279,8 +279,8 @@ jobs:
           retention-days: 2
           path: |
             output/images/openipc.*.tgz
-            output/images/openipc-*-nor-full.bin
-            output/images/openipc-*-nor-full.bin.md5sum
+            output/images/openipc-*-nor-*-full.bin
+            output/images/openipc-*-nor-*-full.bin.md5sum
 
   publish:
     name: Publish
@@ -325,7 +325,7 @@ jobs:
             "Raptor nightly \`${BUILD_ID}\`" \
             "" \
             "\`.tgz\` upgrades a camera already running OpenIPC:" \
-            "\`sysupgrade --archive=<file>\`. \`-nor-full.bin\` is a whole-flash" \
+            "\`sysupgrade --archive=<file>\`. \`-nor-<variant>-full.bin\` is a whole-flash" \
             "image including the bootloader, for one that is not -- carried for" \
             "the boards whose defconfig builds a bootloader." \
             "" \
