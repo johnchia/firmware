@@ -1,5 +1,6 @@
-# The external toolchains this fork's boards download, from the mirror at
-# github.com/johnchia/firmware/releases/tag/toolchain-2026-08-28.
+# The external toolchains this fork's boards download, from the mirrors at
+# github.com/johnchia/firmware/releases/tag/toolchain-2026-08-28 (SigmaStar) and
+# github.com/johnchia/firmware/releases/tag/toolchain-2026-09-25 (hisilicon).
 #
 # Buildroot has no hash for a custom external toolchain -- BR2_TOOLCHAIN_EXTERNAL_URL
 # is whatever the board says -- and prints "no hash file for ..." on every build
@@ -19,28 +20,18 @@ sha256  44eacc941b9f319b3824164cfb90272ee939e6916dbe7b2ac7a167f1b83f8e6b  toolch
 sha256  61c4b9796decd55117e77e21c2a0473006d29003607b62ef4228babf861ec0bb  toolchain.sigmastar-infinity6c-20260828.tgz
 sha256  59f1397302c1b6992481bcc4f45b2cbbdaf8590c1e3fab7b541e7e76469054db  toolchain.sigmastar-infinity6b0-20260828.tgz
 
-# hi3516ev300_raptor, and the odd one out: not mirrored, so this names upstream's
-# asset on its moving `toolchain` tag rather than a dated copy of it. Adding the
-# file above made a hash mandatory for every toolchain, not just the mirrored
-# ones -- Buildroot fails a download with "No hash found for <file>" once a hash
-# file for the package exists -- so this line is what lets a hisilicon board
-# build at all.
+# The hisilicon pair: hi3516ev200_raptor and hi3516ev300_raptor share the first,
+# hi3516cv608_raptor and hi3516cv608_os04d10_raptorwifi the second (verified to
+# carry arm-openipc-linux-musleabi gcc 13.3.0, the tuple and version the
+# defconfig asks for).
 #
-# It is also the right failure. Upstream overwrites that tag in place, and
-# without a line here a rewritten compiler would arrive unnoticed under a port
-# with no known-good binary to compare against. With one, the build stops and
-# says the bytes moved. Mirror this toolchain the way the SigmaStar three are
-# mirrored and the entry becomes a dated filename like theirs.
-#
-# Downloaded 2026-09-01.
-sha256  75fa360224e3e0f7b1934d94e17dafa32c8d5a7745e8b6cf6e2e5ac1b9784641  toolchain.hisilicon-hi3516ev200.tgz
-
-# hi3516cv608_raptor, and unmirrored for the same reason as the line above --
-# the mirror carries the three SigmaStar families only, so this is upstream's
-# asset on the moving `toolchain` tag. Same bargain: the tag can be rewritten
-# under the port, and a line here is what turns that from silent into a stopped
-# build. Verified to carry arm-openipc-linux-musleabi gcc 13.3.0, which is the
-# tuple and the version the defconfig asks for.
-#
-# Downloaded 2026-09-07.
-sha256  4bb9c409832f378e855af05a173f8b7b8957d39ffdb5b362cdbafb62b62e9e4a  toolchain.hisilicon-hi3516cv6xx.tgz
+# These two were pinned before they were mirrored, as upstream's undated assets
+# on its moving `toolchain` tag, and that pin did its job: upstream rewrote
+# both assets in place on 2026-09-14, and the next cold-cache build stopped
+# with a hash mismatch instead of compiling the ports with a compiler nothing
+# had been verified against. The mirror holds the bytes from before the
+# rewrite -- the ev200 toolchain as fetched 2026-09-01, the cv6xx one as fetched
+# 2026-09-07, both taken from the download caches of the trees that built the
+# images on the boards -- so these lines are unchanged apart from the name.
+sha256  75fa360224e3e0f7b1934d94e17dafa32c8d5a7745e8b6cf6e2e5ac1b9784641  toolchain.hisilicon-hi3516ev200-20260925.tgz
+sha256  4bb9c409832f378e855af05a173f8b7b8957d39ffdb5b362cdbafb62b62e9e4a  toolchain.hisilicon-hi3516cv6xx-20260925.tgz

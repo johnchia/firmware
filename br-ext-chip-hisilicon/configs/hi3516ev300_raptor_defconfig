@@ -26,15 +26,16 @@ BR2_ARM_INSTRUCTIONS_THUMB2=y
 
 # Toolchain
 #
-# Upstream's, at the moving URL, and deliberately not the dated mirror the
-# SigmaStar raptor boards fetch from: that mirror carries the three SigmaStar
-# families only. Mirroring this one is the same job done again for hisilicon and
-# is worth doing before anything here is verified on hardware -- until then a
-# rebuilt toolchain changes the compiler under a port that has no known-good
-# reference to compare against.
+# Mirrored, not tracked, the way the SigmaStar raptor boards' toolchains are: a
+# byte-for-byte copy of the asset OpenIPC served on its `toolchain` tag before
+# rewriting it in place on 2026-09-14, named for the date it was mirrored. The
+# hash pin in general/package/all-patches/toolchain-external-custom is what
+# caught the rewrite; the mirror is what keeps the pinned bytes reachable.
+# OPENIPC_KERNEL is <vendor>-<family>, the same string OPENIPC_TOOLCHAIN was
+# built from, and the family's toolchain is shared with hi3516ev200_raptor.
 BR2_TOOLCHAIN_EXTERNAL=y
 BR2_TOOLCHAIN_EXTERNAL_DOWNLOAD=y
-BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/openipc/firmware/releases/download/$(OPENIPC_TOOLCHAIN).tgz"
+BR2_TOOLCHAIN_EXTERNAL_URL="https://github.com/johnchia/firmware/releases/download/toolchain-2026-09-25/toolchain.$(OPENIPC_KERNEL)-20260925.tgz"
 BR2_TOOLCHAIN_EXTERNAL_CUSTOM_PREFIX="arm-openipc-linux-musleabi"
 BR2_TOOLCHAIN_EXTERNAL_HEADERS_4_9=y
 BR2_TOOLCHAIN_EXTERNAL_CUSTOM_MUSL=y
