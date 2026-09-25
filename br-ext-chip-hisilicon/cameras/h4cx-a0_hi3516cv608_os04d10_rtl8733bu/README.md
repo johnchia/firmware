@@ -33,11 +33,15 @@ person holding the unit can read:
   `wlan0` scans both bands. A module without the jumper has no USB.
 - **Ethernet** is on the SoC but no socket is fitted; `eth0` never has a
   carrier. The radio is the only way in.
-- **IR-cut and IR LED pins**, in `raptor.conf`: `gpio_ircut = 61`,
-  `gpio_ircut2 = 60`, `gpio_irled = 8`. These are what the unit's own
-  `/etc/raptor.conf` carried in its overlay on 2026-09-25, read off the
-  running camera. Whether the filter switches on those pins has not been
-  watched from the bench; that is the open item on this camera.
+- **IR-cut pins**, in `raptor.conf`: `gpio_ircut = 1`, `gpio_ircut2 = 9`.
+  That is the pair the unit ran with from 2026-09-22 until its overlay was
+  wiped by the whole-flash move on 2026-09-25; the overlay copy taken on
+  2026-09-24 carries it. The overlay that appeared after the wipe carried a
+  different triple (61, 60 and an IR LED on 8) of unknown provenance, which
+  this directory shipped for one build and nothing ever saw switch the
+  filter. No IR LED pin is set. Whether the filter switches on 1 and 9 has
+  not been watched from the bench on this image; that is the open item on
+  this camera.
 - **The LED comes on at boot** under OpenIPC's U-Boot. GPIO 63 idles high. The
   stock bootloader's board init drives it low (GPIO7_7 through the pad
   controller at 0x11097000) before Linux starts; OpenIPC's U-Boot touches no
@@ -82,4 +86,6 @@ for the family default once the pipeline has proven it.
   shell from an environment saved to `mtd1` with no serial console attached,
   the overlay mounting jffs2, a root password surviving reboot; then the
   4 MP pipeline at 25 fps on build `94cc31b0` (2026-09-24).
-- Not yet verified on this camera's own image: the IR-cut pins above.
+- Not yet verified on this camera's own image: the IR-cut pins above. The
+  image on the unit at the time of writing still carries the 61/60/8 triple
+  from the first camera build.
