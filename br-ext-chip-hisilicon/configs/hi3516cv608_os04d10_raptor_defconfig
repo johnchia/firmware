@@ -161,8 +161,8 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # The vendor bootloader goes (the U-Boot block below), and its table with it:
 # the H4-52POX-S OEM U-Boot keeps a 64K env at 0x30000, the P23H's a 4K one at
 # 0x2f000. Moving a board onto this layout is a full flash, bootloader
-# included, and its overlay does not survive it. raptorwifi keeps the OEM
-# table: its rootfs needs 5184K.
+# included, and its overlay does not survive it. raptorwifi is on this
+# layout too, since its sensor was pinned and its rootfs fit 5120K.
 #
 # rootfs_data IS THE OVERLAY AND THE NAME IS LOAD-BEARING. general/overlay/init
 # greps /proc/mtd for exactly that string, mounts it jffs2, formats it with
@@ -230,7 +230,7 @@ BR2_PACKAGE_HISILICON_CV6XX_BOOT=y
 # sc450ai, sc500ai, sc431hai) alongside the two blobs osdrv installs, imx307
 # and os02m10.
 #
-# This is what makes the MMZ arithmetic in hi3516cv608.env.txt live rather than
+# This is what makes the MMZ arithmetic in hi3516cv608.raptor.env.txt live rather than
 # latent. Until now load_hisilicon died before open_mmz was ever modprobed, so
 # a wrong mmz= was harmless; from here it is handed to the driver.
 #

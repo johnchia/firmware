@@ -116,6 +116,14 @@ ifneq ($(filter $(OPENIPC_VARIANT),raptor raptorwifi),)
 HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = cv2005 os04d10
 endif
 
+# One sensor, when the board pins one (BR2_OPENIPC_SNS_MODEL, the convention
+# ssc333_sc3336_raptor set): the mode INI of that part alone, as
+# hisilicon-opensdk ships its driver alone. A pin with no INI here fails the
+# install rather than shipping a driver nothing can bring up.
+ifneq ($(OPENIPC_SNS_MODEL),)
+HISILICON_OSDRV_HI3516CV6XX_SENSOR_INIS = $(OPENIPC_SNS_MODEL)
+endif
+
 # IQ tuning, which is a different thing from the mode INI above: not how to
 # start the part, but how the ISP should render what it sees. The base is the
 # OEM's own scene_param_0.bin (an ot_scene_pipe_param dump off an xrscam
@@ -149,6 +157,11 @@ endif
 # actually using this sensor. /usr/share/raptor/iq stays the per-unit override
 # that wins over it.
 HISILICON_OSDRV_HI3516CV6XX_SENSOR_IQ = cv2005 os04d10
+# ...and the pinned sensor's alone when there is one. A filter, not the pin
+# itself: not every part has a tuning file, and hal_isp runs untuned without.
+ifneq ($(OPENIPC_SNS_MODEL),)
+HISILICON_OSDRV_HI3516CV6XX_SENSOR_IQ := $(filter $(OPENIPC_SNS_MODEL),$(HISILICON_OSDRV_HI3516CV6XX_SENSOR_IQ))
+endif
 
 define HISILICON_OSDRV_HI3516CV6XX_INSTALL_TARGET_CMDS
 

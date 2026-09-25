@@ -361,6 +361,22 @@ HISILICON_OPENSDK_KMOD_SKIP = open_ive.ko open_svac3e.ko open_svp_npu.ko \
 endif
 endif
 
+# One sensor, when the board pins one. BR2_OPENIPC_SNS_MODEL names the part a
+# single-board target carries -- ssc333_sc3336_raptor set the convention, and
+# the image is named for it (IMAGE_SOC in the Makefile) -- and whatever list
+# the family and variant arrived at above is narrowed to that driver, with its
+# 2-lane build where the family has one. A pin this package builds no driver
+# for stops the build: an image that came up without a sensor would not say
+# why.
+ifeq ($(BR2_PACKAGE_HISILICON_OPENSDK)$(BR_BUILDING),yy)
+ifneq ($(OPENIPC_SNS_MODEL),)
+HISILICON_OPENSDK_SENSORS := $(filter %/libsns_$(OPENIPC_SNS_MODEL) %/libsns_$(OPENIPC_SNS_MODEL)_2l,$(HISILICON_OPENSDK_SENSORS))
+ifeq ($(HISILICON_OPENSDK_SENSORS),)
+$(error hisilicon-opensdk builds no libsns_$(OPENIPC_SNS_MODEL) for $(OPENIPC_SOC_FAMILY); BR2_OPENIPC_SNS_MODEL names a part this family has no driver for)
+endif
+endif
+endif
+
 # Kernel version from the actual build — no hardcoded fallback.
 # The kernel is always built before opensdk (dependency), so kernel.release exists.
 HISILICON_OPENSDK_KVER = $(shell cat $(BUILD_DIR)/linux-custom/include/config/kernel.release 2>/dev/null)

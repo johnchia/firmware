@@ -234,15 +234,16 @@ jobs:
       # whole-flash write there produces a camera that has to be opened rather
       # than reflashed.
       #
-      # Four HiSilicon targets -- hi3516ev300_raptor, hi3516ev200_raptor and
-      # the two hi3516cv608_os04d10 variants -- simply have no bootloader
-      # package yet. That is a gap rather than a decision, and the .tgz is the
-      # honest thing to publish until one exists: a bring-up target that has
-      # never streamed has no proven bootloader to ship with it either. The
-      # cv608 pair is the exception to the "never streamed" half -- that board
-      # streams and is the bench unit for the HiSilicon gen5 work -- but it
-      # reflashes over sysupgrade, so the tarball is the artifact it wants
-      # anyway.
+      # Two HiSilicon targets, hi3516ev300_raptor and hi3516ev200_raptor,
+      # simply have no bootloader package yet. That is a gap rather than a
+      # decision, and the .tgz is the honest thing to publish until one
+      # exists: a bring-up target that has never streamed has no proven
+      # bootloader to ship with it either. The two hi3516cv608_os04d10
+      # variants build theirs (hisilicon-cv6xx-boot) and publish a full
+      # image. On raptorwifi that image has the ssc333 shape -- the wifi
+      # credentials live in the environment it replaces -- with a wired port
+      # beside the radio, so a camera flashed with it wants its keys back
+      # through fw_setenv, over Ethernet or serial.
       #
       # t31_raptor has the same shape and not the same consequence, which is
       # why it builds one. Its environment is erased by a full write too and it
