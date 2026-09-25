@@ -1,0 +1,20 @@
+config BR2_PACKAGE_HISILICON_CV6XX_BOOT
+	bool "hisilicon-cv6xx-boot"
+	depends on BR2_TARGET_UBOOT
+	help
+	  Board hooks for Buildroot's U-Boot package on the Hi3516CV6xx.
+
+	  U-Boot builds u-boot.bin; the boot ROM loads a signed boot
+	  image -- the GSL loader, the board's DDR register table and the
+	  compressed U-Boot -- which the vendor's image_tool assembles.
+	  This compresses U-Boot with the vendor's hi-gzip, builds the GSL
+	  from the tree's own source, packs the three with image_tool,
+	  checks the result and installs it as
+	  images/u-boot-<soc>-nor.bin.
+
+	  The source is OpenIPC/u-boot-hi3516cv6xx, pinned in the board
+	  defconfig: https://github.com/OpenIPC/u-boot-hi3516cv6xx
+
+	  Not part of the sysupgrade tarball: mtd0 has no software
+	  recovery path short of the boot ROM's UART download, so writing
+	  it is a deliberate act. `make fullimage` picks it up.

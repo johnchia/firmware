@@ -12,3 +12,7 @@
 #
 # Locally computed from the archive OpenIPC's own uboot.yml builds from.
 sha256  50049a9078f4ef7c5e82a8cd6589e8b3a1ca95c53ce3351ce67e274a95df095a  bf77aff5d44f34d14b89b3f4014aa8dda9834794.tar.gz
+
+# The Hi3516CV6xx bootloader source, from the commit pinned in
+# hi3516cv608_os04d10_raptor_defconfig. Locally computed from the GitHub archive.
+sha256  8ba63555761975ff6026b2e62c48040ec4360d71139b13febe3020080995c339  ab5d86d558dd9fce90748177cc01b54939560645.tar.gz

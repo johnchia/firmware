@@ -1,0 +1,54 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: johnchia <john@johnchia.com>
+Date: Fri, 25 Sep 2026 01:42:32 -0700
+Subject: [PATCH] image_tool: import pycryptodome under its pycryptodomex name
+
+Buildroot's host-python-pycryptodomex installs the library as Cryptodome,
+the name that cannot collide with the unrelated PyCrypto. The code is the
+same; only the top-level package name differs.
+---
+ image_tool/common/security.py    | 4 ++--
+ image_tool/oem/tool/kdf_tools.py | 4 ++--
+ image_tool/oem/tool/oem_check.py | 2 +-
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/image_tool/common/security.py b/image_tool/common/security.py
+index 629c255a..e17c2105 100644
+--- a/image_tool/common/security.py
++++ b/image_tool/common/security.py
+@@ -370,8 +370,8 @@ def verify_sm2_sm3(data, sign, pub_key):
+ 
+     return False
+ 
+-from Crypto.PublicKey import RSA
+-from Crypto.Util import number as crypto_num
++from Cryptodome.PublicKey import RSA
++from Cryptodome.Util import number as crypto_num
+ def export_rsa_pub_key(modulus, exponent, out_pem):
+     n = crypto_num.bytes_to_long(modulus)
+     e = crypto_num.bytes_to_long(exponent)
+diff --git a/image_tool/oem/tool/kdf_tools.py b/image_tool/oem/tool/kdf_tools.py
+index c65a88ba..216c6eb0 100644
+--- a/image_tool/oem/tool/kdf_tools.py
++++ b/image_tool/oem/tool/kdf_tools.py
+@@ -1,5 +1,5 @@
+-from Crypto.Protocol.KDF import PBKDF2
+-from Crypto.Hash import SHA256
++from Cryptodome.Protocol.KDF import PBKDF2
++from Cryptodome.Hash import SHA256
+ import binascii
+ 
+ import sys
+diff --git a/image_tool/oem/tool/oem_check.py b/image_tool/oem/tool/oem_check.py
+index 1c6728a6..18e26258 100644
+--- a/image_tool/oem/tool/oem_check.py
++++ b/image_tool/oem/tool/oem_check.py
+@@ -1,7 +1,7 @@
+ from binascii import hexlify
+ import os
+ import sys
+-from Crypto.Protocol import KDF
++from Cryptodome.Protocol import KDF
+ import common.logger as log
+ import common.util as utl
+ 

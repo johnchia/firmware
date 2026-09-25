@@ -145,47 +145,24 @@ BR2_OPENIPC_SOC_MODEL="hi3516cv608"
 BR2_OPENIPC_SOC_FAMILY="hi3516cv6xx"
 BR2_OPENIPC_VARIANT="raptor"
 BR2_OPENIPC_FLASH_SIZE="8"
-# 4288, and the number comes from the BOARD, not from OpenIPC/u-boot-hi3516cv6xx.
-# The H4-52POX-S ships an OEM U-Boot 2022.07 whose saved environment partitions
-# the 8 MB part as
+# THE FLASH LAYOUT IS OPENIPC'S, from the default environment of
+# OpenIPC/u-boot-hi3516cv6xx (include/configs/hi-common.h):
 #
-#   sfc:192K(uboot),64K(env),7360K(rootfs),512K(data),64K(devinfo)
-#
-# with root=/dev/mtdblock2. That single 7360K "rootfs" region stacks BOTH
-# halves: squashfs at its head, where the kernel mounts it, and the kernel FIT
-# appended after it at a 4K boundary, which the OEM load_kernel command finds
-# through a trailer recording the two sizes. Verified against a dump of the
-# part -- hsqs at 0x40000, d00dfeed at 0x55B000, JFFS2 at 0x770000.
-#
-# So do NOT reach for the OpenIPC cv6xx table here. That one is
-# 2048k(kernel),5120k(rootfs) (u-boot-hi3516cv6xx, include/configs/hi-common.h)
-# and this family does not fit its kernel slot: the FIT built from
-# hi3516cv6xx.generic.config is ~2688k and OpenIPC's own published cv6xx image
-# carries a 2709k one. A board running that bootloader can take neither.
-#
-# WHAT THE NUMBER BELOW ASSUMES. The OEM stacking is not the shape
-# post-image.sh builds -- FIT first, squashfs after -- and its trailer is not
-# something this tree writes, so this target re-cuts the region into a plain
-# kernel/rootfs pair plus the overlay this tree needs:
-#
-#   sfc:192K(uboot),64K(env),2048K(kernel),5120K(rootfs),768K(rootfs_data)
+#   sfc:256k(boot),64k(env),2048k(kernel),5120k(rootfs),7168k@0x50000(firmware),-(rootfs_data)
 #   root=/dev/mtdblock3
 #
-# 0x40000 + 2048K = 0x240000, + 5120K = 0x740000, + 768K = 0x800000, the end
-# of the chip. The OEM's 512K data partition is absorbed: it is a JFFS2
-# volume for OEM software that is not in this image.
+# boot at 0x0, env 0x40000, kernel 0x50000, rootfs 0x250000, and the overlay
+# from 0x750000 to the end of the chip, 704K. firmware overlaps kernel and
+# rootfs: it is the whole-image slot U-Boot's fwupd writes. Matching OpenIPC is
+# the point. Its sysupgrade, its recovery steps and its U-Boot work on this
+# board as on any OpenIPC camera, and a camera already running OpenIPC takes
+# this image by sysupgrade.
 #
-# THERE IS NO devinfo, unlike raptorwifi, which keeps the OEM's 64K identity
-# partition at 0x7F0000. It holds the vendor's encrypted device identity for
-# its own cloud software, which this image does not run, and the overlay now
-# covers it: a board that takes this table loses its OEM identity the first
-# time rootfs_data is formatted. Dump the last 64K first if it matters. The
-# rootfs is 5120K, as on the other 8 MB targets, and the block that devinfo
-# and the 64K below 5184K freed goes to the overlay.
-#
-# Moving a board from raptorwifi's table to this one moves the overlay's start
-# from 0x750000 to 0x740000, so its contents do not survive the change; the
-# kernel and rootfs starts do not move.
+# The vendor bootloader goes (the U-Boot block below), and its table with it:
+# the H4-52POX-S OEM U-Boot keeps a 64K env at 0x30000, the P23H's a 4K one at
+# 0x2f000. Moving a board onto this layout is a full flash, bootloader
+# included, and its overlay does not survive it. raptorwifi keeps the OEM
+# table: its rootfs needs 5184K.
 #
 # rootfs_data IS THE OVERLAY AND THE NAME IS LOAD-BEARING. general/overlay/init
 # greps /proc/mtd for exactly that string, mounts it jffs2, formats it with
@@ -193,27 +170,52 @@ BR2_OPENIPC_FLASH_SIZE="8"
 # falls through to a tmpfs and every change to /etc is lost on reboot -- which
 # looks like a working overlay right up until the camera is power-cycled.
 #
-# THE KERNEL SLOT IS CUT TO ONE SPARE ERASE BLOCK ON PURPOSE, so that the room
-# in this region sits with the rootfs, which is the half that grows when a
-# package is added. The FIT is 1975k and takes 1984k in 64K blocks, so 2048k
-# leaves exactly one 64K block free. Nothing enforces that: check-rootfs-size.sh
-# covers the rootfs only and says so in its own header, and repack's CHECK_SIZE
-# measures the combined blob against the whole chip on this family. A kernel
-# that grows by a single erase block therefore overruns its partition with no
-# build-time complaint at all -- check the FIT by hand after any kernel bump, or
-# widen this slot and take the 64k back off the rootfs.
+# THE KERNEL SLOT HAS NO SPARE ERASE BLOCK. The FIT is 2006K (build 7e44ca95),
+# inside the last of the slot's 32 blocks with 42K to go. Nothing enforces the
+# slot: check-rootfs-size.sh covers the rootfs only and says so in its own
+# header, repack's CHECK_SIZE measures the combined blob against the whole chip
+# on this family, and only `make fullimage` refuses a FIT that does not fit. A
+# kernel that grows past 2048K overruns into the rootfs by sysupgrade with no
+# build-time complaint -- check the FIT by hand after any kernel bump.
 #
-# 5120 matches the other 8 MB targets. This image carries no radio stack, so
-# it sits well inside it; raptorwifi, which does, needs its 5184.
+# 5120 is OpenIPC's rootfs, and the other 8 MB targets'.
 BR2_OPENIPC_ROOTFS_PART_KB="5120"
 
-# The environment is data in mtd1, not compiled into the OEM bootloader, so the
-# layout and the boot verbs live in a text file that is readable back off the
-# chip. Same idiom as t31_raptor. mkenvimage turns it into images/uboot-env.bin.
-# (openipc.fragment already sets BR2_PACKAGE_HOST_UBOOT_TOOLS.)
+# OpenIPC's U-Boot reads a valid environment off flash in place of its
+# compiled-in default, so the image ships one: that default with the values
+# this board needs, in a text file readable back off the chip. mkenvimage turns
+# it into images/uboot-env.bin. (openipc.fragment already sets
+# BR2_PACKAGE_HOST_UBOOT_TOOLS.)
 BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE=y
 BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SOURCE="$(BR2_EXTERNAL)/../br-ext-chip-hisilicon/board/$(OPENIPC_SOC_FAMILY)/hi3516cv608.raptor.env.txt"
 BR2_PACKAGE_HOST_UBOOT_TOOLS_ENVIMAGE_SIZE="0x10000"
+
+# The bootloader, built here from OpenIPC's tree with its own defconfig,
+# unmodified but for a packaging patch. hisilicon-cv6xx-boot packs it with the
+# GSL built from the same tree and the board's DDR table into the image the
+# boot ROM loads, and installs that as images/u-boot-hi3516cv608-nor.bin for
+# `make fullimage`. It is not in the sysupgrade tarball: mtd0 has no software
+# recovery short of the boot ROM's UART download.
+BR2_TARGET_UBOOT=y
+BR2_TARGET_UBOOT_BUILD_SYSTEM_KCONFIG=y
+BR2_TARGET_UBOOT_CUSTOM_TARBALL=y
+# Pinned by commit; OpenIPC/u-boot-hi3516cv6xx main stood here. Bumping the
+# line is what moves it, and the hash in all-patches/uboot/uboot.hash says which
+# bytes that commit must arrive as.
+BR2_TARGET_UBOOT_CUSTOM_TARBALL_LOCATION="https://github.com/OpenIPC/u-boot-hi3516cv6xx/archive/ab5d86d558dd9fce90748177cc01b54939560645.tar.gz"
+# Spelled out, not built from $(OPENIPC_SOC_MODEL): uboot.mk checks it at parse
+# time, before external.mk defines that (see ssc377d_raptor_defconfig).
+# hisilicon-cv6xx-boot asserts the two agree.
+BR2_TARGET_UBOOT_BOARD_DEFCONFIG="hi3516cv608_openipc"
+# The packed boot image, not u-boot.bin, so a build that produced none fails
+# rather than quietly installing nothing. The bare u-boot.bin is left out of
+# images/ altogether: the boot ROM does not boot it, so the only thing it can do
+# there is be written to mtd0 by mistake.
+# BR2_TARGET_UBOOT_FORMAT_BIN is not set
+BR2_TARGET_UBOOT_FORMAT_CUSTOM=y
+BR2_TARGET_UBOOT_FORMAT_CUSTOM_NAME="boot-image.bin"
+BR2_TARGET_UBOOT_PATCH="$(BR2_EXTERNAL)/package/hisilicon-cv6xx-boot/patches"
+BR2_PACKAGE_HISILICON_CV6XX_BOOT=y
 
 # Packages
 #

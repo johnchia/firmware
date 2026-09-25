@@ -1,7 +1,8 @@
 #!/bin/sh
 #
 # Assemble a whole-flash image for the Hi3516CV6xx from the pieces the build
-# already produced, plus a bootloader container this tree does not build.
+# already produced, plus the boot container: built here by hisilicon-cv6xx-boot
+# for the targets on OpenIPC's U-Boot, taken off the part for the OEM ones.
 #
 # WHY THIS IS NOT make_full_image_hisilicon.sh. That one is for gen4: it writes
 # its own environment with mkenvimage and spells the gen4 partition table into
@@ -33,16 +34,26 @@ OUT=$3
 ENV_BIN=$IMAGES/uboot-env.bin
 FIT=$IMAGES/fitImage
 ROOTFS=$IMAGES/rootfs.squashfs
+# repack renames it rootfs.squashfs.<soc> once the build has finished, which is
+# when fullimage runs; there is one per images directory.
+if [ ! -f "$ROOTFS" ]; then
+	for f in "$IMAGES"/rootfs.squashfs.*; do
+		case $f in *.md5sum) ;; *) [ -f "$f" ] && ROOTFS=$f ;; esac
+	done
+fi
 
 for f in "$UBOOT" "$ENV_BIN" "$FIT" "$ROOTFS"; do
 	[ -f "$f" ] || { echo "missing $f" >&2; exit 1; }
 done
 
 # The environment is stored with a 4-byte CRC in front, so the body is just
-# NUL-separated key=value and strings finds it. mtdparts may be a variable of
-# its own or, as here, spelled inside bootargs -- match it either way, and take
+# NUL-separated key=value and strings finds it. OpenIPC's environment keeps the
+# table in a variable of its own, mtdparts=${mtdids}:<table>, and builds
+# bootargs from it; the OEM-table environment spells it inside bootargs. Take
+# the variable when there is one, since bootargs then only names it, and take
 # only up to the next space so a trailing bootarg is not swallowed.
-MTDPARTS=$(strings -n 8 "$ENV_BIN" \
+MTDPARTS=$(strings -n 8 "$ENV_BIN" | sed -n 's/^mtdparts=[^:]*:\([^ ]*\).*/\1/p' | head -1)
+[ -n "$MTDPARTS" ] || MTDPARTS=$(strings -n 8 "$ENV_BIN" \
 	| sed -n 's/.*mtdparts=[^:]*:\([^ ]*\).*/\1/p' | head -1)
 [ -n "$MTDPARTS" ] || { echo "no mtdparts= in $ENV_BIN" >&2; exit 1; }
 echo "- layout from $ENV_BIN"
@@ -51,11 +62,24 @@ echo "-   $MTDPARTS"
 # name -> file for the partitions that have one. Everything else is a hole.
 part_file() {
 	case $1 in
-		uboot)  echo "$UBOOT" ;;
+		boot|uboot) echo "$UBOOT" ;;
 		env)    echo "$ENV_BIN" ;;
 		kernel) echo "$FIT" ;;
 		rootfs) echo "$ROOTFS" ;;
 		*)      echo "" ;;
+	esac
+}
+
+# A size in K or M, or '-' for the rest of the chip, which needs FLASH_KB.
+# Entries placed with @ (OpenIPC's firmware, which spans kernel and rootfs)
+# overlap others and hold nothing of their own; the loops skip them.
+part_kb() {
+	case $1 in
+		*K|*k) echo "${1%[Kk]}" ;;
+		*M|*m) echo $(( ${1%[Mm]} * 1024 )) ;;
+		-) [ -n "${FLASH_KB:-}" ] || { echo "'-' partition needs FLASH_KB" >&2; exit 1; }
+		   echo $(( FLASH_KB - $2 )) ;;
+		*) echo "cannot parse size '$1'" >&2; exit 1 ;;
 	esac
 }
 
@@ -66,11 +90,8 @@ END=0
 OIFS=$IFS; IFS=,
 for p in $MTDPARTS; do
 	sz=${p%%(*}; name=${p#*(}; name=${name%)*}
-	case $sz in
-		*K|*k) kb=${sz%[Kk]} ;;
-		*M|*m) kb=$(( ${sz%[Mm]} * 1024 )) ;;
-		*) echo "cannot parse size '$sz'" >&2; exit 1 ;;
-	esac
+	case $sz in *@*) continue ;; esac
+	kb=$(part_kb "$sz" "$TOTAL")
 	TOTAL=$(( TOTAL + kb ))
 	[ -n "$(part_file "$name")" ] && END=$TOTAL
 done
@@ -86,10 +107,8 @@ OFF=0
 OIFS=$IFS; IFS=,
 for p in $MTDPARTS; do
 	sz=${p%%(*}; name=${p#*(}; name=${name%)*}
-	case $sz in
-		*K|*k) kb=${sz%[Kk]} ;;
-		*M|*m) kb=$(( ${sz%[Mm]} * 1024 )) ;;
-	esac
+	case $sz in *@*) continue ;; esac
+	kb=$(part_kb "$sz" "$OFF")
 	f=$(part_file "$name")
 	if [ -n "$f" ]; then
 		bytes=$(wc -c < "$f")
