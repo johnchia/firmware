@@ -156,9 +156,13 @@ Summarised from `pr_compliance_checklist.yaml`; the reasoning is in `best_practi
   script in the same pull request generated. A `PROVENANCE.md` documents the problem; it does not
   solve it.
 - **No runtime patching of vendor blob memory**, and no `kallsyms` address hooking.
-- **`*_SITE` points at an OpenIPC-org repository or a documented upstream**, never a personal
-  fork, and a `*_VERSION` bump never becomes less specific than the pin it replaces — a full
-  40-character SHA for anything new. `Config.in` help text must name the URL the `.mk` fetches.
+- **`*_SITE` points at an OpenIPC-org repository or a documented upstream**, never someone
+  else's personal fork, and a `*_VERSION` bump never becomes less specific than the pin it
+  replaces — a full 40-character SHA for anything new. `Config.in` help text must name the URL
+  the `.mk` fetches. A personal account is fine when it owns the repository you are working in:
+  a fork of this tree may pin its owner's own forks (johnchia/firmware pins johnchia/*), since
+  that owner already controls everything the build ships. Such a pin carries a comment saying
+  why it is not the OpenIPC pin and when it goes back.
 - **No board-specific value in shared files.** A sensor name, I2C address, GPIO number,
   resolution, MAC prefix or IP literal does not belong in `general/overlay/` or in a shared
   `load_<vendor>` default. Extending a case arm, or adding a sensor to a package's list, is
