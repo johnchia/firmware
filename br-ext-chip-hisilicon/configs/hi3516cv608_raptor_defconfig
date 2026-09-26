@@ -223,6 +223,11 @@ BR2_TARGET_UBOOT_FORMAT_CUSTOM=y
 BR2_TARGET_UBOOT_FORMAT_CUSTOM_NAME="boot-image.bin"
 BR2_TARGET_UBOOT_PATCH="$(BR2_EXTERNAL)/package/hisilicon-cv6xx-boot/patches"
 BR2_PACKAGE_HISILICON_CV6XX_BOOT=y
+# Pad defaults the boot ROM applies after the DDR table. The reference table
+# leaves the pads it does not use at reset, pulled up, and the pad that lights
+# a lamp on every board seen is pulled down here so nothing is on until a
+# daemon asks. A camera's boot-regs.txt follows these (its own symbol).
+BR2_PACKAGE_HISILICON_CV6XX_BOOT_BOARD_REGS="$(EXTERNAL_VENDOR)/board/$(OPENIPC_SOC_FAMILY)/hi3516cv608.boot-regs.txt"
 
 # Packages
 #

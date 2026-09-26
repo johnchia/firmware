@@ -139,6 +139,9 @@ layers its `camera.conf` on the SoC target the fragment names as `BR2_OPENIPC_CA
    reference DDR table leaves on a function the board does not want (a driver
    chip's enable, an unused bus): "ADDR VALUE" records the boot ROM applies
    before anything else runs, named by `BR2_PACKAGE_HISILICON_CV6XX_BOOT_REGS`.
+   They follow the SoC target's own records (`<soc>.boot-regs.txt` beside its
+   device tree), which hold what every board of the family wants, such as a
+   lamp pad pulled down instead of the reset pull-up.
 5. `overlay/`, only for files no shared overlay has. A path that also exists in
    `general/overlay` or the family overlay is refused.
 6. `README.md`: where the pins came from, and what has and has not run on the unit.

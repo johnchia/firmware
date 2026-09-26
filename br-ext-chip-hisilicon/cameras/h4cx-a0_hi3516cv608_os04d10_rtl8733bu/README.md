@@ -64,12 +64,14 @@ person holding the unit can read:
   the one electrical difference the move made on a pin that reaches the
   filter's driver, and whether an enabled HE2866 drives the coil has not
   been measured. Parking it costs nothing: nothing on the image uses it.
-- **The LED comes on at boot** under OpenIPC's U-Boot. GPIO 63 idles high. The
-  stock bootloader's board init drives it low (GPIO7_7 through the pad
-  controller at 0x11097000) before Linux starts; OpenIPC's U-Boot touches no
-  GPIO, so the pad sits at its reset default until the daemons take it. Not
-  fixed: the per-unit workaround is a `bootcmd` that writes the pad, and the
-  proper one is a board hook in the U-Boot tree.
+- **The LED on GPIO 63** came on at boot under OpenIPC's U-Boot: the pad
+  resets pulled up, the stock bootloader's board init drives it low (GPIO7_7
+  through the pad controller at 0x11097000) before Linux starts, and OpenIPC's
+  U-Boot touches no GPIO. Since the family's `hi3516cv608.boot-regs.txt` the
+  boot table pulls that pad down for every cv608 image, this one included,
+  which puts the lamp off from power-on. The unit here still runs the loader
+  built before that record; it has not been watched from the bench with the
+  new one.
 
 ## Layout and bootloader
 

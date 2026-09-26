@@ -55,12 +55,17 @@ HISILICON_CV6XX_BOOT_REGINFO_hi3516cv608 = \
 	Hi3516CV608-DMEB_4L_DDR2_1333M_64MB_16bit-A7_950M_QFN.bin
 HISILICON_CV6XX_BOOT_REGINFO = $(HISILICON_CV6XX_BOOT_REGINFO_$(OPENIPC_SOC_MODEL))
 
-# Records a camera appends to that table (BR2_PACKAGE_HISILICON_CV6XX_BOOT_REGS).
+# Records appended to that table, the SoC target's first and then a camera's.
 # The boot ROM applies them before the GSL, which is the only point early
-# enough to park a pad the way a vendor bootloader does: the H4's leaves the
-# enable of an IR-cut driver chip it never uses on the reference table's
-# Ethernet-LED function, and the pin then follows the MAC's link state.
+# enough to set a pad the way a vendor bootloader does. The reference table
+# leaves the pads it does not use at reset, pulled up, so a lamp on such a pad
+# is lit from power-on: the SoC target pulls that one down for every board of
+# the family. The H4's vendor loader parks the enable of an IR-cut driver chip
+# it never uses, which the reference table leaves on the Ethernet-LED function
+# following the MAC's link state: that is the camera's own file.
+HISILICON_CV6XX_BOOT_BOARD_REGS = $(call qstrip,$(BR2_PACKAGE_HISILICON_CV6XX_BOOT_BOARD_REGS))
 HISILICON_CV6XX_BOOT_REGS = $(call qstrip,$(BR2_PACKAGE_HISILICON_CV6XX_BOOT_REGS))
+HISILICON_CV6XX_BOOT_REGS_ALL = $(HISILICON_CV6XX_BOOT_BOARD_REGS) $(HISILICON_CV6XX_BOOT_REGS)
 # This is a set of U-Boot hooks, not a generic package, so it has no _PKGDIR.
 HISILICON_CV6XX_BOOT_FILES = $(BR2_EXTERNAL_GENERAL_PATH)/package/hisilicon-cv6xx-boot/files
 
@@ -80,11 +85,13 @@ define HISILICON_CV6XX_BOOT_CHECK
 		exit 1; \
 	fi
 	test -f $(@D)/reginfo/$(HISILICON_CV6XX_BOOT_REGINFO)
-	if [ -n "$(HISILICON_CV6XX_BOOT_REGS)" ] && [ ! -f "$(HISILICON_CV6XX_BOOT_REGS)" ]; then \
-		echo "*** BR2_PACKAGE_HISILICON_CV6XX_BOOT_REGS names $(HISILICON_CV6XX_BOOT_REGS),"; \
-		echo "*** which does not exist."; \
-		exit 1; \
-	fi
+	for f in $(HISILICON_CV6XX_BOOT_REGS_ALL); do \
+		if [ ! -f "$$f" ]; then \
+			echo "*** BR2_PACKAGE_HISILICON_CV6XX_BOOT_{BOARD_,}REGS names $$f,"; \
+			echo "*** which does not exist."; \
+			exit 1; \
+		fi; \
+	done
 endef
 UBOOT_PRE_BUILD_HOOKS += HISILICON_CV6XX_BOOT_CHECK
 
@@ -128,7 +135,7 @@ define HISILICON_CV6XX_BOOT_ASSEMBLE
 	cp $(@D)/u-boot-$(OPENIPC_SOC_MODEL).bin $(@D)/image_tool/input/u-boot-original.bin
 	$(HOST_DIR)/bin/python3 $(HISILICON_CV6XX_BOOT_FILES)/reg-table-append.py \
 		$(@D)/reginfo/$(HISILICON_CV6XX_BOOT_REGINFO) \
-		$(@D)/image_tool/input/reg_info.bin $(HISILICON_CV6XX_BOOT_REGS)
+		$(@D)/image_tool/input/reg_info.bin $(HISILICON_CV6XX_BOOT_REGS_ALL)
 	cp $(@D)/gsl/pub/gsl.bin $(@D)/image_tool/input/gsl.bin
 	rm -f $(@D)/image_tool/image/oem/boot_image.bin
 	cd $(@D)/image_tool/oem && $(HOST_DIR)/bin/python3 oem_quick_build.py

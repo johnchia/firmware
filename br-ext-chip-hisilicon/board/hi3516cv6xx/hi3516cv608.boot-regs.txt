@@ -1,0 +1,18 @@
+# Pad defaults for every hi3516cv608 image, applied by the boot ROM after the
+# DDR table and before anything else runs (BR2_PACKAGE_HISILICON_CV6XX_BOOT_BOARD_REGS).
+# The reference DDR table leaves the pads at the SoC's reset state, which is
+# an input with the internal pull-up on for most of them; a vendor bootloader
+# then drives the ones that matter before Linux, and this image's does not.
+# A camera's boot-regs.txt adds its own records after these.
+#
+# GPIO7_7 (63) lights a lamp on both boards seen (the P23H's white LED, the
+# H4's LED): pulled up at reset it is on from power-on until a daemon takes
+# the pin, and forever on a unit whose raptor.conf does not name it. The SD
+# host owns this pad only where sdio1 is enabled, and the device tree turns
+# sdio1 off; the nebula driver rewrites the pad at probe where it is on.
+#
+# Bit 8 is the pull-up and bit 9 the pull-down, read off the boards rather
+# than a document: the BOOT_SEL1 strap's pad (GPIO0_1, 0x10260004), which the
+# board pulls down, resets to 0x1200, and every pad resetting to 0x1100 reads
+# high as an input (GPIO 62, 63, the H4's driver-chip enable).
+0x11130038 0x00001200  # GPIO7_7 pad: GPIO function, pull-down (reset 0x1100, pull-up)

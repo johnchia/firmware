@@ -19,16 +19,31 @@ config BR2_PACKAGE_HISILICON_CV6XX_BOOT
 	  recovery path short of the boot ROM's UART download, so writing
 	  it is a deliberate act. `make fullimage` picks it up.
 
-config BR2_PACKAGE_HISILICON_CV6XX_BOOT_REGS
-	string "register records appended to the boot reg table"
+config BR2_PACKAGE_HISILICON_CV6XX_BOOT_BOARD_REGS
+	string "register records the SoC target appends to the boot reg table"
 	depends on BR2_PACKAGE_HISILICON_CV6XX_BOOT
 	default ""
 	help
 	  A file of register writes the boot ROM applies after the DDR
 	  table and before anything else runs: one "ADDR VALUE" per
 	  line, '#' comments, optional DELAY and ATTR fields (default 0
-	  and 0xfd, a plain write). A camera uses it to park pads the
-	  reference table leaves on a function the board does not want
-	  -- the enable of a driver chip, a bus with nothing on it --
-	  the way its vendor bootloader did. Board facts, so it lives
-	  in the camera directory: "$(OPENIPC_CAMERA_DIR)/boot-regs.txt".
+	  and 0xfd, a plain write). The reference table leaves every
+	  pad it does not use at the SoC's reset state, which is pulled
+	  up, and a vendor bootloader drives the ones that matter before
+	  Linux. This is where the image does the same for the whole
+	  family: a pad that lights a lamp on every board seen is pulled
+	  down here, so nothing is on until a daemon asks. Named by the
+	  SoC defconfig, kept beside its device tree:
+	  "$(EXTERNAL_VENDOR)/board/<family>/<soc>.boot-regs.txt".
+
+config BR2_PACKAGE_HISILICON_CV6XX_BOOT_REGS
+	string "register records a camera appends to the boot reg table"
+	depends on BR2_PACKAGE_HISILICON_CV6XX_BOOT
+	default ""
+	help
+	  The same format as BR2_PACKAGE_HISILICON_CV6XX_BOOT_BOARD_REGS,
+	  applied after it. A camera uses it to park pads the reference
+	  table leaves on a function the board does not want -- the
+	  enable of a driver chip, a bus with nothing on it -- the way
+	  its vendor bootloader did. Board facts, so it lives in the
+	  camera directory: "$(OPENIPC_CAMERA_DIR)/boot-regs.txt".
