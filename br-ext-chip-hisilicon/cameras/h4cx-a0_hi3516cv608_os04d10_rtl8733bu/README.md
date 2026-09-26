@@ -52,12 +52,18 @@ person holding the unit can read:
   MAC's link-LED function and reads whatever that does (high for a whole
   boot on 2026-09-25, low on another), and the openhisilicon sys_config
   put I2C2 on the bus pads until 86e6d39 stopped muxing I2C2 unless a
-  board asks. `boot-regs.txt` carries the vendor's four records, applied by
-  the boot ROM before anything else runs. The first coil on this unit
-  melted after the move to the source-built bootloader; this is the one
-  electrical difference the move made on a pin that reaches the filter's
-  driver, and whether an enabled HE2866 drives the coil has not been
-  measured. Parking it costs nothing: nothing on the image uses it.
+  board asks. `boot-regs.txt` carries the vendor's four pad records plus
+  three of the table's own: the board pulls the enable up, so as a
+  pulled-down input it still read high (measured 2026-09-26), and the
+  vendor's kernel drives it low as an output, which nothing on this image
+  does. So the table clocks GPIO0, makes bit 6 an output and writes it
+  low, the way the vendor's table parks the coil pins; the source-built
+  U-Boot never rewrites GPIO0's direction, and the level holds into Linux
+  (after boot GPIO0 DIR reads 0x42, DATA bit 6 reads 0). The first coil on
+  this unit melted after the move to the source-built bootloader; this is
+  the one electrical difference the move made on a pin that reaches the
+  filter's driver, and whether an enabled HE2866 drives the coil has not
+  been measured. Parking it costs nothing: nothing on the image uses it.
 - **The LED comes on at boot** under OpenIPC's U-Boot. GPIO 63 idles high. The
   stock bootloader's board init drives it low (GPIO7_7 through the pad
   controller at 0x11097000) before Linux starts; OpenIPC's U-Boot touches no

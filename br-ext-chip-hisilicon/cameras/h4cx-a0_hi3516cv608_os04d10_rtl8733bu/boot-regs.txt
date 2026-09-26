@@ -10,3 +10,13 @@
 0x11130034 0x00001202  # its neighbour (ETH_STA_ACT_LED function otherwise), parked the same
 0x11130050 0x00001105  # JTAG_TMS pad -> GPIO7_5 = he2866_sda_gpio (61), parked
 0x11130054 0x00001105  # JTAG_TDO pad -> GPIO7_4 = he2866_scl_gpio (60), parked
+# The board pulls the enable up, so as an input it still reads high (measured
+# 2026-09-26 with the pad at 0x1202): the chip is off only with the pin driven
+# low. The vendor's kernel does that (hw.cfg: he2866_en_gpio = 6,1,0,0, an
+# output at 0); nothing on this image touches GPIO 6, so the table does it,
+# the way the vendor's parks the coil pins: bank clock on, bit 6 an output,
+# bit 6 low. The source-built U-Boot never rewrites GPIO0's direction (its
+# download check is compiled out), so the level holds into Linux.
+0x11014768 0x00000003  # PERI_CRG4570: clock GPIO0 and GPIO1 (the vendor's record 9; Linux later sets 0x7ff)
+0x11090400 0x00000040  # GPIO0 DIR: bit 6 output
+0x11090100 0x00000000  # GPIO0 DATA, masked address for bit 6: low
