@@ -68,10 +68,16 @@ person holding the unit can read:
   resets pulled up, the stock bootloader's board init drives it low (GPIO7_7
   through the pad controller at 0x11097000) before Linux starts, and OpenIPC's
   U-Boot touches no GPIO. Since the family's `hi3516cv608.boot-regs.txt` the
-  boot table pulls that pad down for every cv608 image, this one included,
-  which puts the lamp off from power-on. The unit here still runs the loader
-  built before that record; it has not been watched from the bench with the
-  new one.
+  boot table pulls that pad down for every cv608 image, this one included.
+  On the P23H that leaves the pin low from power-on; on this unit it does
+  not: with the pad reading 0x1200 the pin still reads high as an input
+  (GPIO7 DATA 0xf0 after a cold boot on the loader with the record,
+  2026-09-26), so something on the board pulls it up harder than the
+  internal pull-down does. The vendor's board init made it an output driven
+  low; this image would have to do the same from the camera's table, the way
+  it drives the HE2866 enable, and nobody has yet watched the LED from the
+  bench under this loader to say whether that is what is wanted (the
+  earlier pin survey has GPIO 63 as the photoresistor input as well).
 
 ## Layout and bootloader
 
