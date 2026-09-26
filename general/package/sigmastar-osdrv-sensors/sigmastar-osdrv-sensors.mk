@@ -39,10 +39,23 @@
 # (the two answer the same sensor ID, so a board names the 5239 in its env).
 # Both stream on an SSC377D board. They should go upstream as their own pull
 # requests.
+#
+# IMX335 ON INFINITY6C. Three changes to TipoMan's driver, each its own commit
+# on the fork's imx335-i6c-1440p60 branch so they can go upstream alone:
+# - pCus_SetFPS no longer keeps an exposure stretch as the base frame length.
+#   The handle starts with expo_lines at 5000, so a streamer that sets the rate
+#   while building the pipeline latched every mode shorter than that at VMAX
+#   5008: the 90 fps mode ran at 54, the 30 fps table at 24.7.
+# - Every linear table writes the whole readout window, so no mode depends on
+#   the sensor having been reset since the last one.
+# - Mode 6, 2560x1440@60, a centred 16:9 window for 1080p60. It is appended,
+#   so no index moves, and a streamer that takes the first mode covering its
+#   size and rate still lands on 2560x1920@60 (mode 3) for 1080p60; it has to
+#   ask for 6.
 # Naming a sha rather than HEAD is worth keeping even after the fork does go
 # away: the package used to build whatever upstream had on the day.
 SIGMASTAR_OSDRV_SENSORS_SITE = $(call github,johnchia,openipc-sensors,$(SIGMASTAR_OSDRV_SENSORS_VERSION))
-SIGMASTAR_OSDRV_SENSORS_VERSION = 22d725b461ff6251ea2376d1cd5b5c430170ed4c
+SIGMASTAR_OSDRV_SENSORS_VERSION = 7d1f4028ad02c0edcea7e4030094d14d4a7fc15d
 
 SIGMASTAR_OSDRV_SENSORS_MODULE_SUBDIRS = $(OPENIPC_SOC_VENDOR)/$(OPENIPC_SOC_FAMILY)
 SIGMASTAR_OSDRV_SENSORS_MODULE_MAKE_OPTS = \
