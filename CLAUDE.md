@@ -135,10 +135,14 @@ layers its `camera.conf` on the SoC target the fragment names as `BR2_OPENIPC_CA
    camera never ships a first-boot script.
 3. `uboot.env.txt`, if the camera bakes an environment. `wlandev` names an arm in the shared
    `/etc/wireless/usb` or `sdio`; the arm stays there (`docs/wireless-detect.md`).
-4. `overlay/`, only for files no shared overlay has. A path that also exists in
+4. `boot-regs.txt`, on a CV6xx camera whose vendor bootloader parks pads the
+   reference DDR table leaves on a function the board does not want (a driver
+   chip's enable, an unused bus): "ADDR VALUE" records the boot ROM applies
+   before anything else runs, named by `BR2_PACKAGE_HISILICON_CV6XX_BOOT_REGS`.
+5. `overlay/`, only for files no shared overlay has. A path that also exists in
    `general/overlay` or the family overlay is refused.
-5. `README.md`: where the pins came from, and what has and has not run on the unit.
-6. **Register its status** in `CAMERA_STATUS` in `.github/scripts/ci-matrix.py`. The camera
+6. `README.md`: where the pins came from, and what has and has not run on the unit.
+7. **Register its status** in `CAMERA_STATUS` in `.github/scripts/ci-matrix.py`. The camera
    itself is registered from its directory and builds without an `ALL_BOARDS` entry.
 
 The image is named by the camera, `openipc.<camera>-nor-<variant>-latest.tgz`, and

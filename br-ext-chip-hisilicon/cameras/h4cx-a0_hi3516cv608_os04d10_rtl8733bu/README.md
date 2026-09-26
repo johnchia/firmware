@@ -42,6 +42,22 @@ person holding the unit can read:
   filter. No IR LED pin is set. Whether the filter switches on 1 and 9 has
   not been watched from the bench on this image; that is the open item on
   this camera.
+- **An unused IR-cut driver chip, parked at boot.** The vendor's hw.cfg lists
+  an HE2866 IR-cut/motor driver on the board with its enable on GPIO 6 and
+  its I2C on GPIO 60 and 61, and configures the H4 not to use it (the coil
+  is driven straight from GPIO 1 and 9). The vendor bootloader's reg table
+  ends by parking those pads: the enable and its neighbour as pulled-down
+  GPIO inputs, the two bus pads on a parked function. The reference DDR
+  table the boot package ships does not, so under it the enable sits on the
+  MAC's link-LED function and reads whatever that does (high for a whole
+  boot on 2026-09-25, low on another), and the openhisilicon sys_config
+  put I2C2 on the bus pads until 86e6d39 stopped muxing I2C2 unless a
+  board asks. `boot-regs.txt` carries the vendor's four records, applied by
+  the boot ROM before anything else runs. The first coil on this unit
+  melted after the move to the source-built bootloader; this is the one
+  electrical difference the move made on a pin that reaches the filter's
+  driver, and whether an enabled HE2866 drives the coil has not been
+  measured. Parking it costs nothing: nothing on the image uses it.
 - **The LED comes on at boot** under OpenIPC's U-Boot. GPIO 63 idles high. The
   stock bootloader's board init drives it low (GPIO7_7 through the pad
   controller at 0x11097000) before Linux starts; OpenIPC's U-Boot touches no

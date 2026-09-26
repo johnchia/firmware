@@ -30,14 +30,14 @@ bad() { echo "FAIL $*"; fail=$((fail + 1)); }
 # size for a camera whose flash differs from its base's, the env image trio,
 # the pins the Ingenic bootloader takes as symbols, the supplicant group, and
 # the WiFi drivers this tree carries.
-ALLOWED='^BR2_(OPENIPC_(CAMERA|CAMERA_BASE|SNS_MODEL|ROOTFS_PART_KB)|PACKAGE_(HOST_UBOOT_TOOLS_ENVIMAGE(_SIZE|_SOURCE)?|WIRELESS_TOOLS|WPA_SUPPLICANT(_[A-Z0-9_]+)?|INGENIC_UBOOT_GPIO_[A-Z0-9_]+|RTL[0-9A-Z]+_OPENIPC|RTL8812AU|ATBM60XX(_[A-Z0-9_]+)?|ATBM_WIFI|AIC8800_OPENIPC|MT7601U_OPENIPC|SSV6[0-9A-Z]+_OPENIPC|TXW8301_OPENIPC|WQ9001))=(y|"[^"]*")$'
+ALLOWED='^BR2_(OPENIPC_(CAMERA|CAMERA_BASE|SNS_MODEL|ROOTFS_PART_KB)|PACKAGE_(HOST_UBOOT_TOOLS_ENVIMAGE(_SIZE|_SOURCE)?|HISILICON_CV6XX_BOOT_REGS|WIRELESS_TOOLS|WPA_SUPPLICANT(_[A-Z0-9_]+)?|INGENIC_UBOOT_GPIO_[A-Z0-9_]+|RTL[0-9A-Z]+_OPENIPC|RTL8812AU|ATBM60XX(_[A-Z0-9_]+)?|ATBM_WIFI|AIC8800_OPENIPC|MT7601U_OPENIPC|SSV6[0-9A-Z]+_OPENIPC|TXW8301_OPENIPC|WQ9001))=(y|"[^"]*")$'
 # Rule 2. Refused by name wherever they sit in the overlay.
 REFUSED_FILES='customizer.sh'
 # Rule 3. Hyphens are allowed inside the identity and nowhere else, so the
 # name splits back into its four fields on underscores.
 NAME='^[a-z0-9][a-z0-9-]*_[a-z0-9]+_[a-z0-9]+_[a-z0-9]+$'
 # What a camera directory may hold.
-MEMBERS='camera.conf raptor.conf uboot.env.txt overlay README.md'
+MEMBERS='camera.conf raptor.conf uboot.env.txt boot-regs.txt overlay README.md'
 
 value() { sed -n "s/^$1=\"\\(.*\\)\"\$/\\1/p" "$2" | head -1; }
 

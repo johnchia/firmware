@@ -16,7 +16,11 @@
 #     "sns0", which is where raptor learns the probed sensor.
 # Move back to the OpenIPC pin once they are all there.
 HISILICON_OPENSDK_SITE = $(call github,johnchia,openhisilicon,$(HISILICON_OPENSDK_VERSION))
-HISILICON_OPENSDK_VERSION = 7feac6e9098eeb1bb03d8443f49740d56c8864ae
+# 86e6d39 stops sys_config muxing I2C2 onto pads 0x50/0x54 unless a board
+# passes i2c2=1: nothing in this driver set talks to I2C2, and the cv608
+# boards seen so far wire those pads as GPIO (the P23H's IR-cut, the H4's
+# unused HE2866 bus, which its vendor bootloader parks).
+HISILICON_OPENSDK_VERSION = 86e6d391141c7c4cd440f52ad367907c21c4b1bb
 
 HISILICON_OPENSDK_LICENSE = GPL-3.0
 HISILICON_OPENSDK_LICENSE_FILES = LICENSE

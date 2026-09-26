@@ -1,0 +1,12 @@
+# Pads the H4's vendor bootloader parks and the reference DDR table does not,
+# applied by the boot ROM before anything else runs. They are the last
+# records of the vendor's reg table (~/hi/cv608_h4.bin, 0x6110..0x7100,
+# records 237 to 240 of its 255), and the vendor's hw.cfg names the
+# pins: the HE2866 IR-cut/motor driver chip, which the H4 configuration
+# never uses (ircut_ctl_type = 0, the coil is on GPIO 1/9). Left on the
+# reference table's functions its enable follows the MAC's link-LED output
+# and its bus carries I2C2; parked, the chip stays off. See README.md.
+0x11130030 0x00001202  # JTAG_TRSTN pad -> GPIO0_6 = he2866_en_gpio (6): input, pull-down
+0x11130034 0x00001202  # its neighbour (ETH_STA_ACT_LED function otherwise), parked the same
+0x11130050 0x00001105  # JTAG_TMS pad -> GPIO7_5 = he2866_sda_gpio (61), parked
+0x11130054 0x00001105  # JTAG_TDO pad -> GPIO7_4 = he2866_scl_gpio (60), parked
